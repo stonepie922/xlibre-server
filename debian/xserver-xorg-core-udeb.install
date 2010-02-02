@@ -1,0 +1,15 @@
+# from xserver-common:
+usr/lib/xorg/protocol.txt
+usr/share/man/man1/Xserver.1
+
+# from xserver-xorg-core:
+usr/lib/xorg/modules/
+usr/bin/Xorg
+usr/share/man/man1/Xorg.1
+usr/share/man/man4/exa.4
+usr/share/man/man4/fbdevhw.4
+usr/share/man/man5/xorg.conf.5
+usr/bin/cvt
+usr/bin/gtf
+usr/share/man/man1/cvt.1
+usr/share/man/man1/gtf.1

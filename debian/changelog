@@ -1,6 +1,10 @@
 xorg-server (2:1.7.4-3) UNRELEASED; urgency=low
 
+  [ Julien Cristau ]
   * Remove myself from Uploaders
+
+  [ Cyril Brulebois ]
+  * Add udeb needed for the graphical installer: xserver-xorg-core-udeb.
 
  -- Julien Cristau <jcristau@debian.org>  Sat, 23 Jan 2010 01:43:22 +0100
 
