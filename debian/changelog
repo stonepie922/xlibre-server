@@ -6,6 +6,16 @@ xorg-server (2:1.7.4-3) UNRELEASED; urgency=low
   [ Cyril Brulebois ]
   * Add udeb needed for the graphical installer: xserver-xorg-core-udeb.
   * Disable selinux until a proper selinux-less flavour is built.
+  * Version/Bump some B-D to make sure xserver-xorg-core-udeb gets its
+    dependencies on the (recently-added) udebs rather than on the
+    libraries:
+     - libdrm-dev
+     - libgcrypt11-dev (switching from the virtual libgcrypt-dev package)
+     - libpciaccess-dev
+     - libudev-dev
+     - libxau-dev
+     - libxdmcp-dev
+     - libxfont-dev
 
  -- Julien Cristau <jcristau@debian.org>  Sat, 23 Jan 2010 01:43:22 +0100
 
