@@ -10,6 +10,9 @@ xorg-server (2:1.7.6-2ubuntu7.1) lucid-proposed; urgency=low
     from Debian to fix X segfault on mouse click in xfig, when pixmaps
     are created in the course of software fallbacks.
     (LP: #553647)
+  * debian/rules: Don't reference the package uploader for support; instead point
+    users to the standard Ubuntu support page.
+    (LP: #589811)
 
   [Martin Pitt]
   * debian/local/64-xorg-xkb.rules: Ignore XKBMODEL=="SKIP" and
