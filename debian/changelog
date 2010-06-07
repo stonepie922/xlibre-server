@@ -18,7 +18,12 @@ xorg-server (2:1.7.6-2ubuntu8) lucid-updates; urgency=low
     installer.
     (LP: #548891)
 
- -- Bryce Harrington <bryce@ubuntu.com>  Wed, 28 Apr 2010 13:10:44 -0700
+  [ Christopher James Halse Rogers ]
+  * Update 122_xext_fix_card32_overflow_in_xauth.patch to most recent version
+    on patchwork tracker.  This one actually fixes the crash with xauth
+    generate (LP: #519049)
+
+ -- Christopher James Halse Rogers <raof@ubuntu.com>  Mon, 07 Jun 2010 12:56:54 +1000
 
 xorg-server (2:1.7.6-2ubuntu7) lucid; urgency=low
 
