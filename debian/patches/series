@@ -51,3 +51,4 @@
 198_nohwaccess.patch
 199_xfvb-help-typo.patch
 200_randr-null.patch
+201_xinerama_negative_screen_index_fix.patch

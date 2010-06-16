@@ -1,3 +1,17 @@
+xorg-server (2:1.7.6-2ubuntu7.2) UNRELEASED; urgency=low
+
+  [ Mackenzie Morgan ]
+  * Added debian/patches/uint_to_int.patch:
+    - Changes back to uints for positioning so that mouse movements can 
+      go to negative positions relative to root window (LP: #563100)
+
+  [ Christopher James Halse Rogers ]
+  * Rename debian/patches/uint_to_int.patch to 
+    201_xinerama_negative_screen_index_fix.patch to better describe it and
+    match our patch guidelines
+
+ -- Christopher James Halse Rogers <raof@ubuntu.com>  Wed, 16 Jun 2010 15:30:08 +1000
+
 xorg-server (2:1.7.6-2ubuntu7.1) lucid-proposed; urgency=low
 
   [Bryce Harrington]
