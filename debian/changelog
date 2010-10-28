@@ -1,3 +1,12 @@
+xorg-server (2:1.9.0-0ubuntu7) maverick; urgency=low
+
+  * debian/control:
+    - Tweak the breaks/conflicts for the virtual xserver-xorg-input
+      breaks to help apt in lucid deal with the upgrade. 
+      With the apt in maverick this will be no longer needed ((LP: #614993)
+
+ -- Michael Vogt <michael.vogt@ubuntu.com>  Thu, 16 Sep 2010 15:17:27 +0200
+
 xorg-server (2:1.9.0-0ubuntu6) maverick; urgency=low
 
   [ Chase Douglas ] 
