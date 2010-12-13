@@ -36,3 +36,4 @@
 204_fix-neg-sync-transition.patch
 205_udev-product-ids.patch
 206_intel_8xx_default_to_fbdev.patch
+207_Xext_panoramiXprocs_fix_typo.patch

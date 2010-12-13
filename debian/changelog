@@ -1,3 +1,11 @@
+xorg-server (2:1.9.0-0ubuntu7.1) maverick-proposed; urgency=low
+
+  * debian/patches/207_Xext_panoramiXprocs_fix_typo.patch:
+    - This prevents Qt applications from crashing when using
+      Xinerama multi-head with drivers such as nvidia (LP: #650539).
+
+ -- Alberto Milone <alberto.milone@canonical.com>  Mon, 22 Nov 2010 18:55:50 +0100
+
 xorg-server (2:1.9.0-0ubuntu7) maverick; urgency=low
 
   * debian/control:
