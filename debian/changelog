@@ -1,3 +1,11 @@
+xorg-server (2:1.9.0-0ubuntu7.2) UNRELEASED; urgency=low
+
+  * Move gesture event handling to server in non-signal context
+    (LP: #670016)
+    - Add debian/patches/208_gestures_through_event_queue.patch
+
+ -- Chase Douglas <chase.douglas@canonical.com>  Mon, 13 Dec 2010 10:39:40 -0800
+
 xorg-server (2:1.9.0-0ubuntu7.1) maverick-proposed; urgency=low
 
   * debian/patches/207_Xext_panoramiXprocs_fix_typo.patch:
