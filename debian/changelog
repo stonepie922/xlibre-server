@@ -1,4 +1,4 @@
-xorg-server (2:1.10.1-1ubuntu1.1) oneiric; urgency=low
+xorg-server (2:1.10.1-1ubuntu1.1) natty-proposed; urgency=low
 
   [ Chase Douglas ]
   * Fix masked transformed valuator handling (LP: #774938)
