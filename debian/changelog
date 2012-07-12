@@ -1,3 +1,12 @@
+xorg-server (2:1.11.4-0ubuntu10.5) precise-security; urgency=low
+
+  * SECURITY UPDATE: do not use input device names in logging format
+    strings (LP: #996250):
+    - debian/patches/509_log-format-fix.patch: backported upstream changes.
+    - CVE-2012-2118
+
+ -- Steve Beattie <sbeattie@ubuntu.com>  Mon, 09 Jul 2012 15:24:55 -0700
+
 xorg-server (2:1.11.4-0ubuntu10.4) precise-proposed; urgency=low
 
   * Add 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
