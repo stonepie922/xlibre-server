@@ -1,3 +1,16 @@
+xorg-server (2:1.11.4-0ubuntu10.6) UNRELEASED; urgency=low
+
+  [ Timo Aaltonen ]
+  * Add 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
+    from upstream 1.12.2. Fixes the server from entering in an infinite
+    loop in certain situations. (LP: #921236)
+
+  [ Maarten Lankhorst ]
+  * This was 2:1.11.4-0ubuntu10.4 but got kicked from -proposed due to
+    a race with a security update.
+
+ -- Maarten Lankhorst <maarten.lankhorst@canonical.com>  Thu, 12 Jul 2012 11:46:44 +0200
+
 xorg-server (2:1.11.4-0ubuntu10.5) precise-security; urgency=low
 
   * SECURITY UPDATE: do not use input device names in logging format

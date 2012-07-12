@@ -46,4 +46,4 @@
 513-dix-disable-non-sprite-owners-first-when-disabling-p.patch
 514-Xi-drop-forced-unpairing-when-changing-the-hierarchy.patch
 515-dix-disable-all-devices-before-shutdown.patch
-#516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
+516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
