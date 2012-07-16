@@ -1,15 +1,14 @@
-xorg-server (2:1.11.4-0ubuntu10.6) UNRELEASED; urgency=low
+xorg-server (2:1.11.4-0ubuntu10.6) precise-proposed; urgency=low
 
-  [ Timo Aaltonen ]
-  * Add 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
-    from upstream 1.12.2. Fixes the server from entering in an infinite
-    loop in certain situations. (LP: #921236)
+  * Revert changes from 10.2 and 10.3 (and the unreleased SRU 10.4).  10.2
+    attempted to fix bug 968845, but this caused the xserver to crash
+    under rare conditions (1009629).  10.3 attempted to fix that crash,
+    but resulted in a more commonly seen crash such as when using GIMP.
+    (LP: #1021517)
+  * Rename patch 509_log-format-fix.patch to 228_log-format-fix.patch,
+    to reserve the 5xx numbering for input stack patches.
 
-  [ Maarten Lankhorst ]
-  * This was 2:1.11.4-0ubuntu10.4 but got kicked from -proposed due to
-    a race with a security update.
-
- -- Maarten Lankhorst <maarten.lankhorst@canonical.com>  Thu, 12 Jul 2012 11:46:44 +0200
+ -- Bryce Harrington <bryce@ubuntu.com>  Mon, 16 Jul 2012 10:42:25 -0700
 
 xorg-server (2:1.11.4-0ubuntu10.5) precise-security; urgency=low
 

@@ -30,20 +30,23 @@
 225_non-root_config_paths.patch
 226_fall_back_to_autoconfiguration.patch
 227_null_ptr_midispcur.patch
+228_log-format-fix.patch
 
-# Temporary, until it's reviewed & accepted upstream
+## Input Stack Patches (from xserver 1.12) ##
 500_pointer_barrier_thresholds.diff
 505_query_pointer_touchscreen.patch
 506_touchscreen_pointer_emulation_checks.patch
 507_touchscreen_fixes.patch
-508_device_off_release_buttons.patch
 
-# Upstream patches
-509_log-format-fix.patch
-510-dix-return-early-from-DisableDevice-if-the-device-is.patch
-511-dix-move-freeing-the-sprite-into-a-function.patch
-512-dix-free-the-sprite-when-disabling-the-device.patch
-513-dix-disable-non-sprite-owners-first-when-disabling-p.patch
-514-Xi-drop-forced-unpairing-when-changing-the-hierarchy.patch
-515-dix-disable-all-devices-before-shutdown.patch
-516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
+# Patch 508 attempted to fix LP: #968845, but caused regression
+# crash bug #1009629.  Patches 510-515 attempted to fix that
+# regression, but this led to the severe crash bug #1021517.
+# So, disabling the patch set until this can be studied better.
+#508_device_off_release_buttons.patch
+#510-dix-return-early-from-DisableDevice-if-the-device-is.patch
+#511-dix-move-freeing-the-sprite-into-a-function.patch
+#512-dix-free-the-sprite-when-disabling-the-device.patch
+#513-dix-disable-non-sprite-owners-first-when-disabling-p.patch
+#514-Xi-drop-forced-unpairing-when-changing-the-hierarchy.patch
+#515-dix-disable-all-devices-before-shutdown.patch
+#516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
