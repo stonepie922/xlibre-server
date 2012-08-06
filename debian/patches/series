@@ -31,13 +31,14 @@
 226_fall_back_to_autoconfiguration.patch
 227_null_ptr_midispcur.patch
 228_log-format-fix.patch
+229_randr_first_check_pScrPriv_before_using_the_pointer.patch
+230_randr_catch_two_more_potential_unset_rrScrPriv_uses.patch
 
 ## Input Stack Patches (from xserver 1.12) ##
 500_pointer_barrier_thresholds.diff
 505_query_pointer_touchscreen.patch
 506_touchscreen_pointer_emulation_checks.patch
 507_touchscreen_fixes.patch
-
 # Patch 508 attempted to fix LP: #968845, but caused regression
 # crash bug #1009629.  Patches 510-515 attempted to fix that
 # regression, but this led to the severe crash bug #1021517.
@@ -50,3 +51,4 @@
 #514-Xi-drop-forced-unpairing-when-changing-the-hierarchy.patch
 #515-dix-disable-all-devices-before-shutdown.patch
 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
+

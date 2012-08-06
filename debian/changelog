@@ -1,3 +1,12 @@
+xorg-server (2:1.11.4-0ubuntu10.8) precise-proposed; urgency=low
+
+  * Add upstream patches to avoid seg fault in case the user is running with
+    multiple screens and xrandr is only enabled at one (LP: #1015292):
+    - 229_randr_first_check_pScrPriv_before_using_the_pointer.patch
+    - 230_randr_catch_two_more_potential_unset_rrScrPriv_uses.patch
+
+ -- Ricardo Salveti de Araujo <ricardo.salveti@linaro.org>  Thu, 19 Jul 2012 22:57:12 -0300
+
 xorg-server (2:1.11.4-0ubuntu10.7) precise-proposed; urgency=low
 
   * Re-enable 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
