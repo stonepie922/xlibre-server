@@ -33,6 +33,8 @@
 228_log-format-fix.patch
 229_randr_first_check_pScrPriv_before_using_the_pointer.patch
 230_randr_catch_two_more_potential_unset_rrScrPriv_uses.patch
+233-xf86events-valgrind.patch
+235-composite-tracking.diff
 
 ## Input Stack Patches (from xserver 1.12) ##
 500_pointer_barrier_thresholds.diff
