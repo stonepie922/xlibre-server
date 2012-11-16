@@ -1,10 +1,19 @@
-xorg-server (2:1.13.0-0ubuntu6.1) UNRELEASED; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.1) raring; urgency=low
 
   [ Maarten Lankhorst ]
   * add 233-xf86events-valgrind.patch to fix a xserver corruption
     when acpid is stopped before Xorg is. (LP: #1070481)
   * add 235-composite-tracking.diff to fix exa corruption. (LP: #1010794)
 
+  [ Bryce Harrington ]
+  * Add 236-use-fbdev-for-poulsbo-oaktrail-medfield.patch: Never use Intel
+    driver on Poulsbo/Oaktrail/Medfield.  Thanks to Matthias Klumpp.
+    (LP: #1069031)
+  * Add 237-dix-set-the-device-transformation-matrix.patch: Fix pointer
+    jumping with absolute pointing device.  Initializes device
+    transformation matrix to an identity matrix.  Thanks to a7x.
+    (LP: #1041063)
+  
   [ Tim Lunn ]
   * 500_pointer_barrier_thresholds.diff: Update to fix gaps above
     barriers at edge of screen (LP: #1073724)
