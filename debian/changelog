@@ -1,9 +1,10 @@
-xorg-server (2:1.13.0-0ubuntu7) UNRELEASED; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.1~nexus7.1) quantal; urgency=low
 
-  * Add 233_dix_save_touchpoint_coords_before_transform.patch: Patch
-    proposed to xorg-devel@ to fix issue where when a transformation
-    matrix is applied on input, it gets applied multiple times.
-    (LP: #1076627)
+  * Add 233_dix_save_touchpoint_coords_before_transform.patch: Fixes issue
+    where input transformation matrix gets applied multiple times.  This
+    patch was proposed to xorg-devel@ and has not yet been merged to
+    the upstream tree, so should be replaced with what gets applied.
+    (LP: #1075415, #1076567, #1076627)
 
  -- Bryce Harrington <bryce@canonical.com>  Wed, 21 Nov 2012 19:29:41 +0000
 
