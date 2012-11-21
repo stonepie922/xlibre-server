@@ -1,4 +1,4 @@
-xorg-server (2:1.13.0-0ubuntu6.1) raring; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.1) quantal-proposed; urgency=low
 
   [ Maarten Lankhorst ]
   * add 233-xf86events-valgrind.patch to fix a xserver corruption
@@ -18,7 +18,7 @@ xorg-server (2:1.13.0-0ubuntu6.1) raring; urgency=low
   * 500_pointer_barrier_thresholds.diff: Update to fix gaps above
     barriers at edge of screen (LP: #1073724)
 
- -- Timo Aaltonen <tjaalton@ubuntu.com>  Tue, 09 Oct 2012 10:22:24 +0300
+ -- Bryce Harrington <bryce@ubuntu.com>  Fri, 16 Nov 2012 15:56:23 -0800
 
 xorg-server (2:1.13.0-0ubuntu6) quantal; urgency=low
 
