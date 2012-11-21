@@ -1,0 +1,205 @@
+From fetchmail  Thu Nov  8 14:21:57 2012
+Return-Path: <xorg-devel-bounces+bryce=canonical.com@lists.x.org>
+X-Spam-Checker-Version: SpamAssassin 3.3.2 (2011-06-06) on
+	humber.bryceharrington.org
+X-Spam-Level: 
+X-Spam-Status: No, score=-7.4 required=5.0 tests=BWH_DEBIAN,BWH_DEBIAN_2,
+	BWH_FREE,BWH_FREE_2,BWH_PATCH_1,BWH_PATCH_2,BWH_PATCH_3,BWH_SPELLING_2b,
+	DKIM_SIGNED,MISSING_FROM,T_DKIM_INVALID autolearn=ham version=3.3.2
+Received: from fiordland.canonical.com (fiordland.canonical.com [91.189.94.145])
+	by vinyl.outflux.net (8.14.4/8.14.4/Debian-2ubuntu2) with ESMTP id qA8MHM9S009852
+	for <bryce@endarchy.org>; Thu, 8 Nov 2012 14:17:22 -0800
+Received: from cluster-j.mailcontrol.com (cluster-j.mailcontrol.com [85.115.54.190])
+	by fiordland.canonical.com (Postfix) with ESMTP id C7169A18CF4
+	for <bryce.harrington@cleanmail.canonical.com>; Thu,  8 Nov 2012 22:17:16 +0000 (UTC)
+Received: from arctowski.canonical.com (arctowski.canonical.com [91.189.94.158])
+	by rly27j.srv.mailcontrol.com (MailControl) with ESMTP id qA8MHFbx032037
+	for <bryce.harrington@cleanmail.canonical.com>; Thu, 8 Nov 2012 22:17:15 GMT
+Received: from fiordland.canonical.com ([91.189.94.145])
+	by arctowski.canonical.com with esmtp (Exim 4.71)
+	(envelope-from <xorg-devel-bounces+bryce=canonical.com@lists.x.org>)
+	id 1TWaPT-0006Wp-Ft
+	for bryce.harrington@cleanmail.canonical.com; Thu, 08 Nov 2012 22:17:15 +0000
+Received: from gabe.freedesktop.org (gabe.freedesktop.org [131.252.210.177])
+	by fiordland.canonical.com (Postfix) with ESMTP id 137A3A18CF4
+	for <bryce@canonical.com>; Thu,  8 Nov 2012 22:17:15 +0000 (UTC)
+Received: from gabe.freedesktop.org (localhost [127.0.0.1])
+	by gabe.freedesktop.org (Postfix) with ESMTP id 6323D9EF0A
+	for <bryce@canonical.com>; Thu,  8 Nov 2012 14:17:14 -0800 (PST)
+X-Original-To: xorg-devel@lists.x.org
+Delivered-To: xorg-devel@lists.x.org
+Received: from mail-ie0-f170.google.com (mail-ie0-f170.google.com
+	[209.85.223.170])
+	by gabe.freedesktop.org (Postfix) with ESMTP id A19AE9E8E1
+	for <xorg-devel@lists.x.org>; Thu,  8 Nov 2012 14:14:11 -0800 (PST)
+Received: by mail-ie0-f170.google.com with SMTP id c12so4623944ieb.15
+	for <xorg-devel@lists.x.org>; Thu, 08 Nov 2012 14:14:11 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=chromium.org; s=google;
+	h=from:to:cc:subject:date:message-id:x-mailer;
+	bh=ChYBhB6uKrVo4Ao196l73x2fAcIlO26+FQDoBGw1w+Q=;
+	b=jUNE0YMNkPVtK3L8aDM9vAkeTj895KvO6R39IsvdAJLojh5/jNdMluqAJjqIVlAdcy
+	aSH9eKSyQgpZgq1z6k00gShenCU5LbGcE589ERCy+G88IDzbIt2gVl3kBPtn1afjMKlR
+	cO7vkm9wjRSbdURKdiM09DrcjDb2uP2LfBAKI=
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+	d=google.com; s=20120113;
+	h=from:to:cc:subject:date:message-id:x-mailer:x-gm-message-state;
+	bh=ChYBhB6uKrVo4Ao196l73x2fAcIlO26+FQDoBGw1w+Q=;
+	b=AsccAWxVJp1JFYFojIhP3Bp6cbti51qYFsNW+jEK/EiqRXQ5tXaCSjh596FFxIXBou
+	jeY/yaXrNoWDeJ3EIn2VqZOe6rREdp6Wyi094577azkafnSz6taWRi78eahx/EZ9diUG
+	erHVhqcJoi9/IDYbMNLQM+HZixf6IePtpMpsXW5IPZapy8qWYr0fQGivFJNR8JjeI65k
+	zo9smHcctrAtPxAFS/rFqJ92CzLJ+Q7yNBWYp30mi0sj8Et4gNwhdXk/NE3f0RHfocMQ
+	WnfvTVL4Rq1kBTP93x9h4iGqxXpkNy5RHy7UO1lR18IekMn7WAmMumDdt+0+biKWoDQY
+	tGXA==
+Received: by 10.50.41.129 with SMTP id f1mr9546471igl.53.1352412851135;
+	Thu, 08 Nov 2012 14:14:11 -0800 (PST)
+Received: from ynovikov-z620.wat.corp.google.com
+	(ynovikov-z620.wat.corp.google.com [172.23.176.218])
+	by mx.google.com with ESMTPS id gz10sm5784369igc.9.2012.11.08.14.14.08
+	(version=TLSv1/SSLv3 cipher=OTHER);
+	Thu, 08 Nov 2012 14:14:10 -0800 (PST)
+From: Yuly Novikov <ynovikov@chromium.org>
+To: xorg-devel@lists.x.org
+Subject: [PATCH] dix: Save touchpoint last coordinates before transform. #49347
+Date: Thu,  8 Nov 2012 17:13:39 -0500
+Message-Id: <1352412820-2098-1-git-send-email-ynovikov@chromium.org>
+X-Mailer: git-send-email 1.7.7.3
+X-Gm-Message-State: ALoCoQlTsnH/BfXzhWsBi3khQqpVw3HqsxOMxQd8/ankSlsWTNEBphsEpSVtfUe1ueGrFQGbnjmH
+X-Mailman-Approved-At: Thu, 08 Nov 2012 14:16:46 -0800
+Cc: ynovikov@chromium.org
+X-BeenThere: xorg-devel@lists.x.org
+X-Mailman-Version: 2.1.13
+Precedence: list
+List-Id: "X.Org development list" <xorg-devel.lists.x.org>
+List-Unsubscribe: <http://lists.x.org/mailman/options/xorg-devel>,
+	<mailto:xorg-devel-request@lists.x.org?subject=unsubscribe>
+List-Archive: <http://lists.x.org/archives/xorg-devel>
+List-Post: <mailto:xorg-devel@lists.x.org>
+List-Help: <mailto:xorg-devel-request@lists.x.org?subject=help>
+List-Subscribe: <http://lists.x.org/mailman/listinfo/xorg-devel>,
+	<mailto:xorg-devel-request@lists.x.org?subject=subscribe>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+Sender: xorg-devel-bounces+bryce=canonical.com@lists.x.org
+Errors-To: xorg-devel-bounces+bryce=canonical.com@lists.x.org
+X-Mailcontrol-Inbound: WBq!ucXEz80wFmxD6S7f3nyjenN!phNbIQWiyBG44+lo3FL0yiLKb3yjenN!phNbh+9WRKrdgbE=
+X-Scanned-By: MIMEDefang 2.71 on 198.145.64.163
+Envelope-To: bryce@endarchy.org
+X-MIMEDefang-Filter: outflux$Revision: 1.316 $
+X-HELO: fiordland.canonical.com
+Status: RO
+Content-Length: 4239
+Lines: 111
+
+A touchpoint used to store the entire valuators structure,
+and coordinates there were stored post-transformation,
+which resulted in Coordinate Transformation Matrix
+being applied multiple times to the last coordinates,
+in the case when only pressure changes in the last touch event.
+
+This commit gets rid of the valuators, as only X and Y coordinates
+are actually used, and stores only the relevant values.
+The variable name was changed to indicate
+that the values are stored before transformation,
+to avoid confusion with last.valuators, which are after transformation.
+
+Fixes: https://bugs.freedesktop.org/show_bug.cgi?id=49347
+
+Signed-off-by: Yuly Novikov <ynovikov@chromium.org>
+---
+ dix/devices.c      |    2 --
+ dix/getevents.c    |   19 ++++++-------------
+ dix/touch.c        |    1 -
+ include/inputstr.h |    3 +--
+ 4 files changed, 7 insertions(+), 18 deletions(-)
+
+diff --git a/dix/devices.c b/dix/devices.c
+index 613323f..d23b1b4 100644
+--- a/dix/devices.c
++++ b/dix/devices.c
+@@ -967,8 +967,6 @@ CloseDevice(DeviceIntPtr dev)
+     free(dev->deviceGrab.sync.event);
+     free(dev->config_info);     /* Allocated in xf86ActivateDevice. */
+     free(dev->last.scroll);
+-    for (j = 0; j < dev->last.num_touches; j++)
+-        free(dev->last.touches[j].valuators);
+     free(dev->last.touches);
+     dev->config_info = NULL;
+     dixFreePrivates(dev->devPrivates, PRIVATE_DEVICE);
+diff --git a/dix/getevents.c b/dix/getevents.c
+index 8b4379d..fe60ac3 100644
+--- a/dix/getevents.c
++++ b/dix/getevents.c
+@@ -1951,32 +1951,25 @@ GetTouchEvents(InternalEvent *events, DeviceIntPtr dev, uint32_t ddx_touchid,
+     default:
+         return 0;
+     }
+-    if (t->mode == XIDirectTouch && !(flags & TOUCH_CLIENT_ID)) {
+-        if (!valuator_mask_isset(&mask, 0))
+-            valuator_mask_set_double(&mask, 0,
+-                                     valuator_mask_get_double(touchpoint.ti->
+-                                                              valuators, 0));
+-        if (!valuator_mask_isset(&mask, 1))
+-            valuator_mask_set_double(&mask, 1,
+-                                     valuator_mask_get_double(touchpoint.ti->
+-                                                              valuators, 1));
+-    }
+ 
+     /* Get our screen event co-ordinates (root_x/root_y/event_x/event_y):
+      * these come from the touchpoint in Absolute mode, or the sprite in
+      * Relative. */
+     if (t->mode == XIDirectTouch) {
+-        transformAbsolute(dev, &mask);
+ 
+         if (!(flags & TOUCH_CLIENT_ID)) {
+-            for (i = 0; i < valuator_mask_size(&mask); i++) {
++            for (i = 0; i < 2; i++) {
+                 double val;
+ 
+                 if (valuator_mask_fetch_double(&mask, i, &val))
+-                    valuator_mask_set_double(touchpoint.ti->valuators, i, val);
++                    touchpoint.ti->last_raw_axes[i] = val;
++                else
++                    valuator_mask_set_double(&mask, i,
++                                             touchpoint.ti->last_raw_axes[i]);
+             }
+         }
+ 
++        transformAbsolute(dev, &mask);
+         clipAbsolute(dev, &mask);
+     }
+     else {
+diff --git a/dix/touch.c b/dix/touch.c
+index 5f77be5..5074ec7 100644
+--- a/dix/touch.c
++++ b/dix/touch.c
+@@ -226,7 +226,6 @@ void
+ TouchInitDDXTouchPoint(DeviceIntPtr dev, DDXTouchPointInfoPtr ddxtouch)
+ {
+     memset(ddxtouch, 0, sizeof(*ddxtouch));
+-    ddxtouch->valuators = valuator_mask_new(dev->valuator->numAxes);
+ }
+ 
+ Bool
+diff --git a/include/inputstr.h b/include/inputstr.h
+index 5a38924..c06f9fe 100644
+--- a/include/inputstr.h
++++ b/include/inputstr.h
+@@ -330,8 +330,7 @@ typedef struct _DDXTouchPointInfo {
+     Bool active;                /* whether or not the touch is active */
+     uint32_t ddx_id;            /* touch ID given by the DDX */
+     Bool emulate_pointer;
+-
+-    ValuatorMask *valuators;    /* last recorded axis values */
++    double last_raw_axes[2];    /* last X/Y axis valuator data as posted */
+ } DDXTouchPointInfoRec;
+ 
+ typedef struct _TouchClassRec {
+-- 
+1.7.7.3
+
+_______________________________________________
+xorg-devel@lists.x.org: X.Org development
+Archives: http://lists.x.org/archives/xorg-devel
+Info: http://lists.x.org/mailman/listinfo/xorg-devel
+
