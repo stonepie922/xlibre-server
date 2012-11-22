@@ -1,9 +1,9 @@
-xorg-server (2:1.13.0-0ubuntu6.2) UNRELEASED; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.2) quantal-proposed; urgency=low
 
   * Revert the change to 500_pointer_barrier_thresholds.diff, causes
     issues with unity launcher.
 
- -- Timo Aaltonen <tjaalton@ubuntu.com>  Thu, 22 Nov 2012 17:29:36 +0200
+ -- Timo Aaltonen <tjaalton@ubuntu.com>  Thu, 22 Nov 2012 17:30:15 +0200
 
 xorg-server (2:1.13.0-0ubuntu6.1) quantal-proposed; urgency=low
 
