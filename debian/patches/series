@@ -54,3 +54,4 @@
 #515-dix-disable-all-devices-before-shutdown.patch
 516-dix-dont-emulate-scroll-events-for-non-existing-axes.patch
 
+237-dix-set-the-device-transformation-matrix.patch

@@ -1,3 +1,12 @@
+xorg-server (2:1.11.4-0ubuntu10.10) UNRELEASED; urgency=low
+
+  * Add 237-dix-set-the-device-transformation-matrix.patch: Fix pointer
+    jumping with absolute pointing device.  Initializes device
+    transformation matrix to an identity matrix.  Thanks to a7x.
+    (LP: #1041063)
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Fri, 16 Nov 2012 16:04:30 -0800
+
 xorg-server (2:1.11.4-0ubuntu10.9) precise-proposed; urgency=low
 
   [ Maarten Lankhorst ]
