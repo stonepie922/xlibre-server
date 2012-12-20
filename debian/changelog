@@ -1,4 +1,13 @@
-xorg-server (2:1.11.4-0ubuntu10.10) UNRELEASED; urgency=low
+xorg-server (2:1.11.4-0ubuntu10.11) precise-proposed; urgency=low
+
+  * Drop 237-dix-set-the-device-transformation-matrix.patch: 
+    Bug was targeted to precise, but is only confirmed to affect xserver
+    1.13 and newer.
+    (LP: 1041063)
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Wed, 19 Dec 2012 16:39:23 -0800
+
+xorg-server (2:1.11.4-0ubuntu10.10) precise-proposed; urgency=low
 
   * Add 237-dix-set-the-device-transformation-matrix.patch: Fix pointer
     jumping with absolute pointing device.  Initializes device
