@@ -1,3 +1,10 @@
+xorg-server (2:1.13.0-0ubuntu6.2) quantal-proposed; urgency=low
+
+  * add patch to fix starting xorg-server with no outputs connected (LP: #1122072)
+    - fixup-headless.patch
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 12 Feb 2013 15:18:32 +0100
+
 xorg-server (2:1.13.0-0ubuntu6.1) quantal-proposed; urgency=low
 
   [ Maarten Lankhorst ]

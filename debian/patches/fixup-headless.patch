@@ -1,0 +1,36 @@
+commit d71a17cfab6536df9df46a342a24dd415c020192
+Author: Chris Wilson <chris@chris-wilson.co.uk>
+Date:   Sat Nov 10 10:26:08 2012 +0000
+
+    xf86: select a fake output for headless servers
+    
+    Following commit 37d956e3ac9513b74078882dff489f9b0a7a5a28
+    Author: Keith Packard <keithp@keithp.com>
+    Date:   Mon Sep 10 11:14:20 2012 +1000
+    
+        xf86: fix compat output selection for no output GPUs
+    
+    headless servers can no longer startup as we no longer select a compat
+    output for the fake framebuffer.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=56343
+    Signed-off-by: Chris Wilson <chris@chris-wilson.co.uk>
+    Reviewed-by: Dave Airlie <airlied@redhat.com>
+    Signed-off-by: Keith Packard <keithp@keithp.com>
+    (cherry picked from commit e54f71a2c7a1677a5c5032d1e7dc099d5204144b)
+
+diff --git a/hw/xfree86/modes/xf86Crtc.c b/hw/xfree86/modes/xf86Crtc.c
+index 177f7ac..13251cf 100644
+--- a/hw/xfree86/modes/xf86Crtc.c
++++ b/hw/xfree86/modes/xf86Crtc.c
+@@ -1847,6 +1847,10 @@ SetCompatOutput(xf86CrtcConfigPtr config)
+         output = config->output[config->compat_output];
+     }
+ 
++    /* All outputs are disconnected, select one to fake */
++    if (!output && config->num_output)
++        output = config->output[0];
++
+     return output;
+ }
+ 

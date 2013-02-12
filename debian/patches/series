@@ -28,6 +28,9 @@
 235-composite-tracking.diff
 236-use-fbdev-for-poulsbo-oaktrail-medfield.patch
 
+# upstream
+fixup-headless.patch
+
 ## waiting for review by upstream
 111_armel-drv-fallbacks.patch
 500_pointer_barrier_thresholds.diff
