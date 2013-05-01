@@ -34,14 +34,16 @@ xephyr-glx-register.patch
 no-nv.patch
 
 ## waiting for review by upstream
+xf86-dont-enable-gpuscreens.patch
 111_armel-drv-fallbacks.patch
 500_pointer_barrier_thresholds.diff
-
 ## upstream patches
 os-use-libunwind-to-generate-backtraces.patch
+include-GPU-screens-in-DPMS-code.patch
 
 # hybrid graphics fixes for xserver 1.13
 228_autobind_gpu.patch
+xf86-fixup-detection.patch
 
 # hotplug fixes
 xfree86-hotplug-cleanup-properly-if-the-screen-fails.patch
@@ -54,3 +56,4 @@ xf86-actually-set-the-compat-output-in-the-failure-c.patch
 autoconfig-fixup-tell-changed-so-randr-clients-can-t.patch
 config-add-no-removal.patch
 CVE-2013-1940.patch
+xf86-detach-scanout.patch

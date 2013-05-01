@@ -1,3 +1,16 @@
+xorg-server (2:1.13.3-0ubuntu6.1) UNRELEASED; urgency=low
+
+  * Add patch to fixup optimus again. (LP: #1185014)
+    - xf86-dont-enable-gpuscreens.patch
+  * Add patch to fix DPMS. (LP: #1184999)
+    - include-GPU-screens-in-DPMS-code.patch
+  * Add patch to fix crash on hybrid systems during shutdown. (LP: #1185035)
+    - xf86-detach-scanout.patch
+  * Add patch to fix device enumeration with nvidia drivers. (LP: #1190546)
+    - xf86-fixup-detection.patch
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 01 May 2013 10:35:55 +0200
+
 xorg-server (2:1.13.3-0ubuntu6) raring; urgency=low
 
   * SECURITY UPDATE: input event leak via inactive VT
