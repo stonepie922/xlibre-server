@@ -8,6 +8,7 @@ xorg-server (2:1.13.3-0ubuntu6.1) UNRELEASED; urgency=low
     - xf86-detach-scanout.patch
   * Add patch to fix device enumeration with nvidia drivers. (LP: #1190546)
     - xf86-fixup-detection.patch
+    - xf86-inactive-gpuscreen.patch
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 01 May 2013 10:35:55 +0200
 
