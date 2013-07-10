@@ -1,4 +1,4 @@
-xorg-server (2:1.13.3-0ubuntu6.1) UNRELEASED; urgency=low
+xorg-server (2:1.13.3-0ubuntu6.1) raring-proposed; urgency=low
 
   * Add patch to fixup optimus again. (LP: #1185014)
     - xf86-dont-enable-gpuscreens.patch
@@ -10,7 +10,7 @@ xorg-server (2:1.13.3-0ubuntu6.1) UNRELEASED; urgency=low
     - xf86-fixup-detection.patch
     - xf86-inactive-gpuscreen.patch
 
- -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 01 May 2013 10:35:55 +0200
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 09 Jul 2013 11:39:38 +0200
 
 xorg-server (2:1.13.3-0ubuntu6) raring; urgency=low
 
