@@ -816,8 +816,6 @@ index 71f88a9..8b204dc 100644
  /* Xinerama */
  extern int (*PanoramiXSaveXFixesVector[XFixesNumberRequests]) (ClientPtr);
  void PanoramiXFixesInit(void);
-diff --git a/dix/dixutils.c b/dix/dixutils.c
-index 9eb5489..521bdce 100644
 diff -Nru /dev/null xorg-server/test/gtest/dummy.conf
 --- /dev/null	1970-01-01 01:00:00.000000000 +0100
 +++ xorg-server/test/gtest/dummy.conf	2012-05-21 18:00:45.996945542 +0200
