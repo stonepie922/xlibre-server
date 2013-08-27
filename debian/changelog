@@ -1,7 +1,13 @@
 xorg-server (2:1.13.0-0ubuntu6.2) UNRELEASED; urgency=low
 
+  [ Maarten Lankhorst ]
   * add patch to fix starting xorg-server with no outputs connected (LP: #1122072)
     - fixup-headless.patch
+
+  [ Shih-Yuan Lee ]
+  * Add 238-fix-erratic-cursor-movement.patch to fix erratic cursor movement
+    when using cursor movement when using "Coordinate Transformation Matrix".
+    (LP: #1212123)
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 12 Feb 2013 15:18:32 +0100
 
