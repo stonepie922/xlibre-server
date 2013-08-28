@@ -26,7 +26,6 @@
 208_switch_on_release.diff
 227_null_ptr_midispcur.patch
 232-xf86compatoutput-valgrind.patch
-233-xf86events-valgrind.patch
 236-use-fbdev-for-poulsbo-oaktrail-medfield.patch
 drm_device_keep_trying.patch
 xfree86-no-xv-for-gpuscreens.patch

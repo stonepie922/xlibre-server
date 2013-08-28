@@ -1,3 +1,10 @@
+xorg-server (2:1.13.4-0ubuntu0.1) UNRELEASED; urgency=low
+
+  * New bugfix release.
+  * Drop 233-xf86events-valgrind.patch, upstream.
+
+ -- Timo Aaltonen <tjaalton@ubuntu.com>  Wed, 28 Aug 2013 14:56:28 +0300
+
 xorg-server (2:1.13.3-0ubuntu6.1) raring-proposed; urgency=low
 
   * Add patch to fixup optimus again. (LP: #1185014)
