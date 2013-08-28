@@ -2,6 +2,8 @@ xorg-server (2:1.13.4-0ubuntu0.1) UNRELEASED; urgency=low
 
   * New bugfix release.
   * Drop 233-xf86events-valgrind.patch, upstream.
+  * Drop CVE-2013-1940.patch, upstream.
+  * Refresh 500_pointer_barrier_thresholds.diff to apply.
 
  -- Timo Aaltonen <tjaalton@ubuntu.com>  Wed, 28 Aug 2013 14:56:28 +0300
 
