@@ -11,6 +11,7 @@ xorg-server (2:1.13.0-0ubuntu6.2) UNRELEASED; urgency=low
 
   [ Timo Aaltonen ]
   * Fix patch 500 to apply.
+  * dix-fix-zaphod-screen-crossing.diff: Fix pointer screen crossing. (LP: #1068920)
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 12 Feb 2013 15:18:32 +0100
 

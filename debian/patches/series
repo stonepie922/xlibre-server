@@ -41,3 +41,4 @@ fixup-headless.patch
 231-scan-pci-after-probing-devices.patch
 237-dix-set-the-device-transformation-matrix.patch
 238-fix-erratic-cursor-movement.patch
+dix-fix-zaphod-screen-crossing.diff
