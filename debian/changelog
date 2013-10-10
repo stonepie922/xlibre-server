@@ -1,4 +1,4 @@
-xorg-server (2:1.13.0-0ubuntu6.3) UNRELEASED; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.3) quantal-proposed; urgency=low
 
   [ Maarten Lankhorst ]
   * add patch to fix starting xorg-server with no outputs connected (LP: #1122072)
