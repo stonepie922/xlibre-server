@@ -1,4 +1,4 @@
-xorg-server (2:1.13.0-0ubuntu6.2) UNRELEASED; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.3) UNRELEASED; urgency=low
 
   [ Maarten Lankhorst ]
   * add patch to fix starting xorg-server with no outputs connected (LP: #1122072)
@@ -14,6 +14,15 @@ xorg-server (2:1.13.0-0ubuntu6.2) UNRELEASED; urgency=low
   * dix-fix-zaphod-screen-crossing.diff: Fix pointer screen crossing. (LP: #1068920)
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 12 Feb 2013 15:18:32 +0100
+
+xorg-server (2:1.13.0-0ubuntu6.2) quantal-security; urgency=low
+
+  * SECURITY UPDATE: input event leak via inactive VT
+    - debian/patches/CVE-2013-1940.patch: fix flush input to work with
+      Linux evdev devices in hw/xfree86/os-support/shared/posix_tty.c.
+    - CVE-2013-1940
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Thu, 11 Apr 2013 08:08:53 -0400
 
 xorg-server (2:1.13.0-0ubuntu6.1) quantal-proposed; urgency=low
 
