@@ -1,4 +1,4 @@
-xorg-server (2:1.13.0-0ubuntu6.3) quantal-proposed; urgency=low
+xorg-server (2:1.13.0-0ubuntu6.5) quantal-proposed; urgency=low
 
   [ Maarten Lankhorst ]
   * add patch to fix starting xorg-server with no outputs connected (LP: #1122072)
@@ -14,6 +14,23 @@ xorg-server (2:1.13.0-0ubuntu6.3) quantal-proposed; urgency=low
   * dix-fix-zaphod-screen-crossing.diff: Fix pointer screen crossing. (LP: #1068920)
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 12 Feb 2013 15:18:32 +0100
+
+xorg-server (2:1.13.0-0ubuntu6.4) quantal-security; urgency=low
+
+  * SECURITY UPDATE: denial of service and possible code execution via
+    use after free in ImageText request handling.
+    - debian/patches/CVE-2013-4396.patch: avoid use after free in
+      dix/dixfonts.c.
+    - CVE-2013-4396
+  * SECURITY UPDATE: unsafe use of xkb cache files
+    - debian/patches/190_cache-xkbcomp_output_for_fast_start_up.patch:
+      updated to not use xkb cache files in /tmp when running a non-root
+      server.
+    - CVE-2013-1056
+  * This package does _not_ contain the changes from 2:1.13.0-0ubuntu6.3
+    in quantal-proposed.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 16 Oct 2013 06:44:50 -0400
 
 xorg-server (2:1.13.0-0ubuntu6.2) quantal-security; urgency=low
 
