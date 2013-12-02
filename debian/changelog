@@ -1,3 +1,9 @@
+xorg-server (2:1.10.4-1~bpo60+2) squeeze-backports; urgency=low
+
+  * Add 14_CVE-2013-4396.diff to fix CVE-2013-4396 (DSA-2784-1).
+
+ -- intrigeri <intrigeri@debian.org>  Mon, 02 Dec 2013 11:30:11 +0100
+
 xorg-server (2:1.10.4-1~bpo60+1) squeeze-backports; urgency=low
 
   * Rebuild for squeeze-backports.
