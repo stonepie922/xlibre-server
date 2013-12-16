@@ -1,4 +1,4 @@
-xorg-server (2:1.14.5-1ubuntu2~saucy1) UNRELEASED; urgency=low
+xorg-server (2:1.14.5-1ubuntu2~saucy1) saucy-proposed; urgency=low
 
   * Copy package back to saucy-proposed from trusty.
     - There's a MRE for xorg-server.
@@ -9,7 +9,7 @@ xorg-server (2:1.14.5-1ubuntu2~saucy1) UNRELEASED; urgency=low
     - Do not render invalid trapezoids. (LP: #1197921)  (CVE-2013-6424)
     - Fix for CVE-2013-1056.
 
- -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 16 Dec 2013 13:10:42 +0100
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 16 Dec 2013 13:27:58 +0100
 
 xorg-server (2:1.14.5-1ubuntu2) trusty; urgency=medium
 
