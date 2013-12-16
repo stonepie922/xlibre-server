@@ -1,3 +1,16 @@
+xorg-server (2:1.14.5-1ubuntu2~saucy1) UNRELEASED; urgency=low
+
+  * Copy package back to saucy-proposed from trusty.
+    - There's a MRE for xorg-server.
+    - Fixes mesa >= 10 support on saucy.
+    - Fix a timer bug in the sync code. (LP: #1238410)
+  * Changes in packaging:
+    - Fix gpu screen output hotplugging. (LP: #1259561)
+    - Do not render invalid trapezoids. (LP: #1197921)  (CVE-2013-6424)
+    - Fix for CVE-2013-1056.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 16 Dec 2013 13:10:42 +0100
+
 xorg-server (2:1.14.5-1ubuntu2) trusty; urgency=medium
 
   * Don't build XMir on ppc64el.
