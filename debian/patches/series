@@ -45,8 +45,10 @@ xf86-fixup-detection.patch
 xf86-inactive-gpuscreen.patch
 xrandr-rroutputchanged-main.patch
 rrcrtc-brackets-are-hard.patch
-
 config-add-no-removal.patch
+xf86-ignore-conflicting-rr-caps.patch
+fix-detach-gpu.patch
+disable-rotation-transform-gpuscreens.patch
 
 glx-remove-current-context-cache.patch
 glx-fix-memory-leak.patch
