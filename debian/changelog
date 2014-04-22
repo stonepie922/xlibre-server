@@ -1,5 +1,6 @@
-xorg-server (2:1.14.5-1ubuntu2~saucy2) UNRELEASED; urgency=medium
+xorg-server (2:1.14.6-0ubuntu1) UNRELEASED; urgency=medium
 
+  * New upstream release (MRE).
   * Disable support for rotations and transforms
     on gpu screens for now. (LP: #1308515)
   * Only set RR caps that are appropriate to main/gpu screen. (LP: #1277014)
