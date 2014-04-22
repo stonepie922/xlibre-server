@@ -1,4 +1,4 @@
-xorg-server (2:1.14.6-0ubuntu1) UNRELEASED; urgency=medium
+xorg-server (2:1.14.6-0ubuntu1) saucy-proposed; urgency=medium
 
   * New upstream release (MRE).
   * Disable support for rotations and transforms
@@ -6,7 +6,7 @@ xorg-server (2:1.14.6-0ubuntu1) UNRELEASED; urgency=medium
   * Only set RR caps that are appropriate to main/gpu screen. (LP: #1277014)
   * Fix crash in RRCrtcDetachScanoutPixmap. (LP: #1280743)
 
- -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 16 Apr 2014 10:14:39 +0200
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 22 Apr 2014 12:37:21 +0200
 
 xorg-server (2:1.14.5-1ubuntu2~saucy1) saucy-proposed; urgency=low
 
