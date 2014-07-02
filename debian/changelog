@@ -1,3 +1,19 @@
+xorg-server (2:1.15.1-0ubuntu2.1) trusty-proposed; urgency=medium
+
+  * Copy utopic package back to trusty.
+    - Fix ppc64el byte order. (LP: #1333422)
+      + xi-dont-copy-too-much.patch
+    - Fix valgrind issue with xi copying too much.
+      + xi-dont-copy-too-much.patch
+    - Fix crash related to suspend/shutdown. (LP: #1208473)
+      + mi-dont-process-disabled.patch
+    - Fix touch event history overflow.
+      + xi2-resize-touch.patch
+    - Fix switching to guest sessions. (LP: #1322212)
+      + Revive drm_device_keep_trying.patch
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 02 Jul 2014 12:37:25 +0200
+
 xorg-server (2:1.15.1-0ubuntu6) utopic; urgency=medium
 
   * ppc64el-endian-fix.patch: Fix PPC endian assumptions (LP: #1333422)
