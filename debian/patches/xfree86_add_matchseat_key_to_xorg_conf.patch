@@ -1,0 +1,248 @@
+From 7070ebeebaca1b51f8a2801989120784a1c374ae Mon Sep 17 00:00:00 2001
+From: Oleg Samarin <osamarin68@gmail.com>
+Date: Thu, 3 Apr 2014 11:19:14 -0300
+Subject: [PATCH] xfree86: add new key MatchSeat to xorg.conf sections
+ "Device", "Screen", and "ServerLayout"
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch introduces a new key MatchSeat in xorg.conf (also applies to
+any .conf file in xorg.conf.d). It will allow targeting a given
+"Device", "Screen", and/or "ServerLayout" section to a particular
+seat only (specified by option "-seat" in X server command line),
+so that other seats won't be affected.
+
+Without this patch, one needs to write a separate xorg.conf.custom
+file and pass it to X server via "-config" option, if one wants that
+these settings only apply for the right seat. However, in some cases,
+this solution is undesirable or even impossible (e.g. when using GDM,
+which doesn't allow X server command line customization).
+
+Example file (/etc/X11/xorg.conf.d/seat1.conf), which would be ignored
+by X server unless it was started with "-seat seat1" option:
+
+Section "Device"
+    Identifier "card0"
+    Driver "nvidia"
+    Option "NoLogo" "True"
+    MatchSeat "seat1"
+EndSection
+
+Signed-off-by: Oleg Samarin <osamarin68@gmail.com>
+Signed-off-by: Laércio de Sousa <lbsousajr@gmail.com>
+Reviewed-by: Dave Airlie <airlied@redhat.com>
+Signed-off-by: Peter Hutterer <peter.hutterer@who-t.net>
+---
+ hw/xfree86/common/xf86Config.c | 34 +++++++++++++++++++++++++---------
+ hw/xfree86/parser/Device.c     |  6 ++++++
+ hw/xfree86/parser/Layout.c     |  6 ++++++
+ hw/xfree86/parser/Screen.c     |  6 ++++++
+ hw/xfree86/parser/xf86Parser.h |  3 +++
+ hw/xfree86/parser/xf86tokens.h |  1 +
+ 6 files changed, 47 insertions(+), 9 deletions(-)
+
+Index: xorg-server-trusty-matchseat/hw/xfree86/common/xf86Config.c
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/common/xf86Config.c	2014-09-11 10:50:39.823851011 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/common/xf86Config.c	2014-09-11 10:55:16.098992439 -0300
+@@ -232,6 +232,18 @@
+     return tmp_path;
+ }
+ 
++#define FIND_SUITABLE(pointertype, listhead, ptr)                                            \
++    do {                                                                                     \
++        pointertype _l, _p;                                                                  \
++                                                                                             \
++        for (_l = (listhead), _p = NULL; !_p && _l; _l = (pointertype)_l->list.next) {       \
++            if (!_l->match_seat || (SeatId && xf86nameCompare(_l->match_seat, SeatId) == 0)) \
++                _p = _l;                                                                     \
++        }                                                                                    \
++                                                                                             \
++        (ptr) = _p;                                                                          \
++    } while(0)
++
+ /*
+  * use the datastructure that the parser provides and pick out the parts
+  * that we need at this point
+@@ -1600,8 +1612,11 @@
+      * config file, or - if it is NULL - configScreen autogenerates one for
+      * us */
+     if (!count) {
++        XF86ConfScreenPtr screen;
++
++        FIND_SUITABLE (XF86ConfScreenPtr, xf86configptr->conf_screen_lst, screen);
+         slp[0].screen = xnfcalloc(1, sizeof(confScreenRec));
+-        if (!configScreen(slp[0].screen, xf86configptr->conf_screen_lst,
++        if (!configScreen(slp[0].screen, screen,
+                           0, X_CONFIG)) {
+             free(slp[0].screen);
+             free(slp);
+@@ -1841,7 +1856,7 @@
+      * set it to NULL so that the section can be autoconfigured later */
+     screenp->device = xnfcalloc(1, sizeof(GDevRec));
+     if ((!conf_screen->scrn_device) && (xf86configptr->conf_device_lst)) {
+-        conf_screen->scrn_device = xf86configptr->conf_device_lst;
++        FIND_SUITABLE (XF86ConfDevicePtr, xf86configptr->conf_device_lst, conf_screen->scrn_device);
+         xf86Msg(X_DEFAULT, "No device specified for screen \"%s\".\n"
+                 "\tUsing the first device section listed.\n", screenp->id);
+     }
+@@ -2374,6 +2389,7 @@
+     char *scanptr;
+     Bool singlecard = 0;
+     Bool implicit_layout = FALSE;
++    XF86ConfLayoutPtr layout;
+ 
+     if (!autoconfig) {
+         char *filename, *dirname, *sysdirname;
+@@ -2449,14 +2465,17 @@
+      */
+ 
+     /* First check if a layout section is present, and if it is valid. */
++    FIND_SUITABLE(XF86ConfLayoutPtr, xf86configptr->conf_layout_lst, layout);
++    if (layout == NULL || xf86ScreenName != NULL) {
++        XF86ConfScreenPtr screen;
+ 
+-    if (xf86configptr->conf_layout_lst == NULL || xf86ScreenName != NULL) {
+         if (xf86ScreenName == NULL) {
+             xf86Msg(X_DEFAULT,
+                     "No Layout section.  Using the first Screen section.\n");
+         }
++        FIND_SUITABLE (XF86ConfScreenPtr, xf86configptr->conf_screen_lst, screen);
+         if (!configImpliedLayout(&xf86ConfigLayout,
+-                                 xf86configptr->conf_screen_lst,
++                                 screen,
+                                  xf86configptr)) {
+             xf86Msg(X_ERROR, "Unable to determine the screen layout\n");
+             return CONFIG_PARSE_ERROR;
+@@ -2471,16 +2490,13 @@
+             if (optlist && xf86FindOption(optlist, "defaultserverlayout"))
+                 dfltlayout =
+                     xf86SetStrOption(optlist, "defaultserverlayout", NULL);
+-            if (!configLayout
+-                (&xf86ConfigLayout, xf86configptr->conf_layout_lst,
+-                 dfltlayout)) {
++            if (!configLayout(&xf86ConfigLayout, layout, dfltlayout)) {
+                 xf86Msg(X_ERROR, "Unable to determine the screen layout\n");
+                 return CONFIG_PARSE_ERROR;
+             }
+         }
+         else {
+-            if (!configLayout(&xf86ConfigLayout, xf86configptr->conf_layout_lst,
+-                              NULL)) {
++            if (!configLayout(&xf86ConfigLayout, layout, NULL)) {
+                 xf86Msg(X_ERROR, "Unable to determine the screen layout\n");
+                 return CONFIG_PARSE_ERROR;
+             }
+Index: xorg-server-trusty-matchseat/hw/xfree86/parser/Device.c
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/parser/Device.c	2014-09-11 10:48:54.272129993 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/parser/Device.c	2014-09-11 10:55:16.094992284 -0300
+@@ -72,6 +72,7 @@
+     {RAMDAC, "ramdac"},
+     {DACSPEED, "dacspeed"},
+     {CLOCKS, "clocks"},
++    {MATCHSEAT, "matchseat"},
+     {OPTION, "option"},
+     {VIDEORAM, "videoram"},
+     {BIOSBASE, "biosbase"},
+@@ -217,6 +218,11 @@
+                 Error(NUMBER_MSG, "TextClockFreq");
+             ptr->dev_textclockfreq = (int) (val.realnum * 1000.0 + 0.5);
+             break;
++        case MATCHSEAT:
++            if (xf86getSubToken(&(ptr->dev_comment)) != STRING)
++                Error(QUOTE_MSG, "MatchSeat");
++            ptr->match_seat = val.str;
++            break;
+         case OPTION:
+             ptr->dev_option_lst = xf86parseOption(ptr->dev_option_lst);
+             break;
+Index: xorg-server-trusty-matchseat/hw/xfree86/parser/Layout.c
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/parser/Layout.c	2014-09-11 10:48:54.272129993 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/parser/Layout.c	2014-09-11 10:55:16.094992284 -0300
+@@ -71,6 +71,7 @@
+     {ENDSECTION, "endsection"},
+     {SCREEN, "screen"},
+     {IDENTIFIER, "identifier"},
++    {MATCHSEAT, "matchseat"},
+     {INACTIVE, "inactive"},
+     {INPUTDEVICE, "inputdevice"},
+     {OPTION, "option"},
+@@ -110,6 +111,11 @@
+             ptr->lay_identifier = val.str;
+             has_ident = TRUE;
+             break;
++        case MATCHSEAT:
++            if (xf86getSubToken(&(ptr->lay_comment)) != STRING)
++                Error(QUOTE_MSG, "MatchSeat");
++            ptr->match_seat = val.str;
++            break;
+         case INACTIVE:
+         {
+             XF86ConfInactivePtr iptr;
+Index: xorg-server-trusty-matchseat/hw/xfree86/parser/Screen.c
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/parser/Screen.c	2014-09-11 10:48:54.272129993 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/parser/Screen.c	2014-09-11 10:55:16.094992284 -0300
+@@ -199,6 +199,7 @@
+ static xf86ConfigSymTabRec ScreenTab[] = {
+     {ENDSECTION, "endsection"},
+     {IDENTIFIER, "identifier"},
++    {MATCHSEAT, "matchseat"},
+     {OBSDRIVER, "driver"},
+     {MDEVICE, "device"},
+     {MONITOR, "monitor"},
+@@ -237,6 +238,11 @@
+                 Error(ONLY_ONE_MSG, "Identifier or Driver");
+             has_ident = TRUE;
+             break;
++        case MATCHSEAT:
++            if (xf86getSubToken(&(ptr->scrn_comment)) != STRING)
++                Error(QUOTE_MSG, "MatchSeat");
++            ptr->match_seat = val.str;
++            break;
+         case OBSDRIVER:
+             if (xf86getSubToken(&(ptr->scrn_comment)) != STRING)
+                 Error(QUOTE_MSG, "Driver");
+Index: xorg-server-trusty-matchseat/hw/xfree86/parser/xf86Parser.h
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/parser/xf86Parser.h	2014-09-11 10:48:54.272129993 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/parser/xf86Parser.h	2014-09-11 10:55:16.094992284 -0300
+@@ -224,6 +224,7 @@
+     int dev_screen;
+     XF86OptionPtr dev_option_lst;
+     char *dev_comment;
++    char *match_seat;
+ } XF86ConfDeviceRec, *XF86ConfDevicePtr;
+ 
+ typedef struct {
+@@ -275,6 +276,7 @@
+     XF86OptionPtr scrn_option_lst;
+     char *scrn_comment;
+     int scrn_virtualX, scrn_virtualY;
++    char *match_seat;
+ } XF86ConfScreenRec, *XF86ConfScreenPtr;
+ 
+ typedef struct {
+@@ -366,6 +368,7 @@
+     XF86ConfInactivePtr lay_inactive_lst;
+     XF86ConfInputrefPtr lay_input_lst;
+     XF86OptionPtr lay_option_lst;
++    char *match_seat;
+     char *lay_comment;
+ } XF86ConfLayoutRec, *XF86ConfLayoutPtr;
+ 
+Index: xorg-server-trusty-matchseat/hw/xfree86/parser/xf86tokens.h
+===================================================================
+--- xorg-server-trusty-matchseat.orig/hw/xfree86/parser/xf86tokens.h	2014-09-11 10:48:54.272129993 -0300
++++ xorg-server-trusty-matchseat/hw/xfree86/parser/xf86tokens.h	2014-09-11 10:55:16.094992284 -0300
+@@ -87,6 +87,7 @@
+     VENDOR,
+     DASH,
+     COMMA,
++    MATCHSEAT,
+     OPTION,
+     COMMENT,
+ 

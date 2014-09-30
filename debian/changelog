@@ -1,3 +1,10 @@
+xorg-server (2:1.15.1-0ubuntu2.2) UNRELEASED; urgency=low
+
+  [ Laércio de Sousa ]
+  * Backport support for logind-based multiseat back to trusty. (LP: #1209008)
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 30 Sep 2014 12:46:12 +0200
+
 xorg-server (2:1.15.1-0ubuntu2.1) trusty-proposed; urgency=medium
 
   * Copy utopic package back to trusty.

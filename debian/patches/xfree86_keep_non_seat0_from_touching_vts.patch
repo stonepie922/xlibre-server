@@ -1,0 +1,50 @@
+From 46cf2a60934076bf568062eb83121ce90b6ff596 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?La=C3=A9rcio=20de=20Sousa?= <lbsousajr@gmail.com>
+Date: Thu, 12 Dec 2013 14:22:48 -0200
+Subject: [PATCH] xfree86: Keep a non-seat0 X server from touching VTs (#71258)
+
+Updated patch following Hans de Goede's advice.
+
+If -seat option is passed with a value different from seat0,
+X server won't call xf86OpenConsole().
+
+This is needed to avoid any race condition between seat0 and
+non-seat0 X servers. If a non-seat0 X server opens a given VT
+before a seat0 one which expects to open the same VT, one can
+get an inactive systemd-logind graphical session for seat0.
+
+This patch was first tested in a multiseat setup with multiple
+video cards and works quite well.
+
+I suppose it can also make things like DontVTSwitch and -sharevts
+meaningless for non-seat0 seats, so it may fix bug #69477, too.
+
+Fixes: https://bugs.freedesktop.org/show_bug.cgi?id=71258
+       https://bugs.freedesktop.org/show_bug.cgi?id=69477 (maybe)
+
+See also: http://lists.x.org/archives/xorg-devel/2013-October/038391.html
+          https://bugzilla.redhat.com/show_bug.cgi?id=1018196
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Reviewed-by: Hans de Goede <hdegoede@redhat.com>
+---
+ hw/xfree86/common/xf86Init.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hw/xfree86/common/xf86Init.c b/hw/xfree86/common/xf86Init.c
+index 9c8a86a..952bf37 100644
+--- a/hw/xfree86/common/xf86Init.c
++++ b/hw/xfree86/common/xf86Init.c
+@@ -544,7 +544,8 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char **argv)
+             if (NEED_IO_ENABLED(flags))
+                 want_hw_access = TRUE;
+ 
+-            if (!(flags & HW_SKIP_CONSOLE))
++            /* Non-seat0 X servers should not open console */
++            if (!(flags & HW_SKIP_CONSOLE) && !ServerIsNotSeat0())
+                 xorgHWOpenConsole = TRUE;
+         }
+ 
+-- 
+2.0.4
+

@@ -56,3 +56,7 @@ xi2-resize-touch.patch
 xi-dont-copy-too-much.patch
 mi-dont-process-disabled.patch
 ppc64el-endian-fix.patch
+xfree86_allow_fallback_to_pci_bus_probe_for_non_seat0.patch
+xfree86_keep_non_seat0_from_touching_vts.patch
+xfree86_add_matchseat_key_to_xorg_conf.patch
+xfree86_add_matchseat_key_description_to_xorg_conf_man.patch
