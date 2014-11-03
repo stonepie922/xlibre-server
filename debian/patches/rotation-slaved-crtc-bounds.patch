@@ -1,0 +1,122 @@
+From: Chris Wilson <chris@chris-wilson.co.uk>
+To: xorg-devel@lists.x.org
+Subject: [PATCH 2/3] randr: Consider rotation of slaved crtcs when computing bounds
+Date: Wed, 23 Jul 2014 12:35:14 +0100
+
+When creating a pixmap to cover a rotated slaved CRTC, we need to
+consider its rotated size as that is the area that it occupies in the
+framebuffer. The slave is then responsible for mapping the copy of the
+framebuffer onto the rotated scanout - which can be the usual RandR
+shadow composite method.
+
+Signed-off-by: Chris Wilson <chris@chris-wilson.co.uk>
+Cc: Dave Airlie <airlied@redhat.com>
+Cc: Maarten Lankhorst <maarten.lankhorst@canonical.com>
+---
+ randr/rrcrtc.c | 56 ++++++++++++++++++++++++++++++++++++--------------------
+ 1 file changed, 36 insertions(+), 20 deletions(-)
+
+--- a/randr/rrcrtc.c
++++ b/randr/rrcrtc.c
+@@ -273,27 +273,43 @@
+     return FALSE;
+ }
+ 
+-static void
+-crtc_bounds(RRCrtcPtr crtc, int *left, int *right, int *top, int *bottom)
++static int mode_height(const RRModeRec *mode, Rotation rotation)
+ {
+-    *left = crtc->x;
+-    *top = crtc->y;
+-
+-    switch (crtc->rotation) {
++    switch (rotation & 0xf) {
+     case RR_Rotate_0:
+     case RR_Rotate_180:
++	return mode->mode.height;
++    case RR_Rotate_90:
++    case RR_Rotate_270:
++	return mode->mode.width;
+     default:
+-        *right = crtc->x + crtc->mode->mode.width;
+-        *bottom = crtc->y + crtc->mode->mode.height;
+-        return;
++	return 0;
++    }
++}
++
++static int mode_width(const RRModeRec *mode, Rotation rotation)
++{
++    switch (rotation & 0xf) {
++    case RR_Rotate_0:
++    case RR_Rotate_180:
++	return mode->mode.width;
+     case RR_Rotate_90:
+     case RR_Rotate_270:
+-        *right = crtc->x + crtc->mode->mode.height;
+-        *bottom = crtc->y + crtc->mode->mode.width;
+-        return;
++	return mode->mode.height;
++    default:
++	return 0;
+     }
+ }
+ 
++static void
++crtc_bounds(RRCrtcPtr crtc, int *left, int *right, int *top, int *bottom)
++{
++    *left = crtc->x;
++    *top = crtc->y;
++    *right = crtc->x + mode_width(crtc->mode, crtc->rotation);
++    *bottom = crtc->y + mode_height(crtc->mode, crtc->rotation);
++}
++
+ /* overlapping counts as adjacent */
+ static Bool
+ crtcs_adjacent(const RRCrtcPtr a, const RRCrtcPtr b)
+@@ -466,9 +482,9 @@
+             if (!pScrPriv->crtcs[c]->mode)
+                 continue;
+             newbox.x1 = pScrPriv->crtcs[c]->x;
+-            newbox.x2 = pScrPriv->crtcs[c]->x + pScrPriv->crtcs[c]->mode->mode.width;
++	    newbox.x2 = pScrPriv->crtcs[c]->x + mode_width(pScrPriv->crtcs[c]->mode, pScrPriv->crtcs[c]->rotation);
+             newbox.y1 = pScrPriv->crtcs[c]->y;
+-            newbox.y2 = pScrPriv->crtcs[c]->y + pScrPriv->crtcs[c]->mode->mode.height;
++	    newbox.y2 = pScrPriv->crtcs[c]->y + mode_height(pScrPriv->crtcs[c]->mode, pScrPriv->crtcs[c]->rotation);
+         }
+         RegionInit(&new_crtc_region, &newbox, 1);
+         RegionUnion(&total_region, &total_region, &new_crtc_region);
+@@ -487,9 +503,9 @@
+                 if (!pScrPriv->crtcs[c]->mode)
+                     continue;
+                 newbox.x1 = pScrPriv->crtcs[c]->x;
+-                newbox.x2 = pScrPriv->crtcs[c]->x + pScrPriv->crtcs[c]->mode->mode.width;
++                newbox.x2 = pScrPriv->crtcs[c]->x + mode_width(pScrPriv->crtcs[c]->mode, pScrPriv->crtcs[c]->rotation);
+                 newbox.y1 = pScrPriv->crtcs[c]->y;
+-                newbox.y2 = pScrPriv->crtcs[c]->y + pScrPriv->crtcs[c]->mode->mode.height;
++                newbox.y2 = pScrPriv->crtcs[c]->y + mode_height(pScrPriv->crtcs[c]->mode, pScrPriv->crtcs[c]->rotation);
+             }
+ 	    RegionInit(&new_crtc_region, &newbox, 1);
+ 	    RegionUnion(&total_region, &total_region, &new_crtc_region);
+@@ -544,8 +560,8 @@
+             int width = 0, height = 0;
+ 
+             if (mode) {
+-                width = mode->mode.width;
+-                height = mode->mode.height;
++		width = mode_width(mode, rotation);
++		height = mode_height(mode, rotation);
+             }
+             ErrorF("have a master to look out for\n");
+             ret = rrCheckPixmapBounding(master, crtc,
+@@ -1672,8 +1688,8 @@
+         changed = FALSE;
+         if (crtc->mode && crtc->x == pDrawable->x &&
+             crtc->y == pDrawable->y &&
+-            crtc->mode->mode.width == pDrawable->width &&
+-            crtc->mode->mode.height == pDrawable->height)
++	    mode_width(crtc->mode, crtc->rotation) == pDrawable->width &&
++	    mode_height(crtc->mode, crtc->rotation) == pDrawable->height)
+             size_fits = TRUE;
+ 
+         /* is the pixmap already set? */
