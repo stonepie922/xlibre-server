@@ -1,3 +1,10 @@
+xorg-server (2:1.15.1-0ubuntu2.3) trusty-proposed; urgency=medium
+
+  * Actually fix the cirrus VGA corruption in gnome-terminal.
+    - fb-24-depth.patch (LP: #1318119)
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 05 Nov 2014 15:24:09 +0100
+
 xorg-server (2:1.15.1-0ubuntu2.2) trusty-proposed; urgency=medium
 
   [ Laércio de Sousa ]
@@ -6,7 +13,7 @@ xorg-server (2:1.15.1-0ubuntu2.2) trusty-proposed; urgency=medium
   [ Maarten Lankhorst ]
   * Re-enable support for rotation and transforms on gpu-screens with support.
     - Allows re-enabling intel SNA rotation after fixing it. (LP: #1386620)
-  * Fix black screen when using qemu with cirrus vga. (LP: #1386620)
+  * Fix black screen when using qemu with cirrus vga.
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 03 Nov 2014 12:36:32 +0100
 

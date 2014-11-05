@@ -1,0 +1,35 @@
+commit fe5018e0564118a7a8198fa286186fdb9ed818c7
+Author: Takashi Iwai <tiwai@suse.de>
+Date:   Tue Aug 19 15:57:22 2014 -0500
+
+    fb: Fix invalid bpp for 24bit depth window
+    
+    We have a hack in fb layer for a 24bpp screen to use 32bpp images, and
+    fbCreateWindow() replaces its drawable.bitsPerPixel field
+    appropriately.  But, the problem is that it always replaces when 32bpp
+    is passed.  If the depth is 32, this results in bpp < depth, which is
+    actually invalid.
+    
+    Meanwhile, fbCreatePixmap() has a more check and it creates with 24bpp
+    only when the passed depth <= 24 for avoiding such a problem.
+    
+    This oneliner patch just adds the similar check in fbCreateWindow().
+    This (hopefully) fixes the long-standing broken graphics mess of
+    cirrus KMS with 24bpp.
+    
+    Signed-off-by: Takashi Iwai <tiwai@suse.de>
+    Reviewed-by: Keith Packard <keithp@keithp.com>
+
+diff --git a/fb/fbwindow.c b/fb/fbwindow.c
+index 368c4b8..c90175f 100644
+--- a/fb/fbwindow.c
++++ b/fb/fbwindow.c
+@@ -33,7 +33,7 @@ fbCreateWindow(WindowPtr pWin)
+ {
+     dixSetPrivate(&pWin->devPrivates, fbGetWinPrivateKey(pWin),
+                   fbGetScreenPixmap(pWin->drawable.pScreen));
+-    if (pWin->drawable.bitsPerPixel == 32)
++    if (pWin->drawable.bitsPerPixel == 32 && pWin->drawable.depth <= 24)
+         pWin->drawable.bitsPerPixel =
+             fbGetScreenPrivate(pWin->drawable.pScreen)->win32bpp;
+     return TRUE;

@@ -61,3 +61,4 @@ xfree86_keep_non_seat0_from_touching_vts.patch
 xfree86_add_matchseat_key_to_xorg_conf.patch
 xfree86_add_matchseat_key_description_to_xorg_conf_man.patch
 rotation-slaved-crtc-bounds.patch
+fb-24-depth.patch
