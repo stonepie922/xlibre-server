@@ -1,11 +1,4 @@
-xorg-server (2:1.15.1-0ubuntu2.3) trusty-proposed; urgency=medium
-
-  * Actually fix the cirrus VGA corruption in gnome-terminal.
-    - fb-24-depth.patch (LP: #1318119)
-
- -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 05 Nov 2014 15:24:09 +0100
-
-xorg-server (2:1.15.1-0ubuntu2.2) trusty-proposed; urgency=medium
+xorg-server (2:1.15.1-0ubuntu2.6) trusty-proposed; urgency=medium
 
   [ Laércio de Sousa ]
   * Backport support for logind-based multiseat back to trusty. (LP: #1209008)
@@ -14,8 +7,41 @@ xorg-server (2:1.15.1-0ubuntu2.2) trusty-proposed; urgency=medium
   * Re-enable support for rotation and transforms on gpu-screens with support.
     - Allows re-enabling intel SNA rotation after fixing it. (LP: #1386620)
   * Fix black screen when using qemu with cirrus vga.
+    - fb-24-depth.patch (LP: #1318119)
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 03 Nov 2014 12:36:32 +0100
+
+xorg-server (2:1.15.1-0ubuntu2.5) trusty-security; urgency=medium
+
+  * SECURITY UPDATE: Dec 2014 security issues - additional fixes
+    - debian/patches/CVE-2014-8xxx/003[4567]*.patch: add additional
+      fixes not included in original pre-advisory bundle.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 09 Dec 2014 17:12:42 -0500
+
+xorg-server (2:1.15.1-0ubuntu2.4) trusty-security; urgency=medium
+
+  * SECURITY UPDATE: Dec 2014 protocol handling security issues
+    - debian/patches/CVE-2014-8xxx/*.patch: patches from upstream to fix
+      a multitude of security issues, including a couple of pre-requisite
+      fixes from git.
+    - CVE-2014-8091
+    - CVE-2014-8092
+    - CVE-2014-8093
+    - CVE-2014-8094
+    - CVE-2014-8095
+    - CVE-2014-8096
+    - CVE-2014-8097
+    - CVE-2014-8098
+    - CVE-2014-8099
+    - CVE-2014-8100
+    - CVE-2014-8101
+    - CVE-2014-8102
+    - CVE-2014-8103
+  * This package does _not_ contain the changes from 2:1.15.1-0ubuntu2.3
+    in trusty-proposed.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Mon, 08 Dec 2014 15:42:08 -0500
 
 xorg-server (2:1.15.1-0ubuntu2.1) trusty-proposed; urgency=medium
 
