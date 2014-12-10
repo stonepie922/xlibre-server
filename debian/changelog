@@ -1,3 +1,9 @@
+xorg-server (2:1.15.1-0ubuntu2.6) trusty-proposed; urgency=medium
+
+  * Re-apply changes between -0u2.1..-0u2.3.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 10 Dec 2014 19:06:02 +0200
+
 xorg-server (2:1.15.1-0ubuntu2.5) trusty-security; urgency=medium
 
   * SECURITY UPDATE: Dec 2014 security issues - additional fixes
