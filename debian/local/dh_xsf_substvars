@@ -22,10 +22,10 @@ VIDEODEP=$(cat /usr/share/xserver-xorg/videodrvdep 2>/dev/null)
 # Iterate on the packages:
 for package in $(dh_listpackages); do
   case $package in
-    *-udeb)
+    *-udeb-lts-vivid)
       # udebs depend on udebs, tweak the dependency on the server:
-      inputdep=$(echo "$INPUTDEP"|sed 's/xserver-xorg-core/&-udeb/')
-      videodep=$(echo "$VIDEODEP"|sed 's/xserver-xorg-core/&-udeb/')
+      inputdep=$(echo "$INPUTDEP"|sed 's/xserver-xorg-core-lts-vivid/&-udeb-lts-vivid/')
+      videodep=$(echo "$VIDEODEP"|sed 's/xserver-xorg-core-lts-vivid/&-udeb-lts-vivid/')
     ;;
     *)
       # just copy the dependencies read previously:
@@ -36,7 +36,7 @@ for package in $(dh_listpackages); do
   # To avoid having "unused substitution variable" warnings from
   # dpkg-gencontrol, only set variables which make sense:
   case $package in
-    *-dbg|*-dev|*-all)
+    *-dbg|*-dev-lts-vivid|*-all-lts-vivid)
       # debug, devel, or meta package, no need for Depends/Provides.
       :
     ;;

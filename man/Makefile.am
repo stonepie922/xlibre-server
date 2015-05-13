@@ -3,4 +3,4 @@
 #  the DDX-level options processing)
 
 include $(top_srcdir)/manpages.am
-appman_PRE = Xserver.man
+appman_PRE =

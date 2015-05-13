@@ -1,3 +1,9 @@
+xorg-server-lts-vivid (2:1.17.1-0ubuntu3~trusty1) trusty; urgency=medium
+
+  * Backport vivid package for lts-vivid stack.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 13 May 2015 07:19:27 +0300
+
 xorg-server (2:1.17.1-0ubuntu3) vivid; urgency=medium
 
   * Add a patch to fix vesa int10 failure. (LP: #1433198)
