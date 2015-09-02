@@ -1,3 +1,10 @@
+xorg-server (2:1.17.1-0ubuntu3.1) vivid; urgency=medium
+
+  * disable-rotation-transform-gpuscreens.patch:
+    Revert back to disabling rotations on GPU screens. (LP: #1489696)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 02 Sep 2015 16:21:04 +0300
+
 xorg-server-lts-vivid (2:1.17.1-0ubuntu3~trusty1) trusty; urgency=medium
 
   * Backport vivid package for lts-vivid stack.
