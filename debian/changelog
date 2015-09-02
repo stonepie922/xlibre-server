@@ -1,3 +1,9 @@
+xorg-server-lts-vivid (2:1.17.1-0ubuntu3.1~trusty1) trusty; urgency=medium
+
+  * Backport vivid package for lts-vivid stack.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 02 Sep 2015 16:28:30 +0300
+
 xorg-server (2:1.17.1-0ubuntu3.1) vivid; urgency=medium
 
   * disable-rotation-transform-gpuscreens.patch:
