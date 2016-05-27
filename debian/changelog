@@ -1,3 +1,11 @@
+xorg-server-lts-vivid (2:1.17.1-0ubuntu3.1~trusty1.1) UNRELEASED; urgency=medium
+
+  * randr-adjust-masters-last-set-time.diff,
+    randr-do-not-check-the-screen-size.diff:
+    Fix issues changing display mode on prime setups. (LP: #1586260)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 27 May 2016 11:50:02 +0300
+
 xorg-server-lts-vivid (2:1.17.1-0ubuntu3.1~trusty1) trusty; urgency=medium
 
   * Backport vivid package for lts-vivid stack.
