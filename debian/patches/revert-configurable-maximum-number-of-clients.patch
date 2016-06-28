@@ -1,0 +1,497 @@
+From 9fb1649c2838dfacf63e31968fb27858de94f673 Mon Sep 17 00:00:00 2001
+From: Timo Aaltonen <tjaalton@debian.org>
+Date: Tue, 28 Jun 2016 17:08:42 +0300
+Subject: [PATCH] Revert "configurable maximum number of clients"
+
+Avoid depending on newer x11proto-core-dev, which would break older servers.
+
+This reverts commit d206c240c0b85c4da44f073d6e9a692afb6b96d2.
+---
+ configure.ac                   |  4 ++--
+ dix/colormap.c                 | 28 ++++++++++++++--------------
+ dix/dispatch.c                 |  4 ++--
+ dix/main.c                     |  2 +-
+ dix/resource.c                 | 33 +++++----------------------------
+ hw/dmx/glxProxy/glxext.c       |  2 +-
+ hw/xfree86/common/xf86Config.c | 16 ----------------
+ hw/xfree86/man/xorg.conf.man   |  4 ----
+ include/misc.h                 |  3 +--
+ include/opaque.h               |  1 -
+ include/resource.h             | 15 +++++++++++++--
+ man/Xserver.man                |  5 -----
+ os/connection.c                |  6 +++---
+ os/osdep.h                     |  8 ++++----
+ os/osinit.c                    |  3 ---
+ os/utils.c                     | 14 --------------
+ 16 files changed, 46 insertions(+), 102 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 77cf234..8f96bf0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -419,7 +419,7 @@ case $host_os in
+ 	AC_DEFINE(CSRG_BASED, 1, [System is BSD-like])
+ 	;;
+   cygwin*|mingw*)
+-	CFLAGS="$CFLAGS -DFD_SETSIZE=512"
++	CFLAGS="$CFLAGS -DFD_SETSIZE=256"
+ 	;;
+ esac
+ 
+@@ -787,7 +787,7 @@ APPLEWMPROTO="applewmproto >= 1.4"
+ LIBXSHMFENCE="xshmfence >= 1.1"
+ 
+ dnl Required modules
+-XPROTO="xproto >= 7.0.28"
++XPROTO="xproto >= 7.0.26"
+ RANDRPROTO="randrproto >= 1.5.0"
+ RENDERPROTO="renderproto >= 0.11"
+ XEXTPROTO="xextproto >= 7.2.99.901"
+diff --git a/dix/colormap.c b/dix/colormap.c
+index 12a85b2..89a17c4 100644
+--- a/dix/colormap.c
++++ b/dix/colormap.c
+@@ -252,7 +252,7 @@ CreateColormap(Colormap mid, ScreenPtr pScreen, VisualPtr pVisual,
+ 
+     size = pVisual->ColormapEntries;
+     sizebytes = (size * sizeof(Entry)) +
+-        (LimitClients * sizeof(Pixel *)) + (LimitClients * sizeof(int));
++        (MAXCLIENTS * sizeof(Pixel *)) + (MAXCLIENTS * sizeof(int));
+     if ((class | DynamicClass) == DirectColor)
+         sizebytes *= 3;
+     sizebytes += sizeof(ColormapRec);
+@@ -277,7 +277,7 @@ CreateColormap(Colormap mid, ScreenPtr pScreen, VisualPtr pVisual,
+     sizebytes = size * sizeof(Entry);
+     pmap->clientPixelsRed = (Pixel **) ((char *) pmap->red + sizebytes);
+     pmap->numPixelsRed = (int *) ((char *) pmap->clientPixelsRed +
+-                                  (LimitClients * sizeof(Pixel *)));
++                                  (MAXCLIENTS * sizeof(Pixel *)));
+     pmap->mid = mid;
+     pmap->flags = 0;            /* start out with all flags clear */
+     if (mid == pScreen->defColormap)
+@@ -289,8 +289,8 @@ CreateColormap(Colormap mid, ScreenPtr pScreen, VisualPtr pVisual,
+         size = NUMRED(pVisual);
+     pmap->freeRed = size;
+     memset((char *) pmap->red, 0, (int) sizebytes);
+-    memset((char *) pmap->numPixelsRed, 0, LimitClients * sizeof(int));
+-    for (pptr = &pmap->clientPixelsRed[LimitClients];
++    memset((char *) pmap->numPixelsRed, 0, MAXCLIENTS * sizeof(int));
++    for (pptr = &pmap->clientPixelsRed[MAXCLIENTS];
+          --pptr >= pmap->clientPixelsRed;)
+         *pptr = (Pixel *) NULL;
+     if (alloc == AllocAll) {
+@@ -313,26 +313,26 @@ CreateColormap(Colormap mid, ScreenPtr pScreen, VisualPtr pVisual,
+     if ((class | DynamicClass) == DirectColor) {
+         pmap->freeGreen = NUMGREEN(pVisual);
+         pmap->green = (EntryPtr) ((char *) pmap->numPixelsRed +
+-                                  (LimitClients * sizeof(int)));
++                                  (MAXCLIENTS * sizeof(int)));
+         pmap->clientPixelsGreen = (Pixel **) ((char *) pmap->green + sizebytes);
+         pmap->numPixelsGreen = (int *) ((char *) pmap->clientPixelsGreen +
+-                                        (LimitClients * sizeof(Pixel *)));
++                                        (MAXCLIENTS * sizeof(Pixel *)));
+         pmap->freeBlue = NUMBLUE(pVisual);
+         pmap->blue = (EntryPtr) ((char *) pmap->numPixelsGreen +
+-                                 (LimitClients * sizeof(int)));
++                                 (MAXCLIENTS * sizeof(int)));
+         pmap->clientPixelsBlue = (Pixel **) ((char *) pmap->blue + sizebytes);
+         pmap->numPixelsBlue = (int *) ((char *) pmap->clientPixelsBlue +
+-                                       (LimitClients * sizeof(Pixel *)));
++                                       (MAXCLIENTS * sizeof(Pixel *)));
+ 
+         memset((char *) pmap->green, 0, (int) sizebytes);
+         memset((char *) pmap->blue, 0, (int) sizebytes);
+ 
+         memmove((char *) pmap->clientPixelsGreen,
+-                (char *) pmap->clientPixelsRed, LimitClients * sizeof(Pixel *));
++                (char *) pmap->clientPixelsRed, MAXCLIENTS * sizeof(Pixel *));
+         memmove((char *) pmap->clientPixelsBlue,
+-                (char *) pmap->clientPixelsRed, LimitClients * sizeof(Pixel *));
+-        memset((char *) pmap->numPixelsGreen, 0, LimitClients * sizeof(int));
+-        memset((char *) pmap->numPixelsBlue, 0, LimitClients * sizeof(int));
++                (char *) pmap->clientPixelsRed, MAXCLIENTS * sizeof(Pixel *));
++        memset((char *) pmap->numPixelsGreen, 0, MAXCLIENTS * sizeof(int));
++        memset((char *) pmap->numPixelsBlue, 0, MAXCLIENTS * sizeof(int));
+ 
+         /* If every cell is allocated, mark its refcnt */
+         if (alloc == AllocAll) {
+@@ -416,7 +416,7 @@ FreeColormap(void *value, XID mid)
+     (*pmap->pScreen->DestroyColormap) (pmap);
+ 
+     if (pmap->clientPixelsRed) {
+-        for (i = 0; i < LimitClients; i++)
++        for (i = 0; i < MAXCLIENTS; i++)
+             free(pmap->clientPixelsRed[i]);
+     }
+ 
+@@ -434,7 +434,7 @@ FreeColormap(void *value, XID mid)
+         }
+     }
+     if ((pmap->class | DynamicClass) == DirectColor) {
+-        for (i = 0; i < LimitClients; i++) {
++        for (i = 0; i < MAXCLIENTS; i++) {
+             free(pmap->clientPixelsGreen[i]);
+             free(pmap->clientPixelsBlue[i]);
+         }
+diff --git a/dix/dispatch.c b/dix/dispatch.c
+index 2c20124..dbbac8b 100644
+--- a/dix/dispatch.c
++++ b/dix/dispatch.c
+@@ -3484,7 +3484,7 @@ NextAvailableClient(void *ospriv)
+     xReq data;
+ 
+     i = nextFreeClientID;
+-    if (i == LimitClients)
++    if (i == MAXCLIENTS)
+         return (ClientPtr) NULL;
+     clients[i] = client =
+         dixAllocateObjectWithPrivates(ClientRec, PRIVATE_CLIENT);
+@@ -3504,7 +3504,7 @@ NextAvailableClient(void *ospriv)
+     }
+     if (i == currentMaxClients)
+         currentMaxClients++;
+-    while ((nextFreeClientID < LimitClients) && clients[nextFreeClientID])
++    while ((nextFreeClientID < MAXCLIENTS) && clients[nextFreeClientID])
+         nextFreeClientID++;
+ 
+     /* Enable client ID tracking. This must be done before
+diff --git a/dix/main.c b/dix/main.c
+index 5495676..579e11d 100644
+--- a/dix/main.c
++++ b/dix/main.c
+@@ -165,7 +165,7 @@ dix_main(int argc, char *argv[], char *envp[])
+         OsInit();
+         if (serverGeneration == 1) {
+             CreateWellKnownSockets();
+-            for (i = 1; i < LimitClients; i++)
++            for (i = 1; i < MAXCLIENTS; i++)
+                 clients[i] = NullClient;
+             serverClient = calloc(sizeof(ClientRec), 1);
+             if (!serverClient)
+diff --git a/dix/resource.c b/dix/resource.c
+index ad71b24..af8e162 100644
+--- a/dix/resource.c
++++ b/dix/resource.c
+@@ -600,29 +600,6 @@ CreateNewResourceClass(void)
+ 
+ static ClientResourceRec clientTable[MAXCLIENTS];
+ 
+-static unsigned int
+-ilog2(int val)
+-{
+-    int bits;
+-
+-    if (val <= 0)
+-	return 0;
+-    for (bits = 0; val != 0; bits++)
+-	val >>= 1;
+-    return bits - 1;
+-}
+-
+-/*****************
+- * ResourceClientBits
+- *    Returns the client bit offset in the client + resources ID field
+- *****************/
+-
+-unsigned int
+-ResourceClientBits(void)
+-{
+-    return (ilog2(LimitClients));
+-}
+-
+ /*****************
+  * InitClientResources
+  *    When a new client is created, call this to allocate space
+@@ -906,7 +883,7 @@ FreeResource(XID id, RESTYPE skipDeleteFuncType)
+     int *eltptr;
+     int elements;
+ 
+-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
++    if (((cid = CLIENT_ID(id)) < MAXCLIENTS) && clientTable[cid].buckets) {
+         head = &clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
+         eltptr = &clientTable[cid].elements;
+ 
+@@ -940,7 +917,7 @@ FreeResourceByType(XID id, RESTYPE type, Bool skipFree)
+     ResourcePtr res;
+     ResourcePtr *prev, *head;
+ 
+-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
++    if (((cid = CLIENT_ID(id)) < MAXCLIENTS) && clientTable[cid].buckets) {
+         head = &clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
+ 
+         prev = head;
+@@ -975,7 +952,7 @@ ChangeResourceValue(XID id, RESTYPE rtype, void *value)
+     int cid;
+     ResourcePtr res;
+ 
+-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
++    if (((cid = CLIENT_ID(id)) < MAXCLIENTS) && clientTable[cid].buckets) {
+         res = clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
+ 
+         for (; res; res = res->next)
+@@ -1213,7 +1190,7 @@ dixLookupResourceByType(void **result, XID id, RESTYPE rtype,
+     if ((rtype & TypeMask) > lastResourceType)
+         return BadImplementation;
+ 
+-    if ((cid < LimitClients) && clientTable[cid].buckets) {
++    if ((cid < MAXCLIENTS) && clientTable[cid].buckets) {
+         res = clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
+ 
+         for (; res; res = res->next)
+@@ -1246,7 +1223,7 @@ dixLookupResourceByClass(void **result, XID id, RESTYPE rclass,
+ 
+     *result = NULL;
+ 
+-    if ((cid < LimitClients) && clientTable[cid].buckets) {
++    if ((cid < MAXCLIENTS) && clientTable[cid].buckets) {
+         res = clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
+ 
+         for (; res; res = res->next)
+diff --git a/hw/dmx/glxProxy/glxext.c b/hw/dmx/glxProxy/glxext.c
+index c858272..3c5a14b 100644
+--- a/hw/dmx/glxProxy/glxext.c
++++ b/hw/dmx/glxProxy/glxext.c
+@@ -347,7 +347,7 @@ GlxExtensionInit(void)
+     /*
+      ** Initialize table of client state.  There is never a client 0.
+      */
+-    for (i = 1; i <= LimitClients; i++) {
++    for (i = 1; i <= MAXCLIENTS; i++) {
+         __glXClients[i] = 0;
+     }
+ 
+diff --git a/hw/xfree86/common/xf86Config.c b/hw/xfree86/common/xf86Config.c
+index 0c067c0..77a8311 100644
+--- a/hw/xfree86/common/xf86Config.c
++++ b/hw/xfree86/common/xf86Config.c
+@@ -699,7 +699,6 @@ typedef enum {
+     FLAG_DRI2,
+     FLAG_USE_SIGIO,
+     FLAG_AUTO_ADD_GPU,
+-    FLAG_MAX_CLIENTS,
+ } FlagValues;
+ 
+ /**
+@@ -759,8 +758,6 @@ static OptionInfoRec FlagOptions[] = {
+      {0}, FALSE},
+     {FLAG_AUTO_ADD_GPU, "AutoAddGPU", OPTV_BOOLEAN,
+      {0}, FALSE},
+-    {FLAG_MAX_CLIENTS, "MaxClients", OPTV_INTEGER,
+-     {0}, FALSE },
+     {-1, NULL, OPTV_NONE,
+      {0}, FALSE},
+ };
+@@ -1051,19 +1048,6 @@ configServerFlags(XF86ConfFlagsPtr flagsconf, XF86OptionPtr layoutopts)
+         xf86Info.dri2From = X_CONFIG;
+     }
+ #endif
+-
+-    from = X_DEFAULT;
+-    if (LimitClients != LIMITCLIENTS)
+-	from = X_CMDLINE;
+-    i = -1;
+-    if (xf86GetOptValInteger(FlagOptions, FLAG_MAX_CLIENTS, &i)) {
+-	if (i != 64 && i != 128 && i != 256 && i != 512)
+-		ErrorF("MaxClients must be one of 64, 128, 256 or 512\n");
+-	from = X_CONFIG;
+-	LimitClients = i;
+-    }
+-    xf86Msg(from, "Max clients allowed: %i, resource mask: 0x%x\n",
+-	    LimitClients, RESOURCE_ID_MASK);
+ }
+ 
+ Bool
+diff --git a/hw/xfree86/man/xorg.conf.man b/hw/xfree86/man/xorg.conf.man
+index 08eb7a9..e9b6d99 100644
+--- a/hw/xfree86/man/xorg.conf.man
++++ b/hw/xfree86/man/xorg.conf.man
+@@ -621,10 +621,6 @@ It is only enabled for screens that have the
+ .B \*qDPMS\*q
+ option set (see the MONITOR section below).
+ .TP 7
+-.BI "Option \*qMaxClients\*q  \*q" integer \*q
+-Set the maximum number of clients allowed to connect to the X server.
+-Acceptable values are 64, 128, 256 or 512.
+-.TP 7
+ .BI "Option \*qPixmap\*q  \*q" bpp \*q
+ This sets the pixmap format to use for depth 24.
+ Allowed values for
+diff --git a/include/misc.h b/include/misc.h
+index 56e138c..9b1c03a 100644
+--- a/include/misc.h
++++ b/include/misc.h
+@@ -86,8 +86,7 @@ OF THIS SOFTWARE.
+ #ifndef MAXGPUSCREENS
+ #define MAXGPUSCREENS	16
+ #endif
+-#define MAXCLIENTS	512
+-#define LIMITCLIENTS	256     /* Must be a power of 2 and <= MAXCLIENTS */
++#define MAXCLIENTS	256
+ #define MAXEXTENSIONS   128
+ #define MAXFORMATS	8
+ #define MAXDEVICES	40      /* input devices */
+diff --git a/include/opaque.h b/include/opaque.h
+index 0ba0d64..a2c54aa 100644
+--- a/include/opaque.h
++++ b/include/opaque.h
+@@ -36,7 +36,6 @@ from The Open Group.
+ extern _X_EXPORT const char *defaultTextFont;
+ extern _X_EXPORT const char *defaultCursorFont;
+ extern _X_EXPORT int MaxClients;
+-extern _X_EXPORT int LimitClients;
+ extern _X_EXPORT volatile char isItTimeToYield;
+ extern _X_EXPORT volatile char dispatchException;
+ 
+diff --git a/include/resource.h b/include/resource.h
+index 5871a4c..772f363 100644
+--- a/include/resource.h
++++ b/include/resource.h
+@@ -85,10 +85,21 @@ typedef uint32_t RESTYPE;
+ #define RT_LASTPREDEF	((RESTYPE)9)
+ #define RT_NONE		((RESTYPE)0)
+ 
+-extern _X_EXPORT unsigned int ResourceClientBits(void);
+ /* bits and fields within a resource id */
+ #define RESOURCE_AND_CLIENT_COUNT   29  /* 29 bits for XIDs */
+-#define RESOURCE_CLIENT_BITS        ResourceClientBits() /* client field offset */
++#if MAXCLIENTS == 64
++#define RESOURCE_CLIENT_BITS	6
++#endif
++#if MAXCLIENTS == 128
++#define RESOURCE_CLIENT_BITS	7
++#endif
++#if MAXCLIENTS == 256
++#define RESOURCE_CLIENT_BITS	8
++#endif
++#if MAXCLIENTS == 512
++#define RESOURCE_CLIENT_BITS	9
++#endif
++/* client field offset */
+ #define CLIENTOFFSET	    (RESOURCE_AND_CLIENT_COUNT - RESOURCE_CLIENT_BITS)
+ /* resource field */
+ #define RESOURCE_ID_MASK	((1 << CLIENTOFFSET) - 1)
+diff --git a/man/Xserver.man b/man/Xserver.man
+index 506e5bb..ba65c9e 100644
+--- a/man/Xserver.man
++++ b/man/Xserver.man
+@@ -329,11 +329,6 @@ sets the stack space limit of the server to the specified number of kilobytes.
+ A value of zero makes the stack size as large as possible.  The default value
+ of \-1 leaves the stack space limit unchanged.
+ .TP 8
+-.B \-maxclients
+-.BR 64 | 128 | 256 | 512
+-Set the maximum number of clients allowed to connect to the X server.
+-Acceptable values are 64, 128, 256 or 512.
+-.TP 8
+ .B \-render
+ .BR default | mono | gray | color
+ sets the color allocation policy that will be used by the render extension.
+diff --git a/os/connection.c b/os/connection.c
+index 9c41c7c..974283c 100644
+--- a/os/connection.c
++++ b/os/connection.c
+@@ -161,9 +161,9 @@ int *ConnectionTranslation = NULL;
+  */
+ 
+ #undef MAXSOCKS
+-#define MAXSOCKS 512
++#define MAXSOCKS 500
+ #undef MAXSELECT
+-#define MAXSELECT 512
++#define MAXSELECT 500
+ 
+ struct _ct_node {
+     struct _ct_node *next;
+@@ -299,7 +299,7 @@ InitConnectionLimits(void)
+     if (lastfdesc > MAXCLIENTS) {
+         lastfdesc = MAXCLIENTS;
+         if (debug_conns)
+-            ErrorF("REACHED MAXIMUM CLIENTS LIMIT %d\n", LimitClients);
++            ErrorF("REACHED MAXIMUM CLIENTS LIMIT %d\n", MAXCLIENTS);
+     }
+     MaxClients = lastfdesc;
+ 
+diff --git a/os/osdep.h b/os/osdep.h
+index ff60943..5fc0658 100644
+--- a/os/osdep.h
++++ b/os/osdep.h
+@@ -65,7 +65,7 @@ SOFTWARE.
+ 
+ #ifndef OPEN_MAX
+ #ifdef SVR4
+-#define OPEN_MAX 512
++#define OPEN_MAX 256
+ #else
+ #include <sys/param.h>
+ #ifndef OPEN_MAX
+@@ -75,7 +75,7 @@ SOFTWARE.
+ #if !defined(WIN32) || defined(__CYGWIN__)
+ #define OPEN_MAX NOFILES_MAX
+ #else
+-#define OPEN_MAX 512
++#define OPEN_MAX 256
+ #endif
+ #endif
+ #endif
+@@ -89,10 +89,10 @@ SOFTWARE.
+  * like sysconf(_SC_OPEN_MAX) is not supported.
+  */
+ 
+-#if OPEN_MAX <= 512
++#if OPEN_MAX <= 256
+ #define MAXSOCKS (OPEN_MAX - 1)
+ #else
+-#define MAXSOCKS 512
++#define MAXSOCKS 256
+ #endif
+ 
+ /* MAXSELECT is the number of fds that select() can handle */
+diff --git a/os/osinit.c b/os/osinit.c
+index 6ec2f11..d273351 100644
+--- a/os/osinit.c
++++ b/os/osinit.c
+@@ -86,9 +86,6 @@ int limitStackSpace = -1;
+ int limitNoFile = -1;
+ #endif
+ 
+-/* The actual user defined max number of clients */
+-int LimitClients = LIMITCLIENTS;
+-
+ static OsSigWrapperPtr OsSigWrapper = NULL;
+ 
+ OsSigWrapperPtr
+diff --git a/os/utils.c b/os/utils.c
+index b45719e..9a1370f 100644
+--- a/os/utils.c
++++ b/os/utils.c
+@@ -557,7 +557,6 @@ UseMsg(void)
+ #ifdef LOCK_SERVER
+     ErrorF("-nolock                disable the locking mechanism\n");
+ #endif
+-    ErrorF("-maxclients n          set maximum number of clients (power of two)\n");
+     ErrorF("-nolisten string       don't listen on protocol\n");
+     ErrorF("-listen string         listen on protocol\n");
+     ErrorF("-noreset               don't reset after last client exists\n");
+@@ -862,19 +861,6 @@ ProcessCommandLine(int argc, char *argv[])
+                 nolock = TRUE;
+         }
+ #endif
+-	else if ( strcmp( argv[i], "-maxclients") == 0)
+-	{
+-	    if (++i < argc) {
+-		LimitClients = atoi(argv[i]);
+-		if (LimitClients != 64 &&
+-		    LimitClients != 128 &&
+-		    LimitClients != 256 &&
+-		    LimitClients != 512) {
+-		    FatalError("maxclients must be one of 64, 128, 256 or 512\n");
+-		}
+-	    } else
+-		UseMsg();
+-	}
+         else if (strcmp(argv[i], "-nolisten") == 0) {
+             if (++i < argc) {
+                 if (_XSERVTransNoListen(argv[i]))
+-- 
+2.7.4
+
