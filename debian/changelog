@@ -1,7 +1,8 @@
-xorg-server-lts-xenial (2:1.18.3-1ubuntu2.2~trusty0.2) trusty; urgency=medium
+xorg-server-lts-xenial (2:1.18.3-1ubuntu2.2~trusty0.3) trusty; urgency=medium
 
   * Backport for lts-xenial stack.
     - revert configurable maxclients, avoid depending on newer coreproto
+    - rules: work around ftbfs on ppc64el
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 03 May 2016 14:02:21 +0300
 
