@@ -178,7 +178,6 @@ confflags_main = \
 	--enable-xfree86-utils \
 	$(wayland) \
 	$(logind) \
-	$(systemd-daemon) \
 	--enable-suid-wrapper \
 	--disable-dmx \
 	--disable-xvfb \

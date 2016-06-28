@@ -101,7 +101,7 @@ Build-Depends:
 #logind
   libdbus-1-dev (>= 1.0) [linux-any],
 # systemd-daemon
-  libsystemd-dev [linux-any],
+#  libsystemd-dev [linux-any],
 # XMir
 Standards-Version: 3.9.6
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/xserver/xorg-server.git
