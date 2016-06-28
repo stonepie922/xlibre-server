@@ -33,23 +33,23 @@ else
 endif
 
 # udeb is arch-dependent...
-ifneq (, $(filter %-udeb, $(shell dh_listpackages -s)))
+ifeq (1, 0)
 	udeb = yes
 endif
 
 # ...but let's support disabling it to speed up debug builds:
 ifneq (,$(filter noudeb,$(DEB_BUILD_OPTIONS)))
 	udeb =
-	DH_INSTALL_OPTIONS = -Nxserver-xorg-core-udeb
+	DH_INSTALL_OPTIONS = -Nxserver-xorg-core-udeb-lts-xenial
 endif
 
 
 ifeq ($(DEB_HOST_ARCH_OS), linux)
-	selinux        = --enable-xselinux
+	selinux        = --disable-xselinux
 	wayland        = --enable-xwayland
 	logind         = --enable-systemd-logind
 	systemd-daemon = --with-systemd-daemon
-	build_xmir = --enable-xmir
+	build_xmir = --disable-xmir
 else
 	selinux        = --disable-xselinux
 	wayland        = --disable-xwayland
@@ -180,9 +180,9 @@ confflags_main = \
 	$(logind) \
 	$(systemd-daemon) \
 	--enable-suid-wrapper \
-	--enable-dmx \
-	--enable-xvfb \
-	--enable-xnest \
+	--disable-dmx \
+	--disable-xvfb \
+	--disable-xnest \
 	--enable-kdrive \
 	--enable-xephyr \
 	$(build_xmir) \
@@ -323,12 +323,7 @@ endif
 	rm -rf debian/tmp/udeb/usr/share/man
 	rm -rf debian/tmp/udeb/usr/lib/pkgconfig
 
-	install -m 755 debian/local/xvfb-run debian/tmp/main/usr/bin
-	# Make sure Xvfb at least starts up
-	PATH=debian/tmp/main/usr/bin/:/bin:/usr/bin \
-	  debian/tmp/main/usr/bin/xvfb-run -s "-screen 0 1280x1024x24 -nolisten tcp -noreset" true
 
-	install debian/local/xvfb-run.1 debian/tmp/main/usr/share/man/man1
 ifneq ($(DEB_HOST_ARCH_OS), linux)
 	install -d debian/tmp/main/usr/share/X11/xorg.conf.d
 	install -m 644 debian/local/10-*.conf debian/tmp/main/usr/share/X11/xorg.conf.d
@@ -348,10 +343,11 @@ binary-deb:
 	dh_lintian
 	dh_compress
 	dh_fixperms
-	-chown root:root $(CURDIR)/debian/xserver-xorg-legacy/usr/lib/xorg/Xorg.wrap
-	-chmod ug+s $(CURDIR)/debian/xserver-xorg-legacy/usr/lib/xorg/Xorg.wrap
+	-chown root:root $(CURDIR)/debian/xserver-xorg-legacy-lts-xenial/usr/lib/xorg/Xorg.wrap
+	-chmod ug+s $(CURDIR)/debian/xserver-xorg-legacy-lts-xenial/usr/lib/xorg/Xorg.wrap
 	dh_installdeb
 	dh_shlibdeps
+	sed -i 's/libgl1-mesa-glx /libgl1-mesa-glx-lts-xenial /' -i debian/xserver-xorg-core-lts-xenial.substvars
 	dh_gencontrol
 	dh_md5sums
 	dh_builddeb
@@ -386,14 +382,14 @@ binary-arch: build install
 	dh_installdocs -s
 	dh_installchangelogs -s
 	dh_install $(DH_INSTALL_OPTIONS) -s --list-missing
-	$(INSTALL) -d $(CURDIR)/debian/xserver-xorg-dev/usr/share/xserver-xorg
+	$(INSTALL) -d $(CURDIR)/debian/xserver-xorg-dev-lts-xenial/usr/share/xserver-xorg
 	# Extract only the major ABI version:
 	abi_videodrv=`PKG_CONFIG_PATH=debian/tmp/main/usr/lib/pkgconfig pkg-config --variable=abi_videodrv xorg-server|cut -d . -f 1`; \
-	echo videoabi=xorg-video-abi-$$abi_videodrv > debian/xserver-xorg-core.substvars && \
-	echo "xorg-video-abi-$$abi_videodrv, xserver-xorg-core (>= $(serverminver))" > debian/xserver-xorg-dev/usr/share/xserver-xorg/videodrvdep
+	echo videoabi=xorg-video-abi-$$abi_videodrv > debian/xserver-xorg-core-lts-xenial.substvars && \
+	echo "xorg-video-abi-$$abi_videodrv, xserver-xorg-core-lts-xenial (>= $(serverminver))" > debian/xserver-xorg-dev-lts-xenial/usr/share/xserver-xorg/videodrvdep
 	abi_xinput=`PKG_CONFIG_PATH=debian/tmp/main/usr/lib/pkgconfig pkg-config --variable=abi_xinput xorg-server|cut -d . -f 1`; \
-	echo inputabi=xorg-input-abi-$$abi_xinput >> debian/xserver-xorg-core.substvars && \
-	echo "xorg-input-abi-$$abi_xinput, xserver-xorg-core (>= $(serverminver))" > debian/xserver-xorg-dev/usr/share/xserver-xorg/xinputdep
+	echo inputabi=xorg-input-abi-$$abi_xinput >> debian/xserver-xorg-core-lts-xenial.substvars && \
+	echo "xorg-input-abi-$$abi_xinput, xserver-xorg-core-lts-xenial (>= $(serverminver))" > debian/xserver-xorg-dev-lts-xenial/usr/share/xserver-xorg/xinputdep
 
 	# save the configure flags so that packages like vnc, tightvnc, tigervnc
 	# know how the package was built.
@@ -402,31 +398,31 @@ binary-arch: build install
 	  echo 'xserver_confflags_main = $(confflags_main)'; \
 	  echo 'xserver_confflags_udeb = $(confflags_udeb)'; \
 	  echo 'xserver_vars = $(vars)'; \
-	) > debian/xserver-xorg-dev/usr/share/xserver-xorg/configure_flags.mk
+	) > debian/xserver-xorg-dev-lts-xenial/usr/share/xserver-xorg/configure_flags.mk
 
 	# The udeb uses the same substvars:
-	cp debian/xserver-xorg-core.substvars debian/xserver-xorg-core-udeb.substvars
+	cp debian/xserver-xorg-core-lts-xenial.substvars debian/xserver-xorg-core-udeb-lts-xenial.substvars
 
 	# save the configure flags so that packages like vnc, tightvnc, tigervnc
 	# know how the package was built.
 	echo 'xserver_confflags = $(confflags) $(confflags_main)' \
-		> debian/xserver-xorg-dev/usr/share/xserver-xorg/configure_flags.mk
+		> debian/xserver-xorg-dev-lts-xenial/usr/share/xserver-xorg/configure_flags.mk
 
-	$(INSTALL) -m 755 -d debian/xserver-xorg-core/usr/share/bug/xserver-xorg-core
-	$(INSTALL) -m 755 debian/xserver-xorg-core.bug.script debian/xserver-xorg-core/usr/share/bug/xserver-xorg-core/script
+	$(INSTALL) -m 755 -d debian/xserver-xorg-core-lts-xenial/usr/share/bug/xserver-xorg-core-lts-xenial
+	$(INSTALL) -m 755 debian/xserver-xorg-core-lts-xenial.bug.script debian/xserver-xorg-core-lts-xenial/usr/share/bug/xserver-xorg-core-lts-xenial/script
 ifeq ($(DEB_HOST_ARCH_OS), linux)
-	install -d debian/xserver-xorg-core/lib/udev/rules.d
-	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xorg-core/lib/udev/rules.d
+	install -d debian/xserver-xorg-core-lts-xenial/lib/udev/rules.d
+	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xorg-core-lts-xenial/lib/udev/rules.d
 ifeq ($(udeb), yes)
-	install -d debian/xserver-xorg-core-udeb/lib/udev/rules.d
-	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xorg-core-udeb/lib/udev/rules.d
+	install -d debian/xserver-xorg-core-udeb-lts-xenial/lib/udev/rules.d
+	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xorg-core-udeb-lts-xenial/lib/udev/rules.d
 endif
 endif
 	dh_installdebconf -s
 	dh_installman -s
 	dh_link -s
-	dh_strip -pxserver-xorg-core --dbg-package=xserver-xorg-core-dbg
-	dh_strip -s -Nxserver-xorg-core -Nxserver-xorg-core-dbg
+	dh_strip -pxserver-xorg-core-lts-xenial --dbg-package=xserver-xorg-core-lts-xenial-dbg
+	dh_strip -s -Nxserver-xorg-core-lts-xenial -Nxserver-xorg-core-lts-xenial-dbg
 	$(MAKE) -f debian/rules DH_OPTIONS=-s binary-deb
 
 
