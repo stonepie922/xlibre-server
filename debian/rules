@@ -7,6 +7,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+CFLAGS+=-Idebian/include
+
 # Set up the $(STAMP_DIR) directory, and use it for quilt' stamp:
 STAMP_DIR     := stampdir
 QUILT_STAMPFN := $(STAMP_DIR)/patch

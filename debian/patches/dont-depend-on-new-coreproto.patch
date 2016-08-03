@@ -1,0 +1,22 @@
+From 9fb1649c2838dfacf63e31968fb27858de94f673 Mon Sep 17 00:00:00 2001
+From: Timo Aaltonen <tjaalton@debian.org>
+Date: Tue, 28 Jun 2016 17:08:42 +0300
+Subject: [PATCH] don't depend on new coreproto
+
+we use a private copy of Xpoll.h
+
+diff --git a/configure.ac b/configure.ac
+index 77cf234..8f96bf0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -787,7 +787,7 @@ APPLEWMPROTO="applewmproto >= 1.4"
+ LIBXSHMFENCE="xshmfence >= 1.1"
+ 
+ dnl Required modules
+-XPROTO="xproto >= 7.0.28"
++XPROTO="xproto >= 7.0.26"
+ RANDRPROTO="randrproto >= 1.5.0"
+ RENDERPROTO="renderproto >= 0.11"
+ XEXTPROTO="xextproto >= 7.2.99.901"
+-- 
+2.7.4

@@ -48,4 +48,4 @@ disable-rotation-transform-gpuscreens.patch
 
 drm_device_keep_trying.patch
 xi2-resize-touch.patch
-revert-configurable-maximum-number-of-clients.patch
+dont-depend-on-new-coreproto.patch
