@@ -155,11 +155,13 @@ Breaks:
  systemd (<< 226-4~),
 Replaces:
  xserver-xorg-core,
+ xserver-xorg-video-glamoregl,
  xserver-xorg-video-modesetting,
  xserver-xorg-lts-xenial (<< 1:7.7+10~),
 Conflicts:
  xserver-xorg-core, xorg-renamed-package-lts-utopic, xorg-renamed-package-lts-vivid, xorg-renamed-package-lts-wily,,
  xserver-xorg-input-evtouch,
+ xserver-xorg-video-glamoregl,
  xserver-xorg-video-modesetting,
 Provides:
  xserver-xorg-core, xorg-renamed-package, xorg-renamed-package-lts-xenial,
@@ -391,9 +393,9 @@ Conflicts: xserver-xorg-core-dbg, xorg-renamed-package-lts-utopic, xorg-renamed-
 # This package provides files necessary for all X.Org based X servers.
 
 #Package: xmir
-#Architecture: amd64 armhf i386
+#Architecture: amd64 arm64 armhf i386
 #Depends:
-# xserver-common,
+# xserver-common (>= ${source:Version}),
 # ${shlibs:Depends},
 # ${misc:Depends},
 #Description: Xmir X server
