@@ -21,5 +21,4 @@ no-nv.patch
 228_autobind_gpu.patch
 xf86-ignore-conflicting-rr-caps.patch
 
-xmir.patch
 xi2-resize-touch.patch
