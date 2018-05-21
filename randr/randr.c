@@ -2,6 +2,7 @@
  * Copyright © 2000 Compaq Computer Corporation
  * Copyright © 2002 Hewlett-Packard Company
  * Copyright © 2006 Intel Corporation
+ * Copyright © 2017 Keith Packard
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -211,7 +212,7 @@ SRRProviderPropertyNotifyEvent(xRRProviderPropertyNotifyEvent * from,
     /* pad4 */
 }
 
-static void
+static void _X_COLD
 SRRResourceChangeNotifyEvent(xRRResourceChangeNotifyEvent * from,
                              xRRResourceChangeNotifyEvent * to)
 {
@@ -222,7 +223,20 @@ SRRResourceChangeNotifyEvent(xRRResourceChangeNotifyEvent * from,
     cpswapl(from->window, to->window);
 }
 
-static void
+static void _X_COLD
+SRRLeaseNotifyEvent(xRRLeaseNotifyEvent * from,
+                    xRRLeaseNotifyEvent * to)
+{
+    to->type = from->type;
+    to->subCode = from->subCode;
+    cpswaps(from->sequenceNumber, to->sequenceNumber);
+    cpswapl(from->timestamp, to->timestamp);
+    cpswapl(from->window, to->window);
+    cpswapl(from->lease, to->lease);
+    to->created = from->created;
+}
+
+static void _X_COLD
 SRRNotifyEvent(xEvent *from, xEvent *to)
 {
     switch (from->u.u.detail) {
@@ -249,6 +263,11 @@ SRRNotifyEvent(xEvent *from, xEvent *to)
     case RRNotify_ResourceChange:
         SRRResourceChangeNotifyEvent((xRRResourceChangeNotifyEvent *) from,
                                    (xRRResourceChangeNotifyEvent *) to);
+        break;
+    case RRNotify_Lease:
+        SRRLeaseNotifyEvent((xRRLeaseNotifyEvent *) from,
+                            (xRRLeaseNotifyEvent *) to);
+        break;
     default:
         break;
     }
@@ -267,6 +286,8 @@ RRInit(void)
         if (!RROutputInit())
             return FALSE;
         if (!RRProviderInit())
+            return FALSE;
+        if (!RRLeaseInit())
             return FALSE;
         RRGeneration = serverGeneration;
     }
@@ -334,6 +355,8 @@ RRScreenInit(ScreenPtr pScreen)
     pScrPriv->outputs = NULL;
     pScrPriv->numCrtcs = 0;
     pScrPriv->crtcs = NULL;
+
+    xorg_list_init(&pScrPriv->leases);
 
     RRMonitorInit(pScreen);
 
@@ -532,6 +555,12 @@ TellChanged(WindowPtr pWin, void *value)
                 RRDeliverResourceEvent(client, pWin);
             }
         }
+
+        if (pRREvent->mask & RRLeaseNotifyMask) {
+            if (pScrPriv->leasesChanged) {
+                RRDeliverLeaseEvent(client, pWin);
+            }
+        }
     }
     return WT_WALKCHILDREN;
 }
@@ -573,6 +602,8 @@ RRTellChanged(ScreenPtr pScreen)
 
     if (pScreen->isGPU) {
         master = pScreen->current_master;
+        if (!master)
+            return;
         mastersp = rrGetScrPriv(master);
     }
     else {
@@ -682,7 +713,7 @@ ProcRRDispatch(ClientPtr client)
     return (*ProcRandrVector[stuff->data]) (client);
 }
 
-static int
+static int _X_COLD
 SProcRRDispatch(ClientPtr client)
 {
     REQUEST(xReq);

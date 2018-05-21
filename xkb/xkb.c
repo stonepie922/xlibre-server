@@ -172,8 +172,8 @@ ProcXkbUseExtension(ClientPtr client)
 
     if ((supported) && (!(client->xkbClientFlags & _XkbClientInitialized))) {
         client->xkbClientFlags = _XkbClientInitialized;
-        client->vMajor = stuff->wantedMajor;
-        client->vMinor = stuff->wantedMinor;
+        if (stuff->wantedMajor == 0)
+            client->xkbClientFlags |= _XkbClientIsAncient;
     }
     else if (xkbDebugFlags & 0x1) {
         ErrorF
@@ -2388,7 +2388,8 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
 
     if ((xkb->min_key_code != req->minKeyCode) ||
         (xkb->max_key_code != req->maxKeyCode)) {
-        if (client->vMajor != 1) {      /* pre 1.0 versions of Xlib have a bug */
+        if (client->xkbClientFlags & _XkbClientIsAncient) {
+            /* pre 1.0 versions of Xlib have a bug */
             req->minKeyCode = xkb->min_key_code;
             req->maxKeyCode = xkb->max_key_code;
         }
@@ -2626,6 +2627,8 @@ ProcXkbSetMap(ClientPtr client)
     if (rc != Success)
         return rc;
 
+    DeviceIntPtr master = GetMaster(dev, MASTER_KEYBOARD);
+
     if (stuff->deviceSpec == XkbUseCoreKbd) {
         DeviceIntPtr other;
 
@@ -2641,9 +2644,21 @@ ProcXkbSetMap(ClientPtr client)
                 }
             }
         }
+    } else {
+        DeviceIntPtr other;
+
+        for (other = inputInfo.devices; other; other = other->next) {
+            if (other != dev && GetMaster(other, MASTER_KEYBOARD) != dev &&
+                (other != master || dev != master->lastSlave))
+                continue;
+
+            rc = _XkbSetMapChecks(client, other, stuff, tmp);
+            if (rc != Success)
+                return rc;
+        }
     }
 
-    /* We know now that we will succed with the SetMap. In theory anyway. */
+    /* We know now that we will succeed with the SetMap. In theory anyway. */
     rc = _XkbSetMap(client, dev, stuff, tmp);
     if (rc != Success)
         return rc;
@@ -2663,6 +2678,16 @@ ProcXkbSetMap(ClientPtr client)
                    set all other devices, hoping that at least they stay in
                    sync. */
             }
+        }
+    } else {
+        DeviceIntPtr other;
+
+        for (other = inputInfo.devices; other; other = other->next) {
+            if (other != dev && GetMaster(other, MASTER_KEYBOARD) != dev &&
+                (other != master || dev != master->lastSlave))
+                continue;
+
+            _XkbSetMap(client, other, stuff, tmp); //ignore rc
         }
     }
 

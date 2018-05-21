@@ -14,6 +14,10 @@ DRI3_BUILDDIR = $(top_builddir)/dri3
 DRI3_LIB = $(DRI3_BUILDDIR)/libdri3.la
 endif
 
+if GLX
+GLXVND_LIB = $(top_builddir)/glx/libglxvnd.la
+endif
+
 if GLAMOR_EGL
 GLAMOR_EGL_SUBDIR = glamor_egl
 endif
@@ -70,6 +74,7 @@ LOCAL_LIBS = \
             $(DRI_LIB) \
             $(DRI2_LIB) \
 	    $(DRI3_LIB) \
+	    $(GLXVND_LIB) \
 	    $(top_builddir)/miext/sync/libsync.la \
             $(top_builddir)/mi/libmi.la \
             $(top_builddir)/os/libos.la \
@@ -84,8 +89,8 @@ Xorg_DEPENDENCIES = $(LOCAL_LIBS)
 Xorg_LDFLAGS = $(LD_EXPORT_SYMBOLS_FLAG)
 
 if SUID_WRAPPER
-wrapdir = $(SUID_WRAPPER_DIR)
-wrap_PROGRAMS = Xorg.wrap
+wrapexecdir = $(SUID_WRAPPER_DIR)
+wrapexec_PROGRAMS = Xorg.wrap
 Xorg_wrap_SOURCES = xorg-wrapper.c
 endif
 

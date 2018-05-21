@@ -90,8 +90,7 @@ static struct protocol protocols[] = {
 #endif
 };
 
-#define NUM_AUTHORIZATION  (sizeof (protocols) /\
-			     sizeof (struct protocol))
+#define NUM_AUTHORIZATION  ARRAY_SIZE(protocols)
 
 /*
  * Initialize all classes of authorization by reading the
@@ -302,6 +301,8 @@ GenerateAuthorization(unsigned name_length,
     return -1;
 }
 
+#endif                          /* XCSECURITY */
+
 void
 GenerateRandomData(int len, char *buf)
 {
@@ -315,5 +316,3 @@ GenerateRandomData(int len, char *buf)
     close(fd);
 #endif
 }
-
-#endif                          /* XCSECURITY */

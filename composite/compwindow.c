@@ -432,6 +432,7 @@ compReparentWindow(WindowPtr pWin, WindowPtr pPriorParent)
 {
     ScreenPtr pScreen = pWin->drawable.pScreen;
     CompScreenPtr cs = GetCompScreen(pScreen);
+    CompWindowPtr cw;
 
     pScreen->ReparentWindow = cs->ReparentWindow;
     /*
@@ -469,6 +470,11 @@ compReparentWindow(WindowPtr pWin, WindowPtr pPriorParent)
         (*pScreen->ReparentWindow) (pWin, pPriorParent);
     cs->ReparentWindow = pScreen->ReparentWindow;
     pScreen->ReparentWindow = compReparentWindow;
+
+    cw = GetCompWindow(pWin);
+    if (pWin->damagedDescendants || (cw && cw->damaged))
+        compMarkAncestors(pWin);
+
     compCheckTree(pWin->drawable.pScreen);
 }
 

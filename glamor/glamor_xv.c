@@ -62,6 +62,8 @@ typedef struct tagREF_TRANSFORM {
 static const glamor_facet glamor_facet_xv_planar = {
     .name = "xv_planar",
 
+    .version = 120,
+
     .source_name = "v_texcoord0",
     .vs_vars = ("attribute vec2 position;\n"
                 "attribute vec2 v_texcoord0;\n"
@@ -208,6 +210,7 @@ glamor_xv_query_image_attributes(int id,
     switch (id) {
     case FOURCC_YV12:
     case FOURCC_I420:
+        *w = ALIGN(*w, 2);
         *h = ALIGN(*h, 2);
         size = ALIGN(*w, 4);
         if (pitches)
