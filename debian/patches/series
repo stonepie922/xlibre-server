@@ -22,3 +22,4 @@ no-nv.patch
 xf86-ignore-conflicting-rr-caps.patch
 
 xi2-resize-touch.patch
+fix-default-permissions.patch
