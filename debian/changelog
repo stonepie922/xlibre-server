@@ -1,3 +1,9 @@
+xorg-server (2:1.20.0-3ubuntu1) cosmic; urgency=medium
+
+  * Merge from Debian.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 02 Jul 2018 11:36:12 +0300
+
 xorg-server (2:1.20.0-3) unstable; urgency=medium
 
   [ Timo Aaltonen ]
