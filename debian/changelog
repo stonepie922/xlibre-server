@@ -1,3 +1,26 @@
+xorg-server (2:1.20.1-1) unstable; urgency=medium
+
+  [ Julien Cristau ]
+  * xvfb-run portability improvements by Eli Schwartz (thanks!):
+    + Fix use of deprecated tempfile utility
+    + Use builtin `case` to test variable value, rather than external `expr`
+    + Use "command -v" rather than "which" (closes: #889676)
+
+  [ Sven Joachim ]
+  * Depend on x11proto-dev rather than on the transitional x11proto-*-dev
+    packages in xserver-xorg-dev (Closes: #900125).
+  * Remove remaining x11proto-*-dev packages from Build-Depends.
+
+  [ Andreas Boll ]
+  * New upstream release.
+    - exa: Use PictureMatchFormat for source-only picture format
+      description (Closes: #900550).
+    - modesetting: use drmmode_bo_import() for rotate_fb
+      (Closes: #906034, #900658).
+  * Drop 07_fix_glamor_fds_from_pixmap.diff, upstream.
+
+ -- Andreas Boll <aboll@debian.org>  Fri, 17 Aug 2018 22:05:00 +0200
+
 xorg-server (2:1.20.0-3ubuntu1) cosmic; urgency=medium
 
   * Merge from Debian.
