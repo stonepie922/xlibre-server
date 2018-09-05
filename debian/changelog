@@ -1,10 +1,10 @@
-xorg-server (2:1.20.1-1ubuntu2) UNRELEASED; urgency=medium
+xorg-server (2:1.20.1-1ubuntu2) cosmic; urgency=medium
 
   * prime-sync-refactor.diff: Fix crash on modesetting+amdgpu hybrid.
     (LP: #1789913)
   * sync-i965-pciids.diff: Update intel pci-id's. (LP: #1789924)
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 30 Aug 2018 17:29:48 +0300
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 05 Sep 2018 14:13:19 +0300
 
 xorg-server (2:1.20.1-1ubuntu1) cosmic; urgency=medium
 
