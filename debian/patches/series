@@ -23,3 +23,4 @@ xf86-ignore-conflicting-rr-caps.patch
 xi2-resize-touch.patch
 fix-default-permissions.patch
 prime-sync-refactor.diff
+sync-i965-pciids.diff
