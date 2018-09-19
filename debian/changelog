@@ -1,3 +1,11 @@
+xorg-server (2:1.20.1-2) unstable; urgency=medium
+
+  * control, rules: Use libunwind for backtracing.
+  * 07_use-modesetting-driver-by-default-on-GeForce.diff: Add a patch from
+    Fedora to use modesetting on NVIDIA GeForce8 and newer.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Sep 2018 17:27:28 +0300
+
 xorg-server (2:1.20.1-1ubuntu2) cosmic; urgency=medium
 
   * prime-sync-refactor.diff: Fix crash on modesetting+amdgpu hybrid.
