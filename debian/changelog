@@ -1,3 +1,41 @@
+xorg-server (2:1.20.3-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Disables -logfile and -modulepath when running with elevated
+      privileges (CVE-2018-14665).
+
+ -- Andreas Boll <aboll@debian.org>  Thu, 25 Oct 2018 20:15:23 +0200
+
+xorg-server (2:1.20.2-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Fixes various crashes with xwayland (Closes: #777625, #881891,
+      #911146).
+    - Fixes a crash when running the X server inside virtualbox
+      (Closes: #911680).
+  * Drop 08_dont-init-glamor-on-llvmpipe.diff, upstream.
+  * Set source format to 1.0.
+
+ -- Andreas Boll <aboll@debian.org>  Thu, 25 Oct 2018 10:19:31 +0200
+
+xorg-server (2:1.20.1-5) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * 08_dont-init-glamor-on-llvmpipe.diff: Glamor shouldn't be used on
+    llvmpipe, as it might end up crashing the server on a racy bootup.
+    (LP: #1792932) (Closes: #907655, #910135)
+
+ -- Andreas Boll <aboll@debian.org>  Wed, 10 Oct 2018 18:23:15 +0200
+
+xorg-server (2:1.20.1-4) unstable; urgency=medium
+
+  [ Julien Cristau ]
+  * Disable libunwind in udeb build.
+  * Disable libunwind backtraces on mips to work around bug#909242.  Thanks,
+    Simon McVittie!
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 26 Sep 2018 13:20:47 +0300
+
 xorg-server (2:1.20.1-3ubuntu2.1) cosmic-security; urgency=medium
 
   * SECURITY UPDATE: Privilege escalation and file overwrite
