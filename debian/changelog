@@ -1,3 +1,13 @@
+xorg-server (2:1.20.1-3ubuntu2.1) cosmic-security; urgency=medium
+
+  * SECURITY UPDATE: Privilege escalation and file overwrite
+    - debian/patches/CVE-2018-14665.patch: disable -logfile and -modulepath
+      when running with elevated privileges in
+      hw/xfree86/common/xf86Init.c.
+    - CVE-2018-14665
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Thu, 25 Oct 2018 10:53:34 -0400
+
 xorg-server (2:1.20.1-3ubuntu2) cosmic; urgency=medium
 
   * dont-init-glamor-on-llvmpipe.diff: Glamor shouldn't be used on

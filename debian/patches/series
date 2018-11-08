@@ -26,3 +26,4 @@ fix-default-permissions.patch
 prime-sync-refactor.diff
 sync-i965-pciids.diff
 dont-init-glamor-on-llvmpipe.diff
+CVE-2018-14665.patch
