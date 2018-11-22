@@ -1,10 +1,10 @@
-xorg-server (2:1.20.3-1ubuntu1) UNRELEASED; urgency=medium
+xorg-server (2:1.20.3-1ubuntu1) disco; urgency=medium
 
   * Merge from Debian.
     - CVE-2018-14665.patch, dont-init-glamor-on-llvmpipe.diff,
       prime-sync-refactor.diff: Dropped, upstream.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 08 Nov 2018 12:39:41 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 Nov 2018 15:47:34 +0200
 
 xorg-server (2:1.20.3-1) unstable; urgency=medium
 
