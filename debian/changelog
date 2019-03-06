@@ -1,3 +1,9 @@
+xorg-server (2:1.20.4-1ubuntu1) UNRELEASED; urgency=medium
+
+  * Merge from Debian.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 06 Mar 2019 09:05:02 +0200
+
 xorg-server (2:1.20.4-1) unstable; urgency=medium
 
   [ Timo Aaltonen ]
