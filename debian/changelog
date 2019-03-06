@@ -1,3 +1,17 @@
+xorg-server (2:1.20.4-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+    - present/wnmd: Fix use after free on CRTC removal
+      (Closes: #920665).
+    - xwayland: Replace xwl_window::present_window with
+      ::present_flipped (Closes: #921734).
+
+  [ Andreas Boll ]
+  * Refresh 07_use-modesetting-driver-by-default-on-GeForce.diff.
+
+ -- Andreas Boll <aboll@debian.org>  Tue, 05 Mar 2019 21:11:12 +0100
+
 xorg-server (2:1.20.3-1ubuntu1) disco; urgency=medium
 
   * Merge from Debian.
