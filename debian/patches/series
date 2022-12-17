@@ -14,3 +14,4 @@
 12_xkb-fix-some-possible-memleaks-in-XkbGetKbdByName.patch
 13_Xtest-disallow-GenericEvents-in-XTestSwapFakeInput.patch
 14_Xi-disallow-passive-grabs-with-a-detail-255.patch
+15_Xext-free-the-XvRTVideoNotify-when-turning-off-from-.patch
