@@ -12,3 +12,4 @@
 10_xkb-swap-XkbSetDeviceInfo-and-XkbSetDeviceInfoCheck.patch
 11_xkb-proof-GetCountedString-against-request-length-at.patch
 12_xkb-fix-some-possible-memleaks-in-XkbGetKbdByName.patch
+13_Xtest-disallow-GenericEvents-in-XTestSwapFakeInput.patch
