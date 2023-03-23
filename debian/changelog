@@ -1,3 +1,9 @@
+xorg-server (2:1.20.11-1+deb11u6) bullseye-security; urgency=high
+
+  * composite: Fix use-after-free of the COW (CVE-2023-1393)
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 23 Mar 2023 11:25:56 +0100
+
 xorg-server (2:1.20.11-1+deb11u5) bullseye-security; urgency=high
 
   * Xi: fix potential use-after-free in DeepCopyPointerClasses (CVE-2023-0494)
