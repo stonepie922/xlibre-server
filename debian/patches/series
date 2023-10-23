@@ -21,3 +21,7 @@
 19_xkb-reset-the-radio_groups-pointer-to-NULL-after-fre.patch
 20_Xi-fix-potential-use-after-free-in-DeepCopyPointerCl.patch
 21_composite-Fix-use-after-free-of-the-COW.patch
+0001-Xi-randr-fix-handling-of-PropModeAppend-Prepend.patch
+0002-mi-reset-the-PointerWindows-reference-on-screen-swit.patch
+0003-mi-fix-CloseScreen-initialization-order.patch
+0004-fb-properly-wrap-unwrap-CloseScreen.patch
