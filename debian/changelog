@@ -1,8 +1,12 @@
-xorg-server (2:21.1.7-3+deb12u1) UNRELEASED; urgency=medium
+xorg-server (2:21.1.7-3+deb12u1) bookworm-security; urgency=medium
 
   * present-Check-for-NULL-to-prevent-crash.patch: drop, applied upstream since 21.1.4
+  * Xi/randr: fix handling of PropModeAppend/Prepend (CVE-2023-5367)
+  * mi: reset the PointerWindows reference on screen switch (CVE-2023-5380)
+  * mi: fix CloseScreen initialization order
+  * fb: properly wrap/unwrap CloseScreen (CVE-2023-5574)
 
- -- Julien Cristau <jcristau@debian.org>  Mon, 23 Oct 2023 18:58:31 +0200
+ -- Julien Cristau <jcristau@debian.org>  Mon, 23 Oct 2023 19:26:14 +0200
 
 xorg-server (2:21.1.7-3) unstable; urgency=medium
 
