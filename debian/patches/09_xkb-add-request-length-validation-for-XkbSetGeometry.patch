@@ -20,11 +20,9 @@ Signed-off-by: Peter Hutterer <peter.hutterer@who-t.net>
  xkb/xkb.c | 43 ++++++++++++++++++++++++++++++++++++++-----
  1 file changed, 38 insertions(+), 5 deletions(-)
 
-diff --git a/xkb/xkb.c b/xkb/xkb.c
-index 34b2c290b..4692895db 100644
 --- a/xkb/xkb.c
 +++ b/xkb/xkb.c
-@@ -5156,7 +5156,7 @@ _GetCountedString(char **wire_inout, ClientPtr client, char **str)
+@@ -5157,7 +5157,7 @@ _GetCountedString(char **wire_inout, Cli
  }
  
  static Status
@@ -33,7 +31,7 @@ index 34b2c290b..4692895db 100644
                  XkbGeometryPtr geom, XkbSectionPtr section, ClientPtr client)
  {
      char *wire;
-@@ -5167,6 +5167,9 @@ _CheckSetDoodad(char **wire_inout,
+@@ -5168,6 +5168,9 @@ _CheckSetDoodad(char **wire_inout,
      Status status;
  
      dWire = (xkbDoodadWireDesc *) (*wire_inout);
@@ -43,7 +41,7 @@ index 34b2c290b..4692895db 100644
      any = dWire->any;
      wire = (char *) &dWire[1];
      if (client->swapped) {
-@@ -5269,7 +5272,7 @@ _CheckSetDoodad(char **wire_inout,
+@@ -5270,7 +5273,7 @@ _CheckSetDoodad(char **wire_inout,
  }
  
  static Status
@@ -52,7 +50,7 @@ index 34b2c290b..4692895db 100644
                   XkbGeometryPtr geom, XkbSectionPtr section, ClientPtr client)
  {
      register int r;
-@@ -5280,6 +5283,9 @@ _CheckSetOverlay(char **wire_inout,
+@@ -5281,6 +5284,9 @@ _CheckSetOverlay(char **wire_inout,
  
      wire = *wire_inout;
      olWire = (xkbOverlayWireDesc *) wire;
@@ -62,7 +60,7 @@ index 34b2c290b..4692895db 100644
      if (client->swapped) {
          swapl(&olWire->name);
      }
-@@ -5291,6 +5297,9 @@ _CheckSetOverlay(char **wire_inout,
+@@ -5292,6 +5298,9 @@ _CheckSetOverlay(char **wire_inout,
          xkbOverlayKeyWireDesc *kWire;
          XkbOverlayRowPtr row;
  
@@ -72,7 +70,7 @@ index 34b2c290b..4692895db 100644
          if (rWire->rowUnder > section->num_rows) {
              client->errorValue = _XkbErrCode4(0x20, r, section->num_rows,
                                                rWire->rowUnder);
-@@ -5299,6 +5308,9 @@ _CheckSetOverlay(char **wire_inout,
+@@ -5300,6 +5309,9 @@ _CheckSetOverlay(char **wire_inout,
          row = XkbAddGeomOverlayRow(ol, rWire->rowUnder, rWire->nKeys);
          kWire = (xkbOverlayKeyWireDesc *) &rWire[1];
          for (k = 0; k < rWire->nKeys; k++, kWire++) {
@@ -82,7 +80,7 @@ index 34b2c290b..4692895db 100644
              if (XkbAddGeomOverlayKey(ol, row,
                                       (char *) kWire->over,
                                       (char *) kWire->under) == NULL) {
-@@ -5332,6 +5344,9 @@ _CheckSetSections(XkbGeometryPtr geom,
+@@ -5333,6 +5345,9 @@ _CheckSetSections(XkbGeometryPtr geom,
          register int r;
          xkbRowWireDesc *rWire;
  
@@ -92,7 +90,7 @@ index 34b2c290b..4692895db 100644
          if (client->swapped) {
              swapl(&sWire->name);
              swaps(&sWire->top);
-@@ -5357,6 +5372,9 @@ _CheckSetSections(XkbGeometryPtr geom,
+@@ -5358,6 +5373,9 @@ _CheckSetSections(XkbGeometryPtr geom,
              XkbRowPtr row;
              xkbKeyWireDesc *kWire;
  
@@ -102,7 +100,7 @@ index 34b2c290b..4692895db 100644
              if (client->swapped) {
                  swaps(&rWire->top);
                  swaps(&rWire->left);
-@@ -5371,6 +5389,9 @@ _CheckSetSections(XkbGeometryPtr geom,
+@@ -5372,6 +5390,9 @@ _CheckSetSections(XkbGeometryPtr geom,
              for (k = 0; k < rWire->nKeys; k++, kWire++) {
                  XkbKeyPtr key;
  
@@ -112,7 +110,7 @@ index 34b2c290b..4692895db 100644
                  key = XkbAddGeomKey(row);
                  if (!key)
                      return BadAlloc;
-@@ -5396,7 +5417,7 @@ _CheckSetSections(XkbGeometryPtr geom,
+@@ -5397,7 +5418,7 @@ _CheckSetSections(XkbGeometryPtr geom,
              register int d;
  
              for (d = 0; d < sWire->nDoodads; d++) {
@@ -121,7 +119,7 @@ index 34b2c290b..4692895db 100644
                  if (status != Success)
                      return status;
              }
-@@ -5405,7 +5426,7 @@ _CheckSetSections(XkbGeometryPtr geom,
+@@ -5406,7 +5427,7 @@ _CheckSetSections(XkbGeometryPtr geom,
              register int o;
  
              for (o = 0; o < sWire->nOverlays; o++) {
@@ -130,7 +128,7 @@ index 34b2c290b..4692895db 100644
                  if (status != Success)
                      return status;
              }
-@@ -5439,6 +5460,9 @@ _CheckSetShapes(XkbGeometryPtr geom,
+@@ -5440,6 +5461,9 @@ _CheckSetShapes(XkbGeometryPtr geom,
              xkbOutlineWireDesc *olWire;
              XkbOutlinePtr ol;
  
@@ -140,7 +138,7 @@ index 34b2c290b..4692895db 100644
              shape =
                  XkbAddGeomShape(geom, shapeWire->name, shapeWire->nOutlines);
              if (!shape)
-@@ -5449,12 +5473,18 @@ _CheckSetShapes(XkbGeometryPtr geom,
+@@ -5450,12 +5474,18 @@ _CheckSetShapes(XkbGeometryPtr geom,
                  XkbPointPtr pt;
                  xkbPointWireDesc *ptWire;
  
@@ -159,7 +157,7 @@ index 34b2c290b..4692895db 100644
                      pt->x = ptWire->x;
                      pt->y = ptWire->y;
                      if (client->swapped) {
-@@ -5560,12 +5590,15 @@ _CheckSetGeom(XkbGeometryPtr geom, xkbSetGeometryReq * req, ClientPtr client)
+@@ -5561,12 +5591,15 @@ _CheckSetGeom(XkbGeometryPtr geom, xkbSe
          return status;
  
      for (i = 0; i < req->nDoodads; i++) {
@@ -176,6 +174,3 @@ index 34b2c290b..4692895db 100644
          if (XkbAddGeomKeyAlias(geom, &wire[XkbKeyNameLength], wire) == NULL)
              return BadAlloc;
          wire += 2 * XkbKeyNameLength;
--- 
-2.30.2
-

@@ -17,11 +17,9 @@ Reviewed-by: Adam Jackson <ajax@redhat.com>
  mi/miscrinit.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/mi/miscrinit.c b/mi/miscrinit.c
-index 3bb52b1bc6..b88938c9ae 100644
 --- a/mi/miscrinit.c
 +++ b/mi/miscrinit.c
-@@ -249,10 +249,10 @@ miScreenInit(ScreenPtr pScreen, void *pbits,  /* pointer to screen bits */
+@@ -242,10 +242,10 @@ miScreenInit(ScreenPtr pScreen, void *pb
      pScreen->numVisuals = numVisuals;
      pScreen->visuals = visuals;
      if (width) {
@@ -32,7 +30,4 @@ index 3bb52b1bc6..b88938c9ae 100644
 -        pScreen->CloseScreen = miCloseScreen;
      }
      /* else CloseScreen */
-     /* QueryBestSize */
--- 
-2.41.0
-
+     /* QueryBestSize, SaveScreen, GetImage, GetSpans */

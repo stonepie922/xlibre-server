@@ -35,11 +35,9 @@ Signed-off-by: Peter Hutterer <peter.hutterer@who-t.net>
  xkb/xkb.c | 46 +++++++++++++++++++++++++---------------------
  1 file changed, 25 insertions(+), 21 deletions(-)
 
-diff --git a/xkb/xkb.c b/xkb/xkb.c
-index 64e52611e..34b2c290b 100644
 --- a/xkb/xkb.c
 +++ b/xkb/xkb.c
-@@ -6550,7 +6550,8 @@ ProcXkbGetDeviceInfo(ClientPtr client)
+@@ -6584,7 +6584,8 @@ ProcXkbGetDeviceInfo(ClientPtr client)
  static char *
  CheckSetDeviceIndicators(char *wire,
                           DeviceIntPtr dev,
@@ -49,7 +47,7 @@ index 64e52611e..34b2c290b 100644
  {
      xkbDeviceLedsWireDesc *ledWire;
      int i;
-@@ -6558,6 +6559,11 @@ CheckSetDeviceIndicators(char *wire,
+@@ -6592,6 +6593,11 @@ CheckSetDeviceIndicators(char *wire,
  
      ledWire = (xkbDeviceLedsWireDesc *) wire;
      for (i = 0; i < num; i++) {
@@ -61,7 +59,7 @@ index 64e52611e..34b2c290b 100644
          if (client->swapped) {
              swaps(&ledWire->ledClass);
              swaps(&ledWire->ledID);
-@@ -6585,6 +6591,11 @@ CheckSetDeviceIndicators(char *wire,
+@@ -6619,6 +6625,11 @@ CheckSetDeviceIndicators(char *wire,
              atomWire = (CARD32 *) &ledWire[1];
              if (nNames > 0) {
                  for (n = 0; n < nNames; n++) {
@@ -73,7 +71,7 @@ index 64e52611e..34b2c290b 100644
                      if (client->swapped) {
                          swapl(atomWire);
                      }
-@@ -6596,6 +6607,10 @@ CheckSetDeviceIndicators(char *wire,
+@@ -6630,6 +6641,10 @@ CheckSetDeviceIndicators(char *wire,
              mapWire = (xkbIndicatorMapWireDesc *) atomWire;
              if (nMaps > 0) {
                  for (n = 0; n < nMaps; n++) {
@@ -84,7 +82,7 @@ index 64e52611e..34b2c290b 100644
                      if (client->swapped) {
                          swaps(&mapWire->virtualMods);
                          swapl(&mapWire->ctrls);
-@@ -6647,11 +6662,6 @@ SetDeviceIndicators(char *wire,
+@@ -6681,11 +6696,6 @@ SetDeviceIndicators(char *wire,
          xkbIndicatorMapWireDesc *mapWire;
          XkbSrvLedInfoPtr sli;
  
@@ -96,7 +94,7 @@ index 64e52611e..34b2c290b 100644
          namec = mapc = statec = 0;
          sli = XkbFindSrvLedInfo(dev, ledWire->ledClass, ledWire->ledID,
                                  XkbXI_IndicatorMapsMask);
-@@ -6670,10 +6680,6 @@ SetDeviceIndicators(char *wire,
+@@ -6704,10 +6714,6 @@ SetDeviceIndicators(char *wire,
              memset((char *) sli->names, 0, XkbNumIndicators * sizeof(Atom));
              for (n = 0, bit = 1; n < XkbNumIndicators; n++, bit <<= 1) {
                  if (ledWire->namesPresent & bit) {
@@ -107,7 +105,7 @@ index 64e52611e..34b2c290b 100644
                      sli->names[n] = (Atom) *atomWire;
                      if (sli->names[n] == None)
                          ledWire->namesPresent &= ~bit;
-@@ -6691,10 +6697,6 @@ SetDeviceIndicators(char *wire,
+@@ -6725,10 +6731,6 @@ SetDeviceIndicators(char *wire,
          if (ledWire->mapsPresent) {
              for (n = 0, bit = 1; n < XkbNumIndicators; n++, bit <<= 1) {
                  if (ledWire->mapsPresent & bit) {
@@ -118,7 +116,7 @@ index 64e52611e..34b2c290b 100644
                      sli->maps[n].flags = mapWire->flags;
                      sli->maps[n].which_groups = mapWire->whichGroups;
                      sli->maps[n].groups = mapWire->groups;
-@@ -6730,13 +6732,17 @@ SetDeviceIndicators(char *wire,
+@@ -6764,13 +6766,17 @@ SetDeviceIndicators(char *wire,
  }
  
  static int
@@ -137,7 +135,7 @@ index 64e52611e..34b2c290b 100644
          if (!dev->button) {
              client->errorValue = _XkbErrCode2(XkbErr_BadClass, ButtonClass);
              return XkbKeyboardErrorCode;
-@@ -6747,13 +6753,13 @@ _XkbSetDeviceInfo(ClientPtr client, DeviceIntPtr dev,
+@@ -6781,13 +6787,13 @@ _XkbSetDeviceInfo(ClientPtr client, Devi
                               dev->button->numButtons);
              return BadMatch;
          }
@@ -153,7 +151,7 @@ index 64e52611e..34b2c290b 100644
          if (status != Success)
              return status;
      }
-@@ -6764,8 +6770,8 @@ _XkbSetDeviceInfo(ClientPtr client, DeviceIntPtr dev,
+@@ -6798,8 +6804,8 @@ _XkbSetDeviceInfo(ClientPtr client, Devi
  }
  
  static int
@@ -164,7 +162,7 @@ index 64e52611e..34b2c290b 100644
  {
      char *wire;
      xkbExtensionDeviceNotify ed;
-@@ -6789,8 +6795,6 @@ _XkbSetDeviceInfoCheck(ClientPtr client, DeviceIntPtr dev,
+@@ -6823,8 +6829,6 @@ _XkbSetDeviceInfoCheck(ClientPtr client,
          if (stuff->firstBtn + stuff->nBtns > nBtns)
              return BadValue;
          sz = stuff->nBtns * SIZEOF(xkbActionWireDesc);
@@ -173,6 +171,3 @@ index 64e52611e..34b2c290b 100644
          memcpy((char *) &acts[stuff->firstBtn], (char *) wire, sz);
          wire += sz;
          ed.reason |= XkbXI_ButtonActionsMask;
--- 
-2.30.2
-

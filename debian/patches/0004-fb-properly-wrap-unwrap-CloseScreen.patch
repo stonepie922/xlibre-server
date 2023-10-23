@@ -27,8 +27,6 @@ Reviewed-by: Adam Jackson <ajax@redhat.com>
  hw/vfb/InitOutput.c |  7 -------
  3 files changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/fb/fb.h b/fb/fb.h
-index d157b6956d..cd7bd05d21 100644
 --- a/fb/fb.h
 +++ b/fb/fb.h
 @@ -410,6 +410,7 @@ typedef struct {
@@ -39,8 +37,6 @@ index d157b6956d..cd7bd05d21 100644
  } FbScreenPrivRec, *FbScreenPrivPtr;
  
  #define fbGetScreenPrivate(pScreen) ((FbScreenPrivPtr) \
-diff --git a/fb/fbscreen.c b/fb/fbscreen.c
-index 4ab807ab50..c481033f98 100644
 --- a/fb/fbscreen.c
 +++ b/fb/fbscreen.c
 @@ -29,6 +29,7 @@
@@ -65,7 +61,7 @@ index 4ab807ab50..c481033f98 100644
  }
  
  Bool
-@@ -144,6 +146,7 @@ fbFinishScreenInit(ScreenPtr pScreen, void *pbits, int xsize, int ysize,
+@@ -144,6 +146,7 @@ fbFinishScreenInit(ScreenPtr pScreen, vo
                     int dpix, int dpiy, int width, int bpp)
  #endif
  {
@@ -73,7 +69,7 @@ index 4ab807ab50..c481033f98 100644
      VisualPtr visuals;
      DepthPtr depths;
      int nvisuals;
-@@ -177,8 +180,11 @@ fbFinishScreenInit(ScreenPtr pScreen, void *pbits, int xsize, int ysize,
+@@ -177,8 +180,11 @@ fbFinishScreenInit(ScreenPtr pScreen, vo
                        rootdepth, ndepths, depths,
                        defaultVisual, nvisuals, visuals))
          return FALSE;
@@ -86,11 +82,9 @@ index 4ab807ab50..c481033f98 100644
      return TRUE;
  }
  
-diff --git a/hw/vfb/InitOutput.c b/hw/vfb/InitOutput.c
-index 48efb61b2f..076fb7defa 100644
 --- a/hw/vfb/InitOutput.c
 +++ b/hw/vfb/InitOutput.c
-@@ -720,13 +720,6 @@ vfbCloseScreen(ScreenPtr pScreen)
+@@ -738,13 +738,6 @@ vfbCloseScreen(ScreenPtr pScreen)
  
      pScreen->CloseScreen = pvfb->closeScreen;
  
@@ -104,6 +98,3 @@ index 48efb61b2f..076fb7defa 100644
      return pScreen->CloseScreen(pScreen);
  }
  
--- 
-2.41.0
-
