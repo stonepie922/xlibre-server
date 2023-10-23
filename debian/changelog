@@ -1,3 +1,9 @@
+xorg-server (2:21.1.7-3+deb12u1) UNRELEASED; urgency=medium
+
+  * present-Check-for-NULL-to-prevent-crash.patch: drop, applied upstream since 21.1.4
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 23 Oct 2023 18:58:31 +0200
+
 xorg-server (2:21.1.7-3) unstable; urgency=medium
 
   * Enable DRI2 for the udeb build, needed in addition to DRM support
