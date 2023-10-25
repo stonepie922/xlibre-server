@@ -1,3 +1,11 @@
+xorg-server (2:21.1.7-3+deb12u2) bookworm-security; urgency=high
+
+  * 0003-mi-fix-CloseScreen-initialization-order.patch,
+    0004-fb-properly-wrap-unwrap-CloseScreen.patch: drop, causes other
+    bugs that are worse than CVE-2023-5574.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 25 Oct 2023 09:35:47 +0200
+
 xorg-server (2:21.1.7-3+deb12u1) bookworm-security; urgency=medium
 
   * present-Check-for-NULL-to-prevent-crash.patch: drop, applied upstream since 21.1.4
