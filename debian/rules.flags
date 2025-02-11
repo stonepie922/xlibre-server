@@ -59,7 +59,7 @@ confflags_main = \
 	--enable-xnest \
 	--enable-kdrive \
 	--enable-xephyr \
-	--with-sha1=libgcrypt \
+	--with-sha1=libnettle \
 	--enable-xcsecurity \
 	$(void)
 
