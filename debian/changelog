@@ -1,4 +1,4 @@
-xorg-server (2:21.1.16-1) UNRELEASED; urgency=medium
+xorg-server (2:21.1.16-1) unstable; urgency=medium
 
   * New upstream release. Fixes:
     - CVE-2025-26594: use-after-free of the root cursor
@@ -14,7 +14,7 @@ xorg-server (2:21.1.16-1) UNRELEASED; urgency=medium
     debian/patches/xfree86-fbdevhw-fix-pci-detection-on-recent-Linux.patch:
     - Dropped, included upstream.
 
- -- Emilio Pozuelo Monfort <pochu@debian.org>  Wed, 26 Feb 2025 09:57:41 +0100
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Wed, 26 Feb 2025 10:22:45 +0100
 
 xorg-server (2:21.1.15-3) unstable; urgency=medium
 
