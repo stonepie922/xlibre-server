@@ -10,6 +10,8 @@ xorg-server (2:21.1.16-1) UNRELEASED; urgency=medium
     - CVE-2025-26600
     - CVE-2025-26601
     (Closes: #1098906).
+  * debian/patches/03_autotools-enable-static-use-of-Nettle-for-SHA1.diff:
+    - Dropped, included upstream.
 
  -- Emilio Pozuelo Monfort <pochu@debian.org>  Wed, 26 Feb 2025 09:57:41 +0100
 
