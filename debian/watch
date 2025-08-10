@@ -1,3 +1,2 @@
-version=3
-opts="pgpsigurlmangle=s/$/.sig/" \
-https://xorg.freedesktop.org/releases/individual/xserver/ xorg-server-(.*)\.tar\.gz
+version=4
+https://github.com/X11Libre/xserver/tags .*/xlibre-xserver-(.*)@ARCHIVE_EXT@
