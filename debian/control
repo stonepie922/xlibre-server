@@ -107,17 +107,17 @@ Provides:
  ${videoabi},
  ${inputabi},
  xserver-xlibre-video-modesetting,
-Description: Xorg X server - core server
- The Xorg X server is an X server for several architectures and operating
+Description: XLibre X server - core server
+ The XLibre X server is an X server for several architectures and operating
  systems, which is derived from the XFree86 4.x series of X servers.
  .
- The Xorg server supports most modern graphics hardware from most vendors,
+ The XLibre server supports most modern graphics hardware from most vendors,
  and supersedes all XFree86 X servers.
  .
- More information about X.Org can be found at:
- <URL:https://www.x.org>
+ More information about XLibre can be found at:
+ <URL:https://github.com/X11Libre/xserver>
  .
- This package is built from the X.org xserver module.
+ This package is built from the XLibre xserver module.
 
 Package: xserver-xlibre-core-udeb
 Package-Type: udeb
@@ -134,7 +134,7 @@ Provides:
  xserver-xorg-core-udeb,
  ${videoabi},
  ${inputabi},
-Description: Xorg X server - core server
+Description: XLibre X server - core server
  This is a udeb, or a microdeb, for the debian-installer.
 Conflicts:
  xserver-xorg-core-udeb,
@@ -150,20 +150,20 @@ Depends:
  libpciaccess-dev,
  mesa-common-dev,
  ${misc:Depends},
-Description: Xorg X server - development files
- This package provides development files for the X.Org ('Xorg') X server.
+Description: XLibre X server - development files
+ This package provides development files for the XLibre ('XLibre') X server.
  This is not quite the same as the DDK (Driver Development Kit) from the
  XFree86 4.x and X.Org 6.7, 6.8 and 6.9 series of servers; it provides
  headers and a pkg-config file for drivers using autotools to build
  against.
  .
  Unless you are developing or building a driver, you probably want
- xserver-xorg and/or xserver-xorg-core instead.
+ xserver-xlibre and/or xserver-xlibre-core instead.
  .
- More information about X.Org can be found at:
- <URL:https://www.x.org>
+ More information about XLibre can be found at:
+ <URL:https://github.com/X11Libre/xserver>
  .
- This package is built from the X.org xserver module.
+ This package is built from the XLibre xserver module.
 Provides:
  xserver-xorg-dev,
 Conflicts:
@@ -187,10 +187,10 @@ Description: Nested X server
  .
  Use of the Xephyr X server instead of Xnest is recommended.
  .
- More information about X.Org can be found at:
- <URL:https://www.x.org>
+ More information about XLibre can be found at:
+ <URL:https://github.com/X11Libre/xserver>
  .
- This package is built from the X.org xserver module.
+ This package is built from the XLibre xserver module.
 Conflicts:
  xnest,
 
@@ -221,10 +221,10 @@ Description: Virtual Framebuffer 'fake' X server
  environment. This convenience script requires the use of the xauth
  program.
  .
- More information about X.Org can be found at:
- <URL:https://www.x.org>
+ More information about XLibre can be found at:
+ <URL:https://github.com/X11Libre/xserver>
  .
- This package is built from the X.org xserver module.
+ This package is built from the XLibre xserver module.
 Conflicts:
  xvfb,
 
@@ -244,10 +244,10 @@ Description: nested X server
  result it supports newer extensions than Xnest, including render and
  composite.
  .
- More information about X.Org can be found at:
- <URL:https://www.x.org>
+ More information about XLibre can be found at:
+ <URL:https://github.com/X11Libre/xserver>
  .
- This package is built from the X.org xserver module.
+ This package is built from the XLibre xserver module.
 Conflicts:
  xserver-xephyr,
 
@@ -264,7 +264,7 @@ Recommends:
  xauth,
 Replaces: xserver-xorg-core (<< 2:1.5.2)
 Description: common files used by various X servers
- This package provides files necessary for all X.Org based X servers.
+ This package provides files necessary for all XLibre based X servers.
 Provides:
  xserver-common,
 Conflicts:
@@ -274,15 +274,15 @@ Package: xlibre-server-source
 Architecture: all
 Depends:
  ${misc:Depends},
-Description: Xorg X server - source files
+Description: XLibre X server - source files
  This package provides original Debian (with Debian patches already
- applied, and autotools files updated) sources for the X.Org ('Xorg')
+ applied, and autotools files updated) sources for the XLibre ('XLibre')
  X server shipped in a tarball.  This enables other projects re-using
  X server codebase (e.g. VNC servers) to (re-)use officially
  Debian-supported version of the X xserver for their builds.
  .
  Unless you are building a software product using X server sources,
- you probably want xserver-xorg and/or xserver-xorg-core instead.
+ you probably want xserver-xlibre and/or xserver-xlibre-core instead.
 Provides:
  xorg-server-source,
 Conflicts:
@@ -300,8 +300,8 @@ Breaks:
 Replaces:
  x11-common (<< 1:7.7+10~),
  xserver-xorg-core (<< 2:1.17.2-3~),
-Description: setuid root Xorg server wrapper
- This package provides a wrapper for the Xorg X server, which is
+Description: setuid root XLibre server wrapper
+ This package provides a wrapper for the XLibre X server, which is
  necessary for legacy drivers and non-Linux kernels.
 Provides:
  xserver-xorg-legacy,
