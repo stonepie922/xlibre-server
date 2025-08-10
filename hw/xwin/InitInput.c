@@ -29,8 +29,11 @@
 #ifdef HAVE_XWIN_CONFIG_H
 #include <xwin-config.h>
 #endif
+
+#include "mi/mi_priv.h"
+
 #include "win.h"
-#include "dixstruct.h"
+#include "dixstruct_priv.h"
 #include "inputstr.h"
 
 /*
@@ -72,23 +75,11 @@ DDXRingBell(int volume, int pitch, int duration)
     return;
 }
 
-
-#ifdef HAS_DEVWINDOWS
-static void
-xwinDevWindowsHandlerNotify(int fd, int ready, void *data)
-{
-    /* This should process Windows messages, but instead all of that is delayed
-     * until the wakeup handler is called.
-     */
-    ;
-}
-#endif
-
 /* See Porting Layer Definition - p. 17 */
 void
 InitInput(int argc, char *argv[])
 {
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("InitInput\n");
 #endif
 
@@ -126,7 +117,7 @@ InitInput(int argc, char *argv[])
     }
 #endif
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("InitInput - returning\n");
 #endif
 }

@@ -75,9 +75,7 @@ Equipment Corporation.
 
 ******************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "regionstr.h"
 #include <X11/Xprotostr.h>
@@ -169,7 +167,15 @@ Equipment Corporation.
         ((r1)->y1 <= (r2)->y1) && \
         ((r1)->y2 >= (r2)->y2) )
 
-#define xfreeData(reg) if ((reg)->data && (reg)->data->size) free((reg)->data)
+// note: we really need to check for size, because when it's zero, then data
+// might point to RegionBrokenData (.data segment), which we must not free()
+// (this also can create analyzer false alarms)
+static inline void xfreeData(RegionPtr reg) {
+    if (reg && reg->data && reg->data->size &&
+        reg->data != &RegionBrokenData &&
+        reg->data != &RegionEmptyData)
+            free(reg->data);
+}
 
 #define RECTALLOC_BAIL(pReg,n,bail) \
 if (!(pReg)->data || (((pReg)->data->numRects + (n)) > (pReg)->data->size)) \
@@ -229,16 +235,14 @@ InitRegions(void)
 
 /*****************************************************************
  *   RegionCreate(rect, size)
- *     This routine does a simple malloc to make a structure of
+ *     This routine does a simple calloc to make a structure of
  *     REGION of "size" number of rectangles.
  *****************************************************************/
 
 RegionPtr
 RegionCreate(BoxPtr rect, int size)
 {
-    RegionPtr pReg;
-
-    pReg = (RegionPtr) malloc(sizeof(RegionRec));
+    RegionPtr pReg = calloc(1, sizeof(RegionRec));
     if (!pReg)
         return &RegionBrokenRegion;
 
@@ -350,7 +354,7 @@ RegionRectAlloc(RegionPtr pRgn, int n)
     if (!pRgn->data) {
         n++;
         rgnSize = RegionSizeof(n);
-        pRgn->data = (rgnSize > 0) ? malloc(rgnSize) : NULL;
+        pRgn->data = (rgnSize > 0) ? calloc(1, rgnSize) : NULL;
         if (!pRgn->data)
             return RegionBreak(pRgn);
         pRgn->data->numRects = 1;
@@ -358,7 +362,7 @@ RegionRectAlloc(RegionPtr pRgn, int n)
     }
     else if (!pRgn->data->size) {
         rgnSize = RegionSizeof(n);
-        pRgn->data = (rgnSize > 0) ? malloc(rgnSize) : NULL;
+        pRgn->data = (rgnSize > 0) ? calloc(1, rgnSize) : NULL;
         if (!pRgn->data)
             return RegionBreak(pRgn);
         pRgn->data->numRects = 0;
@@ -402,7 +406,7 @@ RegionRectAlloc(RegionPtr pRgn, int n)
  *
  *-----------------------------------------------------------------------
  */
-_X_INLINE static int
+static inline int
 RegionCoalesce(RegionPtr pReg,  /* Region to coalesce                */
                int prevStart,   /* Index of start of previous band   */
                int curStart)
@@ -487,7 +491,7 @@ RegionCoalesce(RegionPtr pReg,  /* Region to coalesce                */
  *-----------------------------------------------------------------------
  */
 
-_X_INLINE static Bool
+static inline Bool
 RegionAppendNonO(RegionPtr pReg, BoxPtr r, BoxPtr rEnd, int y1, int y2)
 {
     BoxPtr pNextRect;
@@ -1144,7 +1148,6 @@ RegionValidate(RegionPtr badreg, Bool *pOverlap)
     } RegionInfo;
 
     int numRects;               /* Original numRects for badreg         */
-    RegionInfo *ri;             /* Array of current regions             */
     int numRI;                  /* Number of entries used in ri         */
     int sizeRI;                 /* Number of entries available in ri    */
     int i;                      /* Index into rects                     */
@@ -1187,7 +1190,7 @@ RegionValidate(RegionPtr badreg, Bool *pOverlap)
 
     /* Set up the first region to be the first rectangle in badreg */
     /* Note that step 2 code will never overflow the ri[0].reg rects array */
-    ri = (RegionInfo *) malloc(4 * sizeof(RegionInfo));
+    RegionInfo *ri = calloc(4, sizeof(RegionInfo));
     if (!ri)
         return RegionBreak(badreg);
     sizeRI = 4;
@@ -1318,7 +1321,6 @@ RegionFromRects(int nrects, xRectangle *prect, int ctype)
 
     RegionPtr pRgn;
     size_t rgnSize;
-    RegDataPtr pData;
     BoxPtr pBox;
     int i;
     int x1, y1, x2, y2;
@@ -1345,7 +1347,7 @@ RegionFromRects(int nrects, xRectangle *prect, int ctype)
         return pRgn;
     }
     rgnSize = RegionSizeof(nrects);
-    pData = (rgnSize > 0) ? malloc(rgnSize) : NULL;
+    RegDataPtr pData = (rgnSize > 0) ? calloc(1, rgnSize) : NULL;
     if (!pData) {
         RegionBreak(pRgn);
         return pRgn;

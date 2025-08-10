@@ -48,17 +48,17 @@ from The Open Group.
  * OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stddef.h>
+
+#include "dix/colormap_priv.h"
+
 #include "windowstr.h"
 #include "resource.h"
 #include "privates.h"
 #include "gcstruct.h"
 #include "cursorstr.h"
-#include "colormapst.h"
 #include "inputstr.h"
 #include "scrnintstr.h"
 #include "extnsionst.h"
@@ -257,7 +257,7 @@ fixupDefaultColormaps(FixupFunc fixup, unsigned bytes)
         ColormapPtr cmap;
 
         dixLookupResourceByType((void **) &cmap,
-                                screenInfo.screens[s]->defColormap, RT_COLORMAP,
+                                screenInfo.screens[s]->defColormap, X11_RESTYPE_COLORMAP,
                                 serverClient, DixCreateAccess);
         if (cmap &&
             !fixup(&cmap->devPrivates, screenInfo.screens[s]->screenSpecificPrivates[PRIVATE_COLORMAP].offset, bytes))
@@ -413,7 +413,7 @@ dixRegisterScreenPrivateKey(DevScreenPrivateKey screenKey, ScreenPtr pScreen,
         assert(key->type == type);
         return TRUE;
     }
-    key = calloc(sizeof(DevPrivateKeyRec), 1);
+    key = calloc(1, sizeof(DevPrivateKeyRec));
     if (!key)
         return FALSE;
     if (!dixRegisterPrivateKey(key, type, size)) {
@@ -471,7 +471,6 @@ _dixAllocateObjectWithPrivates(unsigned baseSize, unsigned clear,
                                unsigned offset, DevPrivateType type)
 {
     unsigned totalSize;
-    void *object;
     PrivatePtr privates;
     PrivatePtr *devPrivates;
 
@@ -482,7 +481,7 @@ _dixAllocateObjectWithPrivates(unsigned baseSize, unsigned clear,
     /* round up so that void * is aligned */
     baseSize = (baseSize + sizeof(void *) - 1) & ~(sizeof(void *) - 1);
     totalSize = baseSize + global_keys[type].offset;
-    object = malloc(totalSize);
+    void *object = calloc(1, totalSize);
     if (!object)
         return NULL;
 
@@ -514,7 +513,7 @@ dixAllocatePrivates(PrivatePtr *privates, DevPrivateType type)
         p = NULL;
     }
     else {
-        if (!(p = malloc(size)))
+        if (!(p = calloc(1, size)))
             return FALSE;
     }
 
@@ -544,6 +543,9 @@ _dixFreeObjectWithPrivates(void *object, PrivatePtr privates,
 void
 dixFreePrivates(PrivatePtr privates, DevPrivateType type)
 {
+    if (!privates)
+        return;
+
     _dixFiniPrivates(privates, type);
     --global_keys[type].allocated;
     free(privates);
@@ -552,7 +554,7 @@ dixFreePrivates(PrivatePtr privates, DevPrivateType type)
 /*
  * Return size of privates for the specified type
  */
-extern _X_EXPORT int
+int
 dixPrivatesSize(DevPrivateType type)
 {
     assert(type >= PRIVATE_SCREEN);
@@ -564,13 +566,13 @@ dixPrivatesSize(DevPrivateType type)
 
 /* Table of devPrivates offsets */
 static const int offsets[] = {
-    -1,                         /* RT_NONE */
-    offsetof(WindowRec, devPrivates),   /* RT_WINDOW */
-    offsetof(PixmapRec, devPrivates),   /* RT_PIXMAP */
-    offsetof(GC, devPrivates),  /* RT_GC */
-    -1,                         /* RT_FONT */
-    offsetof(CursorRec, devPrivates),   /* RT_CURSOR */
-    offsetof(ColormapRec, devPrivates), /* RT_COLORMAP */
+    -1,                                 /* X11_RESTYPE_NONE */
+    offsetof(WindowRec, devPrivates),   /* X11_RESTYPE_WINDOW */
+    offsetof(PixmapRec, devPrivates),   /* X11_RESTYPE_PIXMAP */
+    offsetof(GCRec, devPrivates),       /* X11_RESTYPE_GC */
+    -1,                                 /* X11_RESTYPE_FONT */
+    offsetof(CursorRec, devPrivates),   /* X11_RESTYPE_CURSOR */
+    offsetof(ColormapRec, devPrivates), /* X11_RESTYPE_COLORMAP */
 };
 
 int
@@ -581,10 +583,10 @@ dixLookupPrivateOffset(RESTYPE type)
      * points at pixmaps (thanks, DBE)
      */
     if (type & RC_DRAWABLE) {
-        if (type == RT_WINDOW)
-            return offsets[RT_WINDOW & TypeMask];
+        if (type == X11_RESTYPE_WINDOW)
+            return offsets[X11_RESTYPE_WINDOW & TypeMask];
         else
-            return offsets[RT_PIXMAP & TypeMask];
+            return offsets[X11_RESTYPE_PIXMAP & TypeMask];
     }
     type = type & TypeMask;
     if (type < ARRAY_SIZE(offsets))
@@ -596,7 +598,7 @@ dixLookupPrivateOffset(RESTYPE type)
  * Screen-specific privates
  */
 
-extern _X_EXPORT Bool
+Bool
 dixRegisterScreenSpecificPrivateKey(ScreenPtr pScreen, DevPrivateKey key,
                                     DevPrivateType type, unsigned size)
 {
@@ -689,12 +691,10 @@ _dixInitScreenPrivates(ScreenPtr pScreen, PrivatePtr *privates, void *addr, DevP
 void *
 _dixAllocateScreenObjectWithPrivates(ScreenPtr pScreen,
                                      unsigned baseSize,
-                                     unsigned clear,
                                      unsigned offset,
                                      DevPrivateType type)
 {
     unsigned totalSize;
-    void *object;
     PrivatePtr privates;
     PrivatePtr *devPrivates;
     int privates_size;
@@ -710,11 +710,10 @@ _dixAllocateScreenObjectWithPrivates(ScreenPtr pScreen,
     /* round up so that pointer is aligned */
     baseSize = (baseSize + sizeof(void *) - 1) & ~(sizeof(void *) - 1);
     totalSize = baseSize + privates_size;
-    object = malloc(totalSize);
+    void *object = calloc(1, totalSize);
     if (!object)
         return NULL;
 
-    memset(object, '\0', clear);
     privates = (PrivatePtr) (((char *) object) + baseSize);
     devPrivates = (PrivatePtr *) ((char *) object + offset);
 

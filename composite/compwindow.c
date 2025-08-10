@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,15 +41,15 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "dix/resource_priv.h"
+#include "os/osdep.h"
+#include "Xext/panoramiXsrv.h"
 
 #include "compint.h"
-
-#ifdef PANORAMIX
-#include "panoramiXsrv.h"
-#endif
+#include "compositeext_priv.h"
 
 #ifdef COMPOSITE_DEBUG
 static int
@@ -178,7 +178,7 @@ compCheckRedirect(WindowPtr pWin)
 
             compSetParentPixmap(pWin);
             compRestoreWindow(pWin, pPixmap);
-            (*pScreen->DestroyPixmap) (pPixmap);
+            dixDestroyPixmap(pPixmap, 0);
         }
     }
     else if (should) {
@@ -199,12 +199,12 @@ updateOverlayWindow(ScreenPtr pScreen)
     int w = pScreen->width;
     int h = pScreen->height;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension) {
         w = PanoramiXPixWidth;
         h = PanoramiXPixHeight;
     }
-#endif
+#endif /* XINERAMA */
 
     cs = GetCompScreen(pScreen);
     if ((pWin = cs->pOverlayWin) != NULL) {
@@ -214,7 +214,7 @@ updateOverlayWindow(ScreenPtr pScreen)
         /* Let's resize the overlay window. */
         vlist[0] = w;
         vlist[1] = h;
-        return ConfigureWindow(pWin, CWWidth | CWHeight, vlist, wClient(pWin));
+        return ConfigureWindow(pWin, CWWidth | CWHeight, vlist, dixClientForWindow(pWin));
     }
 
     /* Let's be on the safe side and not assume an overlay window is
@@ -222,14 +222,9 @@ updateOverlayWindow(ScreenPtr pScreen)
     return Success;
 }
 
-Bool
-compPositionWindow(WindowPtr pWin, int x, int y)
+void compWindowPosition(CallbackListPtr *pcbl, ScreenPtr pScreen, XorgScreenWindowPositionParamRec *param)
 {
-    ScreenPtr pScreen = pWin->drawable.pScreen;
-    CompScreenPtr cs = GetCompScreen(pScreen);
-    Bool ret = TRUE;
-
-    pScreen->PositionWindow = cs->PositionWindow;
+    WindowPtr pWin = param->window;
     /*
      * "Shouldn't need this as all possible places should be wrapped
      *
@@ -253,14 +248,8 @@ compPositionWindow(WindowPtr pWin, int x, int y)
         }
     }
 
-    if (!(*pScreen->PositionWindow) (pWin, x, y))
-        ret = FALSE;
-    cs->PositionWindow = pScreen->PositionWindow;
-    pScreen->PositionWindow = compPositionWindow;
     compCheckTree(pWin->drawable.pScreen);
-    if (updateOverlayWindow(pScreen) != Success)
-        ret = FALSE;
-    return ret;
+    updateOverlayWindow(pScreen);
 }
 
 Bool
@@ -339,9 +328,9 @@ compIsAlternateVisual(ScreenPtr pScreen, XID visual)
     return FALSE;
 }
 
-static Bool
-compIsImplicitRedirectException(ScreenPtr pScreen,
-                                XID parentVisual, XID winVisual)
+Bool
+CompositeIsImplicitRedirectException(ScreenPtr pScreen,
+                                     XID parentVisual, XID winVisual)
 {
     CompScreenPtr cs = GetCompScreen(pScreen);
     int i;
@@ -362,7 +351,7 @@ compImplicitRedirect(WindowPtr pWin, WindowPtr pParent)
         XID winVisual = wVisual(pWin);
         XID parentVisual = wVisual(pParent);
 
-        if (compIsImplicitRedirectException(pScreen, parentVisual, winVisual))
+        if (CompositeIsImplicitRedirectException(pScreen, parentVisual, winVisual))
             return FALSE;
 
         if (winVisual != parentVisual &&
@@ -376,13 +365,11 @@ compImplicitRedirect(WindowPtr pWin, WindowPtr pParent)
 static void
 compFreeOldPixmap(WindowPtr pWin)
 {
-    ScreenPtr pScreen = pWin->drawable.pScreen;
-
     if (pWin->redirectDraw != RedirectDrawNone) {
         CompWindowPtr cw = GetCompWindow(pWin);
 
         if (cw->pOldPixmap) {
-            (*pScreen->DestroyPixmap) (cw->pOldPixmap);
+            dixDestroyPixmap(cw->pOldPixmap, 0);
             cw->pOldPixmap = NullPixmap;
         }
     }
@@ -585,7 +572,7 @@ compCreateWindow(WindowPtr pWin)
             (*pScreen->SetWindowPixmap) (pWin, parent_pixmap);
         if (csw)
             for (ccw = csw->clients; ccw; ccw = ccw->next)
-                compRedirectWindow(clients[CLIENT_ID(ccw->id)],
+                compRedirectWindow(dixClientForXID(ccw->id),
                                    pWin, ccw->update);
         if (compImplicitRedirect(pWin, pWin->parent))
             compRedirectWindow(serverClient, pWin, CompositeRedirectAutomatic);
@@ -596,37 +583,29 @@ compCreateWindow(WindowPtr pWin)
     return ret;
 }
 
-Bool
-compDestroyWindow(WindowPtr pWin)
+void compWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWin)
 {
-    ScreenPtr pScreen = pWin->drawable.pScreen;
     CompScreenPtr cs = GetCompScreen(pScreen);
     CompWindowPtr cw;
     CompSubwindowsPtr csw;
-    Bool ret;
 
-    pScreen->DestroyWindow = cs->DestroyWindow;
     while ((cw = GetCompWindow(pWin)))
-        FreeResource(cw->clients->id, RT_NONE);
+        FreeResource(cw->clients->id, X11_RESTYPE_NONE);
     while ((csw = GetCompSubwindows(pWin)))
-        FreeResource(csw->clients->id, RT_NONE);
+        FreeResource(csw->clients->id, X11_RESTYPE_NONE);
 
     if (pWin->redirectDraw != RedirectDrawNone) {
         PixmapPtr pPixmap = (*pScreen->GetWindowPixmap) (pWin);
 
         compSetParentPixmap(pWin);
-        (*pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
     }
-    ret = (*pScreen->DestroyWindow) (pWin);
-    cs->DestroyWindow = pScreen->DestroyWindow;
-    pScreen->DestroyWindow = compDestroyWindow;
 
     /* Did we just destroy the overlay window? */
     if (pWin == cs->pOverlayWin)
         cs->pOverlayWin = NULL;
 
 /*    compCheckTree (pWin->drawable.pScreen); can't check -- tree isn't good*/
-    return ret;
 }
 
 void

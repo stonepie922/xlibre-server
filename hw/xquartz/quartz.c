@@ -31,9 +31,9 @@
 
 #include "sanitizedCarbon.h"
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
 
 #include "quartzRandR.h"
 #include "inputstr.h"
@@ -54,7 +54,6 @@
 // X headers
 #include "scrnintstr.h"
 #include "windowstr.h"
-#include "colormapst.h"
 #include "globals.h"
 #include "mi.h"
 
@@ -117,7 +116,7 @@ QuartzAddScreen(int index,
     // The clang static analyzer thinks we leak displayInfo here
 #ifndef __clang_analyzer__
     // allocate space for private per screen Quartz specific storage
-    QuartzScreenPtr displayInfo = calloc(sizeof(QuartzScreenRec), 1);
+    QuartzScreenPtr displayInfo = calloc(1, sizeof(QuartzScreenRec));
 
     // QUARTZ_PRIV(pScreen) = displayInfo;
     dixSetPrivate(&pScreen->devPrivates, quartzScreenKey, displayInfo);

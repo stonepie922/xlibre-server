@@ -30,7 +30,9 @@
 
 #include "xorg-config.h"
 
-#include "xf86VGAarbiter.h"
+#include "dix/colormap_priv.h"
+
+#include "xf86VGAarbiter_priv.h"
 #include "xf86VGAarbiterPriv.h"
 #include "xf86Bus.h"
 #include "xf86Priv.h"
@@ -71,8 +73,8 @@ xf86VGAarbiterInit(void)
 {
     if (pci_device_vgaarb_init() != 0) {
         vga_no_arb = 1;
-        xf86Msg(X_WARNING,
-                "VGA arbiter: cannot open kernel arbiter, no multi-card support\n");
+        LogMessageVerb(X_WARNING, 1,
+                      "VGA arbiter: cannot open kernel arbiter, no multi-card support\n");
     }
 }
 
@@ -137,15 +139,6 @@ xf86VGAarbiterScrnInit(ScrnInfoPtr pScrn)
     pScrn->vgaDev = dev;
 }
 
-void
-xf86VGAarbiterDeviceDecodes(ScrnInfoPtr pScrn, int rsrc)
-{
-    if (vga_no_arb)
-        return;
-    pci_device_vgaarb_set_target(pScrn->vgaDev);
-    pci_device_vgaarb_decodes(rsrc);
-}
-
 Bool
 xf86VGAarbiterWrapFunctions(void)
 {
@@ -167,8 +160,9 @@ xf86VGAarbiterWrapFunctions(void)
     if (vga_count < 2 || !xf86Screens)
         return FALSE;
 
-    xf86Msg(X_INFO, "Found %d VGA devices: arbiter wrapping enabled\n",
-            vga_count);
+    LogMessageVerb(X_INFO, 1,
+                   "Found %d VGA devices: arbiter wrapping enabled\n",
+                   vga_count);
 
     for (i = 0; i < xf86NumScreens; i++) {
         pScreen = xf86Screens[i]->pScreen;
@@ -183,7 +177,7 @@ xf86VGAarbiterWrapFunctions(void)
         if (!dixRegisterPrivateKey(&VGAarbiterScreenKeyRec, PRIVATE_SCREEN, 0))
             return FALSE;
 
-        if (!(pScreenPriv = malloc(sizeof(VGAarbiterScreenRec))))
+        if (!(pScreenPriv = calloc(1, sizeof(VGAarbiterScreenRec))))
             return FALSE;
 
         dixSetPrivate(&pScreen->devPrivates, VGAarbiterScreenKey, pScreenPriv);
@@ -609,7 +603,7 @@ VGAarbiterDestroyClip(GCPtr pGC)
 /* GC Ops */
 static void
 VGAarbiterFillSpans(DrawablePtr pDraw,
-                    GC * pGC,
+                    GCPtr pGC,
                     int nInit,
                     DDXPointPtr pptInit, int *pwidthInit, int fSorted)
 {
@@ -658,7 +652,7 @@ VGAarbiterPutImage(DrawablePtr pDraw,
 static RegionPtr
 VGAarbiterCopyArea(DrawablePtr pSrc,
                    DrawablePtr pDst,
-                   GC * pGC,
+                   GCPtr pGC,
                    int srcx, int srcy,
                    int width, int height, int dstx, int dsty)
 {

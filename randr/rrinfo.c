@@ -19,8 +19,9 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "randrstr.h"
+#include "randr/randrstr_priv.h"
 
 #ifdef RANDR_10_INTERFACE
 static RRModePtr
@@ -58,7 +59,7 @@ RROldModeAdd(RROutputPtr output, RRScreenSizePtr size, int refresh)
         modes = reallocarray(output->modes,
                              output->numModes + 1, sizeof(RRModePtr));
     else
-        modes = malloc(sizeof(RRModePtr));
+        modes = calloc(1, sizeof(RRModePtr));
     if (!modes) {
         RRModeDestroy(mode);
         FreeResource(mode->mode.id, 0);
@@ -250,19 +251,18 @@ RRRegisterSize(ScreenPtr pScreen,
 {
     rrScrPriv(pScreen);
     int i;
-    RRScreenSize tmp;
     RRScreenSizePtr pNew;
 
     if (!pScrPriv)
         return 0;
 
-    tmp.id = 0;
-    tmp.width = width;
-    tmp.height = height;
-    tmp.mmWidth = mmWidth;
-    tmp.mmHeight = mmHeight;
-    tmp.pRates = 0;
-    tmp.nRates = 0;
+    RRScreenSize tmp = {
+        .width = width,
+        .height = height,
+        .mmWidth = mmWidth,
+        .mmHeight = mmHeight,
+    };
+
     for (i = 0; i < pScrPriv->nSizes; i++)
         if (RRScreenSizeMatches(&tmp, &pScrPriv->pSizes[i]))
             return &pScrPriv->pSizes[i];
@@ -296,17 +296,6 @@ RRRegisterRate(ScreenPtr pScreen, RRScreenSizePtr pSize, int rate)
     pRate->rate = rate;
     pSize->pRates = pNew;
     return TRUE;
-}
-
-Rotation
-RRGetRotation(ScreenPtr pScreen)
-{
-    RROutputPtr output = RRFirstOutput(pScreen);
-
-    if (!output)
-        return RR_Rotate_0;
-
-    return output->crtc->rotation;
 }
 
 void

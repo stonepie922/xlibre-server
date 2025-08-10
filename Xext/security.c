@@ -24,22 +24,31 @@ in this Software without prior written authorization from The Open Group.
 
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/Xmd.h>
+#include <X11/extensions/securproto.h>
+#include <X11/Xfuncproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/registry_priv.h"
+#include "dix/resource_priv.h"
+#include "miext/extinit_priv.h"
+#include "os/audit.h"
+#include "os/auth.h"
+#include "os/client_priv.h"
+#include "os/osdep.h"
 
 #include "scrnintstr.h"
 #include "inputstr.h"
 #include "windowstr.h"
 #include "propertyst.h"
-#include "colormapst.h"
 #include "privates.h"
-#include "registry.h"
 #include "xacestr.h"
 #include "securitysrv.h"
-#include <X11/extensions/securproto.h>
-#include "extinit.h"
 #include "protocol-versions.h"
+
+Bool noSecurityExtension = FALSE;
 
 /* Extension stuff */
 static int SecurityErrorBase;   /* first Security error number */
@@ -147,7 +156,7 @@ SecurityLabelInitial(void)
 /*
  * Looks up a request name
  */
-static _X_INLINE const char *
+static inline const char *
 SecurityLookupRequestName(ClientPtr client)
 {
     return LookupRequestName(client->majorOp, client->minorOp);
@@ -197,8 +206,8 @@ SecurityDeleteAuthorization(void *value, XID id)
             .type = SecurityEventBase + XSecurityAuthorizationRevoked,
             .authId = pAuth->id
         };
-        WriteEventsToClient(rClient(pEventClient), 1, (xEvent *) &are);
-        FreeResource(pEventClient->resource, RT_NONE);
+        WriteEventsToClient(dixClientForOtherClients(pEventClient), 1, (xEvent *) &are);
+        FreeResource(pEventClient->resource, X11_RESTYPE_NONE);
     }
 
     /* kill all clients using this auth */
@@ -304,7 +313,7 @@ SecurityAuthorizationExpired(OsTimerPtr timer, CARD32 time, void *pval)
                                                    pAuth->secondsRemaining);
     }
     else {
-        FreeResource(pAuth->id, RT_NONE);
+        FreeResource(pAuth->id, X11_RESTYPE_NONE);
         return 0;
     }
 }                               /* SecurityAuthorizationExpired */
@@ -368,14 +377,14 @@ SecurityEventSelectForAuthorization(SecurityAuthorizationPtr pAuth,
          pEventClient; pEventClient = pEventClient->next) {
         if (SameClient(pEventClient, client)) {
             if (mask == 0)
-                FreeResource(pEventClient->resource, RT_NONE);
+                FreeResource(pEventClient->resource, X11_RESTYPE_NONE);
             else
                 pEventClient->mask = mask;
             return Success;
         }
     }
 
-    pEventClient = malloc(sizeof(OtherClients));
+    pEventClient = calloc(1, sizeof(OtherClients));
     if (!pEventClient)
         return BadAlloc;
     pEventClient->mask = mask;
@@ -396,7 +405,6 @@ ProcSecurityGenerateAuthorization(ClientPtr client)
     REQUEST(xSecurityGenerateAuthorizationReq);
     int len;                    /* request length in CARD32s */
     Bool removeAuth = FALSE;    /* if bailout, call RemoveAuthorization? */
-    SecurityAuthorizationPtr pAuth = NULL;      /* auth we are creating */
     int err;                    /* error to return from this function */
     XID authId;                 /* authorization ID assigned by os layer */
     xSecurityGenerateAuthorizationReply rep;    /* reply struct */
@@ -482,9 +490,8 @@ ProcSecurityGenerateAuthorization(ClientPtr client)
     authId = GenerateAuthorization(stuff->nbytesAuthProto, protoname,
                                    stuff->nbytesAuthData, protodata,
                                    &authdata_len, &pAuthdata);
-    if ((XID) ~0L == authId) {
-        err = SecurityErrorBase + XSecurityBadAuthorizationProtocol;
-        goto bailout;
+    if (!authId) {
+        return SecurityErrorBase + XSecurityBadAuthorizationProtocol;
     }
 
     /* now that we've added the auth, remember to remove it if we have to
@@ -494,7 +501,7 @@ ProcSecurityGenerateAuthorization(ClientPtr client)
 
     /* associate additional information with this auth ID */
 
-    pAuth = malloc(sizeof(SecurityAuthorizationRec));
+    SecurityAuthorizationPtr pAuth = calloc(1, sizeof(SecurityAuthorizationRec));
     if (!pAuth) {
         err = BadAlloc;
         goto bailout;
@@ -580,7 +587,7 @@ ProcSecurityRevokeAuthorization(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    FreeResource(stuff->authId, RT_NONE);
+    FreeResource(stuff->authId, X11_RESTYPE_NONE);
     return Success;
 }                               /* ProcSecurityRevokeAuthorization */
 
@@ -605,8 +612,6 @@ static int _X_COLD
 SProcSecurityQueryVersion(ClientPtr client)
 {
     REQUEST(xSecurityQueryVersionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xSecurityQueryVersionReq);
     swaps(&stuff->majorVersion);
     swaps(&stuff->minorVersion);
@@ -620,8 +625,6 @@ SProcSecurityGenerateAuthorization(ClientPtr client)
     CARD32 *values;
     unsigned long nvalues;
     int values_offset;
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xSecurityGenerateAuthorizationReq);
     swaps(&stuff->nbytesAuthProto);
     swaps(&stuff->nbytesAuthData);
@@ -629,10 +632,10 @@ SProcSecurityGenerateAuthorization(ClientPtr client)
     values_offset = bytes_to_int32(stuff->nbytesAuthProto) +
         bytes_to_int32(stuff->nbytesAuthData);
     if (values_offset >
-        stuff->length - bytes_to_int32(sz_xSecurityGenerateAuthorizationReq))
+        client->req_len - bytes_to_int32(sz_xSecurityGenerateAuthorizationReq))
         return BadLength;
     values = (CARD32 *) (&stuff[1]) + values_offset;
-    nvalues = (((CARD32 *) stuff) + stuff->length) - values;
+    nvalues = (((CARD32 *) stuff) + client->req_len) - values;
     SwapLongs(values, nvalues);
     return ProcSecurityGenerateAuthorization(client);
 }                               /* SProcSecurityGenerateAuthorization */
@@ -641,8 +644,6 @@ static int _X_COLD
 SProcSecurityRevokeAuthorization(ClientPtr client)
 {
     REQUEST(xSecurityRevokeAuthorizationReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xSecurityRevokeAuthorizationReq);
     swapl(&stuff->authId);
     return ProcSecurityRevokeAuthorization(client);
@@ -740,28 +741,31 @@ SecurityResource(CallbackListPtr *pcbl, void *unused, void *calldata)
 {
     XaceResourceAccessRec *rec = calldata;
     SecurityStateRec *subj, *obj;
-    int cid = CLIENT_ID(rec->id);
     Mask requested = rec->access_mode;
     Mask allowed = SecurityResourceMask;
 
     subj = dixLookupPrivate(&rec->client->devPrivates, stateKey);
 
     /* disable background None for untrusted windows */
-    if ((requested & DixCreateAccess) && (rec->rtype == RT_WINDOW))
+    if ((requested & DixCreateAccess) && (rec->rtype == X11_RESTYPE_WINDOW))
         if (subj->haveState && subj->trustLevel != XSecurityClientTrusted)
             ((WindowPtr) rec->res)->forcedBG = TRUE;
 
     /* additional permissions for specific resource types */
-    if (rec->rtype == RT_WINDOW)
+    if (rec->rtype == X11_RESTYPE_WINDOW)
         allowed |= SecurityWindowExtraMask;
 
+    ClientPtr owner = dixClientForXID(rec->id);
+    if (!owner)
+        goto denied;
+
     /* special checks for server-owned resources */
-    if (cid == 0) {
+    if (dixResouceIsServerOwned(rec->id)) {
         if (rec->rtype & RC_DRAWABLE)
             /* additional operations allowed on root windows */
             allowed |= SecurityRootWindowExtraMask;
 
-        else if (rec->rtype == RT_COLORMAP)
+        else if (rec->rtype == X11_RESTYPE_COLORMAP)
             /* allow access to default colormaps */
             allowed = requested;
 
@@ -770,15 +774,15 @@ SecurityResource(CallbackListPtr *pcbl, void *unused, void *calldata)
             allowed |= DixReadAccess;
     }
 
-    if (clients[cid] != NULL) {
-        obj = dixLookupPrivate(&clients[cid]->devPrivates, stateKey);
-        if (SecurityDoCheck(subj, obj, requested, allowed) == Success)
-            return;
-    }
+    obj = dixLookupPrivate(&owner->devPrivates, stateKey);
+    if (SecurityDoCheck(subj, obj, requested, allowed) == Success)
+        return;
 
+denied:
     SecurityAudit("Security: denied client %d access %lx to resource 0x%lx "
                   "of client %d on request %s\n", rec->client->index,
-                  (unsigned long)requested, (unsigned long)rec->id, cid,
+                  (unsigned long)requested, (unsigned long)rec->id,
+                  dixClientIdForXID(rec->id),
                   SecurityLookupRequestName(rec->client));
     rec->status = BadAccess;    /* deny access */
 }
@@ -854,13 +858,13 @@ SecurityProperty(CallbackListPtr *pcbl, void *unused, void *calldata)
     Mask allowed = SecurityResourceMask | DixReadAccess;
 
     subj = dixLookupPrivate(&rec->client->devPrivates, stateKey);
-    obj = dixLookupPrivate(&wClient(rec->pWin)->devPrivates, stateKey);
+    obj = dixLookupPrivate(&dixClientForWindow(rec->pWin)->devPrivates, stateKey);
 
     if (SecurityDoCheck(subj, obj, requested, allowed) != Success) {
         SecurityAudit("Security: denied client %d access to property %s "
                       "(atom 0x%x) window 0x%lx of client %d on request %s\n",
                       rec->client->index, NameForAtom(name), name,
-                      (unsigned long)rec->pWin->drawable.id, wClient(rec->pWin)->index,
+                      (unsigned long)rec->pWin->drawable.id, dixClientForWindow(rec->pWin)->index,
                       SecurityLookupRequestName(rec->client));
         rec->status = BadAccess;
     }
@@ -876,7 +880,7 @@ SecuritySend(CallbackListPtr *pcbl, void *unused, void *calldata)
         int i;
 
         subj = dixLookupPrivate(&rec->client->devPrivates, stateKey);
-        obj = dixLookupPrivate(&wClient(rec->pWin)->devPrivates, stateKey);
+        obj = dixLookupPrivate(&dixClientForWindow(rec->pWin)->devPrivates, stateKey);
 
         if (SecurityDoCheck(subj, obj, DixSendAccess, 0) == Success)
             return;
@@ -891,7 +895,7 @@ SecuritySend(CallbackListPtr *pcbl, void *unused, void *calldata)
                               rec->client->index,
                               LookupEventName(rec->events[i].u.u.type),
                               (unsigned long)rec->pWin->drawable.id,
-                              wClient(rec->pWin)->index);
+                              dixClientForWindow(rec->pWin)->index);
                 rec->status = BadAccess;
                 return;
             }
@@ -905,7 +909,7 @@ SecurityReceive(CallbackListPtr *pcbl, void *unused, void *calldata)
     SecurityStateRec *subj, *obj;
 
     subj = dixLookupPrivate(&rec->client->devPrivates, stateKey);
-    obj = dixLookupPrivate(&wClient(rec->pWin)->devPrivates, stateKey);
+    obj = dixLookupPrivate(&dixClientForWindow(rec->pWin)->devPrivates, stateKey);
 
     if (SecurityDoCheck(subj, obj, DixReceiveAccess, 0) == Success)
         return;
@@ -913,7 +917,7 @@ SecurityReceive(CallbackListPtr *pcbl, void *unused, void *calldata)
     SecurityAudit("Security: denied client %d from receiving an event "
                   "sent to window 0x%lx of client %d\n",
                   rec->client->index, (unsigned long)rec->pWin->drawable.id,
-                  wClient(rec->pWin)->index);
+                  dixClientForWindow(rec->pWin)->index);
     rec->status = BadAccess;
 }
 

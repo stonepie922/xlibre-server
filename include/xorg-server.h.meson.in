@@ -20,9 +20,6 @@
 #error Include xorg-config.h when building the X server
 #endif
 
-/* Support BigRequests extension */
-#mesondefine BIGREQS
-
 /* Default font path */
 #mesondefine COMPILEDDEFAULTFONTPATH
 
@@ -41,14 +38,8 @@
 /* Support XDM-AUTH*-1 */
 #mesondefine HASXDMAUTH
 
-/* Support SHM */
-#mesondefine HAS_SHM
-
 /* Define to 1 if you have the `reallocarray' function. */
 #mesondefine HAVE_REALLOCARRAY
-
-/* Define to 1 if you have the `strcasecmp' function. */
-#mesondefine HAVE_STRCASECMP
 
 /* Define to 1 if you have the `strcasestr' function. */
 #mesondefine HAVE_STRCASESTR
@@ -58,9 +49,6 @@
 
 /* Define to 1 if you have the `strlcpy' function. */
 #mesondefine HAVE_STRLCPY
-
-/* Define to 1 if you have the `strncasecmp' function. */
-#mesondefine HAVE_STRNCASECMP
 
 /* Define to 1 if you have the `strndup' function. */
 #mesondefine HAVE_STRNDUP
@@ -73,6 +61,7 @@
 
 /* Internal define for Xinerama */
 #mesondefine PANORAMIX
+#mesondefine XINERAMA
 
 /* Support Present extension */
 #mesondefine PRESENT
@@ -179,9 +168,6 @@
 /* System is BSD-like */
 #mesondefine CSRG_BASED
 
-/* System has PC console */
-#mesondefine PCCONS_SUPPORT
-
 /* System has PCVT console */
 #mesondefine PCVT_SUPPORT
 
@@ -218,5 +204,14 @@
 
 /* byte order */
 #mesondefine X_BYTE_ORDER
+
+/* maximum number of clients */
+#mesondefine MAXCLIENTS
+
+/* announce server API features */
+#define XORG_API_DIX_SCREEN_HOOK_WINDOW_DESTROY 1
+#define XORG_API_DIX_SCREEN_HOOK_WINDOW_POSITION 1
+#define XORG_API_DIX_SCREEN_HOOK_CLOSE 1
+#define XORG_API_DIX_SCREEN_HOOK_PIXMAP_DESTROY 1
 
 #endif /* _XORG_SERVER_H_ */

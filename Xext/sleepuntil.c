@@ -27,9 +27,7 @@ in this Software without prior written authorization from The Open Group.
 
 /* dixsleep.c - implement millisecond timeouts for X clients */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "sleepuntil.h"
 #include <X11/X.h>
@@ -74,7 +72,7 @@ ClientSleepUntil(ClientPtr client,
                  TimeStamp *revive,
                  void (*notifyFunc) (ClientPtr, void *), void *closure)
 {
-    SertafiedPtr pRequest, pReq, pPrev;
+    SertafiedPtr pReq, pPrev;
 
     if (SertafiedGeneration != serverGeneration) {
         SertafiedResType = CreateNewResourceType(SertafiedDelete,
@@ -84,7 +82,8 @@ ClientSleepUntil(ClientPtr client,
         SertafiedGeneration = serverGeneration;
         BlockHandlerRegistered = FALSE;
     }
-    pRequest = malloc(sizeof(SertafiedRec));
+
+    SertafiedPtr pRequest = calloc(1, sizeof(SertafiedRec));
     if (!pRequest)
         return FALSE;
     pRequest->pClient = client;
@@ -166,7 +165,7 @@ SertafiedBlockHandler(void *data, void *wt)
         pNext = pReq->next;
         if (CompareTimeStamps(pReq->revive, now) == LATER)
             break;
-        FreeResource(pReq->id, RT_NONE);
+        FreeResource(pReq->id, X11_RESTYPE_NONE);
 
         /* AttendClient() may have been called via the resource delete
          * function so a client may have input to be processed and so
@@ -195,7 +194,7 @@ SertafiedWakeupHandler(void *data, int i)
         pNext = pReq->next;
         if (CompareTimeStamps(pReq->revive, now) == LATER)
             break;
-        FreeResource(pReq->id, RT_NONE);
+        FreeResource(pReq->id, X11_RESTYPE_NONE);
     }
     if (!pPending) {
         RemoveBlockAndWakeupHandlers(SertafiedBlockHandler,

@@ -20,9 +20,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#define  XK_LATIN1
+#include <X11/keysymdef.h>
 
 #include "misc.h"
 #include "scrnintstr.h"
@@ -32,7 +33,6 @@
 #include "windowstr.h"
 #include "input.h"
 #include "resource.h"
-#include "colormapst.h"
 #include "cursorstr.h"
 #include "dixstruct.h"
 #include "gcstruct.h"
@@ -43,6 +43,47 @@ static char **filterNames;
 static int nfilterNames;
 
 /*
+ * ISO Latin-1 case conversion routine
+ *
+ * this routine always null-terminates the result, so
+ * beware of too-small buffers
+ */
+
+static unsigned char
+ISOLatin1ToLower(unsigned char source)
+{
+    unsigned char dest;
+
+    if ((source >= XK_A) && (source <= XK_Z))
+        dest = source + (XK_a - XK_A);
+    else if ((source >= XK_Agrave) && (source <= XK_Odiaeresis))
+        dest = source + (XK_agrave - XK_Agrave);
+    else if ((source >= XK_Ooblique) && (source <= XK_Thorn))
+        dest = source + (XK_oslash - XK_Ooblique);
+    else
+        dest = source;
+    return dest;
+}
+
+static int
+CompareISOLatin1Lowered(const unsigned char *s1, int s1len,
+                        const unsigned char *s2, int s2len)
+{
+    unsigned char c1, c2;
+
+    for (;;) {
+        /* note -- compare against zero so that -1 ignores len */
+        c1 = s1len-- ? *s1++ : '\0';
+        c2 = s2len-- ? *s2++ : '\0';
+        if (!c1 ||
+            (c1 != c2 &&
+             (c1 = ISOLatin1ToLower(c1)) != (c2 = ISOLatin1ToLower(c2))))
+            break;
+    }
+    return (int) c1 - (int) c2;
+}
+
+/*
  * standard but not required filters don't have constant indices
  */
 
@@ -50,7 +91,6 @@ int
 PictureGetFilterId(const char *filter, int len, Bool makeit)
 {
     int i;
-    char *name;
     char **names;
 
     if (len < 0)
@@ -61,7 +101,7 @@ PictureGetFilterId(const char *filter, int len, Bool makeit)
             return i;
     if (!makeit)
         return -1;
-    name = malloc(len + 1);
+    char *name = calloc(1, len + 1);
     if (!name)
         return -1;
     memcpy(name, filter, len);
@@ -69,7 +109,7 @@ PictureGetFilterId(const char *filter, int len, Bool makeit)
     if (filterNames)
         names = reallocarray(filterNames, nfilterNames + 1, sizeof(char *));
     else
-        names = malloc(sizeof(char *));
+        names = calloc(1, sizeof(char *));
     if (!names) {
         free(name);
         return -1;
@@ -147,7 +187,7 @@ PictureAddFilter(ScreenPtr pScreen,
         filters =
             reallocarray(ps->filters, ps->nfilters + 1, sizeof(PictFilterRec));
     else
-        filters = malloc(sizeof(PictFilterRec));
+        filters = calloc(1, sizeof(PictFilterRec));
     if (!filters)
         return -1;
     ps->filters = filters;
@@ -181,7 +221,7 @@ PictureSetFilterAlias(ScreenPtr pScreen, const char *filter, const char *alias)
                                    ps->nfilterAliases + 1,
                                    sizeof(PictFilterAliasRec));
         else
-            aliases = malloc(sizeof(PictFilterAliasRec));
+            aliases = calloc(1, sizeof(PictFilterAliasRec));
         if (!aliases)
             return FALSE;
         ps->filterAliases = aliases;
@@ -336,7 +376,7 @@ SetPicturePictFilter(PicturePtr pPicture, PictFilterPtr pFilter,
         return BadMatch;
 
     if (nparams != pPicture->filter_nparams) {
-        xFixed *new_params = xallocarray(nparams, sizeof(xFixed));
+        xFixed *new_params = calloc(nparams, sizeof(xFixed));
 
         if (!new_params && nparams)
             return BadAlloc;
@@ -345,7 +385,8 @@ SetPicturePictFilter(PicturePtr pPicture, PictFilterPtr pFilter,
         pPicture->filter_nparams = nparams;
     }
     for (i = 0; i < nparams; i++)
-        pPicture->filter_params[i] = params[i];
+        if (pPicture->filter_params)
+            pPicture->filter_params[i] = params[i];
     pPicture->filter = pFilter->id;
 
     if (pPicture->pDrawable) {

@@ -19,8 +19,11 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "randrstr.h"
+#include "dix/dix_priv.h"
+#include "randr/randrstr_priv.h"
+#include "randr/rrdispatch_priv.h"
 
 RESTYPE RRModeType;
 
@@ -68,7 +71,7 @@ RRModeCreate(xRRModeInfo * modeInfo, const char *name, ScreenPtr userScreen)
     if (!RRInit())
         return NULL;
 
-    mode = malloc(sizeof(RRModeRec) + modeInfo->nameLength + 1);
+    mode = calloc(1, sizeof(RRModeRec) + modeInfo->nameLength + 1);
     if (!mode)
         return NULL;
     mode->refcnt = 1;
@@ -81,14 +84,14 @@ RRModeCreate(xRRModeInfo * modeInfo, const char *name, ScreenPtr userScreen)
     if (num_modes)
         newModes = reallocarray(modes, num_modes + 1, sizeof(RRModePtr));
     else
-        newModes = malloc(sizeof(RRModePtr));
+        newModes = calloc(1, sizeof(RRModePtr));
 
     if (!newModes) {
         free(mode);
         return NULL;
     }
 
-    mode->mode.id = FakeClientID(0);
+    mode->mode.id = dixAllocServerXID();
     if (!AddResource(mode->mode.id, RRModeType, (void *) mode)) {
         free(newModes);
         return NULL;
@@ -166,7 +169,7 @@ RRModesForScreen(ScreenPtr pScreen, int *num_ret)
     RRModePtr *screen_modes;
     int num_screen_modes = 0;
 
-    screen_modes = xallocarray((num_modes ? num_modes : 1), sizeof(RRModePtr));
+    screen_modes = calloc((num_modes ? num_modes : 1), sizeof(RRModePtr));
     if (!screen_modes)
         return NULL;
 
@@ -284,7 +287,6 @@ int
 ProcRRCreateMode(ClientPtr client)
 {
     REQUEST(xRRCreateModeReq);
-    xRRCreateModeReply rep;
     WindowPtr pWin;
     ScreenPtr pScreen;
     xRRModeInfo *modeInfo;
@@ -302,7 +304,7 @@ ProcRRCreateMode(ClientPtr client)
 
     modeInfo = &stuff->modeInfo;
     name = (char *) (stuff + 1);
-    units_after = (stuff->length - bytes_to_int32(sizeof(xRRCreateModeReq)));
+    units_after = (client->req_len - bytes_to_int32(sizeof(xRRCreateModeReq)));
 
     /* check to make sure requested name fits within the data provided */
     if (bytes_to_int32(modeInfo->nameLength) > units_after)
@@ -312,12 +314,12 @@ ProcRRCreateMode(ClientPtr client)
     if (!mode)
         return error;
 
-    rep = (xRRCreateModeReply) {
+    xRRCreateModeReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
-        .length = 0,
         .mode = mode->mode.id
-	};
+    };
+
     if (client->swapped) {
         swaps(&rep.sequenceNumber);
         swapl(&rep.length);

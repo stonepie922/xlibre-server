@@ -23,18 +23,17 @@
 /* Test relies on assert() */
 #undef NDEBUG
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdint.h>
+#include <X11/extensions/XI2proto.h>
+
+#include "dix/exevents_priv.h"
+#include "dix/eventconvert.h"
 
 #include "inputstr.h"
 #include "eventstr.h"
-#include "eventconvert.h"
-#include "exevents.h"
 #include "inpututils.h"
-#include <X11/extensions/XI2proto.h>
 
 #include "protocol-common.h"
 
@@ -272,7 +271,7 @@ test_convert_XIRawEvent(void)
 static void
 test_values_XIDeviceEvent(DeviceEvent *in, xXIDeviceEvent * out, BOOL swap)
 {
-    int buttons, valuators;
+    int valuators;
     int i;
     unsigned char *ptr;
     uint32_t flagmask = 0;
@@ -346,11 +345,9 @@ test_values_XIDeviceEvent(DeviceEvent *in, xXIDeviceEvent * out, BOOL swap)
     assert(out->root_x == double_to_fp1616(in->root_x + in->root_x_frac));
     assert(out->root_y == double_to_fp1616(in->root_y + in->root_y_frac));
 
-    buttons = 0;
     for (i = 0; i < bits_to_bytes(sizeof(in->buttons)); i++) {
         if (XIMaskIsSet(in->buttons, i)) {
             assert(out->buttons_len >= bytes_to_int32(bits_to_bytes(i)));
-            buttons++;
         }
     }
 
@@ -742,7 +739,7 @@ test_values_XIDeviceChangedEvent(DeviceChangedEvent *in,
                        flags & SCROLL_FLAG_PREFERRED);
         }
         default:
-            printf("Invalid class type.\n\n");
+            dbg("Invalid class type.\n\n");
             assert(1);
             break;
         }
@@ -1206,15 +1203,17 @@ test_convert_XIBarrierEvent(void)
     test_XIBarrierEvent(&in);
 }
 
-int
+const testfunc_t*
 protocol_eventconvert_test(void)
 {
-    test_convert_XIRawEvent();
-    test_convert_XIFocusEvent();
-    test_convert_XIDeviceEvent();
-    test_convert_XIDeviceChangedEvent();
-    test_convert_XITouchOwnershipEvent();
-    test_convert_XIBarrierEvent();
-
-    return 0;
+    static const testfunc_t testfuncs[] = {
+        test_convert_XIRawEvent,
+        test_convert_XIFocusEvent,
+        test_convert_XIDeviceEvent,
+        test_convert_XIDeviceChangedEvent,
+        test_convert_XITouchOwnershipEvent,
+        test_convert_XIBarrierEvent,
+        NULL,
+    };
+    return testfuncs;
 }

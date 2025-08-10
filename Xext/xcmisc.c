@@ -26,21 +26,21 @@ from The Open Group.
 
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <stdint.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
+#include <X11/extensions/xcmiscproto.h>
+
+#include "dix/resource_priv.h"
+#include "miext/extinit_priv.h"
+
 #include "misc.h"
 #include "os.h"
 #include "dixstruct.h"
 #include "extnsionst.h"
 #include "swaprep.h"
-#include <X11/extensions/xcmiscproto.h>
-#include "extinit.h"
-
-#include <stdint.h>
 
 static int
 ProcXCMiscGetVersion(ClientPtr client)
@@ -101,7 +101,7 @@ ProcXCMiscGetXIDList(ClientPtr client)
     if (stuff->count > UINT32_MAX / sizeof(XID))
         return BadAlloc;
 
-    pids = xallocarray(stuff->count, sizeof(XID));
+    pids = calloc(stuff->count, sizeof(XID));
     if (!pids) {
         return BadAlloc;
     }
@@ -146,21 +146,10 @@ static int _X_COLD
 SProcXCMiscGetVersion(ClientPtr client)
 {
     REQUEST(xXCMiscGetVersionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXCMiscGetVersionReq);
     swaps(&stuff->majorVersion);
     swaps(&stuff->minorVersion);
     return ProcXCMiscGetVersion(client);
-}
-
-static int _X_COLD
-SProcXCMiscGetXIDRange(ClientPtr client)
-{
-    REQUEST(xReq);
-
-    swaps(&stuff->length);
-    return ProcXCMiscGetXIDRange(client);
 }
 
 static int _X_COLD
@@ -169,7 +158,6 @@ SProcXCMiscGetXIDList(ClientPtr client)
     REQUEST(xXCMiscGetXIDListReq);
     REQUEST_SIZE_MATCH(xXCMiscGetXIDListReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->count);
     return ProcXCMiscGetXIDList(client);
 }
@@ -182,7 +170,7 @@ SProcXCMiscDispatch(ClientPtr client)
     case X_XCMiscGetVersion:
         return SProcXCMiscGetVersion(client);
     case X_XCMiscGetXIDRange:
-        return SProcXCMiscGetXIDRange(client);
+        return ProcXCMiscGetXIDRange(client);
     case X_XCMiscGetXIDList:
         return SProcXCMiscGetXIDList(client);
     default:

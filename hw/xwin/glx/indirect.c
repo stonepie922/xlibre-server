@@ -373,8 +373,6 @@ static __GLXdrawable *glxWinCreateDrawable(ClientPtr client,
                                            int type,
                                            XID glxDrawId, __GLXconfig * conf);
 
-static Bool glxWinRealizeWindow(WindowPtr pWin);
-static Bool glxWinUnrealizeWindow(WindowPtr pWin);
 static void glxWinCopyWindow(WindowPtr pWindow, DDXPointRec ptOldOrg,
                              RegionPtr prgnSrc);
 static Bool glxWinSetPixelFormat(HDC hdc, int bppOverride, int drawableTypeOverride,
@@ -704,11 +702,7 @@ glxWinScreenProbe(ScreenPtr pScreen)
     // dump out fbConfigs now fbConfigIds and visualIDs have been assigned
     fbConfigsDump(screen->base.numFBConfigs, screen->base.fbconfigs, &rejects);
 
-    /* Wrap RealizeWindow, UnrealizeWindow and CopyWindow on this screen */
-    screen->RealizeWindow = pScreen->RealizeWindow;
-    pScreen->RealizeWindow = glxWinRealizeWindow;
-    screen->UnrealizeWindow = pScreen->UnrealizeWindow;
-    pScreen->UnrealizeWindow = glxWinUnrealizeWindow;
+    /* Wrap CopyWindow on this screen */
     screen->CopyWindow = pScreen->CopyWindow;
     pScreen->CopyWindow = glxWinCopyWindow;
 
@@ -729,23 +723,6 @@ glxWinScreenProbe(ScreenPtr pScreen)
 /*
  * Window functions
  */
-
-static Bool
-glxWinRealizeWindow(WindowPtr pWin)
-{
-    Bool result;
-    ScreenPtr pScreen = pWin->drawable.pScreen;
-    glxWinScreen *screenPriv = (glxWinScreen *) glxGetScreen(pScreen);
-
-    GLWIN_DEBUG_MSG("glxWinRealizeWindow");
-
-    /* Allow the window to be created (RootlessRealizeWindow is inside our wrap) */
-    pScreen->RealizeWindow = screenPriv->RealizeWindow;
-    result = pScreen->RealizeWindow(pWin);
-    pScreen->RealizeWindow = glxWinRealizeWindow;
-
-    return result;
-}
 
 static void
 glxWinCopyWindow(WindowPtr pWindow, DDXPointRec ptOldOrg, RegionPtr prgnSrc)
@@ -776,22 +753,6 @@ glxWinCopyWindow(WindowPtr pWindow, DDXPointRec ptOldOrg, RegionPtr prgnSrc)
     pScreen->CopyWindow = screenPriv->CopyWindow;
     pScreen->CopyWindow(pWindow, ptOldOrg, prgnSrc);
     pScreen->CopyWindow = glxWinCopyWindow;
-}
-
-static Bool
-glxWinUnrealizeWindow(WindowPtr pWin)
-{
-    Bool result;
-    ScreenPtr pScreen = pWin->drawable.pScreen;
-    glxWinScreen *screenPriv = (glxWinScreen *) glxGetScreen(pScreen);
-
-    GLWIN_DEBUG_MSG("glxWinUnrealizeWindow");
-
-    pScreen->UnrealizeWindow = screenPriv->UnrealizeWindow;
-    result = pScreen->UnrealizeWindow(pWin);
-    pScreen->UnrealizeWindow = glxWinUnrealizeWindow;
-
-    return result;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -882,9 +843,7 @@ glxWinCreateDrawable(ClientPtr client,
                      DrawablePtr pDraw,
                      XID drawId, int type, XID glxDrawId, __GLXconfig * conf)
 {
-    __GLXWinDrawable *glxPriv;
-
-    glxPriv = malloc(sizeof *glxPriv);
+    __GLXWinDrawable *glxPriv = calloc(1, sizeof *glxPriv);
 
     if (glxPriv == NULL)
         return NULL;
@@ -1134,7 +1093,7 @@ glxWinSetPixelFormat(HDC hdc, int bppOverride, int drawableTypeOverride,
                     winConfig->pixelFormatIndex);
 
     /*
-       Normally, we can just use the the pixelFormatIndex corresponding
+       Normally, we can just use the pixelFormatIndex corresponding
        to the fbconfig which has been specified by the client
      */
 
@@ -2008,7 +1967,7 @@ glxWinCreateConfigs(HDC hdc, glxWinScreen * screen)
         n++;
 
         // allocate and save
-        work = malloc(sizeof(GLXWinConfig));
+        work = calloc(1, sizeof(GLXWinConfig));
         if (NULL == work) {
             ErrorF("Failed to allocate GLXWinConfig\n");
             break;
@@ -2422,7 +2381,7 @@ glxWinCreateConfigsExt(HDC hdc, glxWinScreen * screen, PixelFormatRejectStats * 
         n++;
 
         // allocate and save
-        work = malloc(sizeof(GLXWinConfig));
+        work = calloc(1, sizeof(GLXWinConfig));
         if (NULL == work) {
             ErrorF("Failed to allocate GLXWinConfig\n");
             break;

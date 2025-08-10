@@ -57,7 +57,7 @@
 #endif
 
 #include "xf86Config.h"
-#include "xf86Parser.h"
+#include "xf86Parser_priv.h"
 #include "xf86tokens.h"
 #include "Configint.h"
 
@@ -104,7 +104,7 @@ xf86readConfigFile(void)
             xf86_lex_val.str = NULL;
             break;
         case SECTION:
-            if (xf86getSubToken(&(ptr->conf_comment)) != STRING) {
+            if (xf86getSubToken(&(ptr->conf_comment)) != XF86_TOKEN_STRING) {
                 xf86parseError(QUOTE_MSG, "Section");
                 CLEANUP(ptr);
                 return NULL;

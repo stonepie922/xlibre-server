@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies). All
  * rights reserved.
- * Copyright (c) 1993, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1993, 2010, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -50,12 +50,14 @@
  *
  * Author: Rami Ylimäki <rami.ylimaki@vincit.fi>
  */
+#include <dix-config.h>
 
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "client.h"
+#include "os/client_priv.h"
+
 #include "os.h"
 #include "dixstruct.h"
 
@@ -73,11 +75,19 @@
 #include <limits.h>
 #endif
 
+#if defined(__DragonFly__) || defined(__FreeBSD__)
+#include <sys/sysctl.h>
+#include <errno.h>
+#endif
+
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
 #include <errno.h>
 #include <sys/sysctl.h>
 #endif
+
+#include "os/auth.h"
+#include "os/log_priv.h"
 
 /**
  * Try to determine a PID for a client from its connection
@@ -136,7 +146,7 @@ DetermineClientPid(struct _Client * client)
 void
 DetermineClientCmd(pid_t pid, const char **cmdname, const char **cmdargs)
 {
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(__DragonFly__) && !defined(__FreeBSD__)
     char path[PATH_MAX + 1];
     int totsize = 0;
     int fd = 0;
@@ -172,7 +182,7 @@ DetermineClientCmd(pid_t pid, const char **cmdname, const char **cmdargs)
         size_t len = argmax;
         int32_t argc = -1;
 
-        char * const procargs = malloc(len);
+        char * const procargs = calloc(1, len);
         if (!procargs) {
             ErrorF("Failed to allocate memory (%lu bytes) for KERN_PROCARGS2 result for pid %d: %s\n", len, pid, strerror(errno));
             return;
@@ -250,6 +260,56 @@ DetermineClientCmd(pid_t pid, const char **cmdname, const char **cmdargs)
 
         free(procargs);
     }
+#elif defined(__DragonFly__) || defined(__FreeBSD__)
+    /* on DragonFly and FreeBSD use KERN_PROC_ARGS */
+    {
+        int mib[] = {
+            CTL_KERN,
+            KERN_PROC,
+            KERN_PROC_ARGS,
+            pid,
+        };
+
+        /* Determine exact size instead of relying on kern.argmax */
+        size_t len;
+        if (sysctl(mib, ARRAY_SIZE(mib), NULL, &len, NULL, 0) != 0) {
+            ErrorF("Failed to query KERN_PROC_ARGS length for PID %d: %s\n", pid, strerror(errno));
+            return;
+        }
+
+        /* Read KERN_PROC_ARGS contents. Similar to /proc/pid/cmdline
+         * the process name and each argument are separated by NUL byte. */
+        char *const procargs = calloc(1, len);
+        if (sysctl(mib, ARRAY_SIZE(mib), procargs, &len, NULL, 0) != 0) {
+            ErrorF("Failed to get KERN_PROC_ARGS for PID %d: %s\n", pid, strerror(errno));
+            free(procargs);
+            return;
+        }
+
+        /* Construct the process name without arguments. */
+        if (cmdname) {
+            *cmdname = strdup(procargs);
+        }
+
+        /* Construct the arguments for client process. */
+        if (cmdargs) {
+            size_t cmdsize = strlen(procargs) + 1;
+            size_t argsize = len - cmdsize;
+            char *args = NULL;
+
+            if (argsize > 0)
+                args = procargs + cmdsize;
+            if (args) {
+                /* Replace NUL with space except terminating NUL */
+                for (size_t i = 0; i < (argsize - 1); i++) {
+                    if (args[i] == '\0')
+                        args[i] = ' ';
+                }
+                *cmdargs = strdup(args);
+            }
+        }
+        free(procargs);
+    }
 #elif defined(__OpenBSD__)
     /* on OpenBSD use kvm_getargv() */
     {
@@ -324,7 +384,7 @@ DetermineClientCmd(pid_t pid, const char **cmdname, const char **cmdargs)
         char *args = NULL;
 
         if (argsize > 0)
-            args = malloc(argsize);
+            args = calloc(1, argsize);
         if (args) {
             int i = 0;
 
@@ -395,7 +455,7 @@ ReserveClientIds(struct _Client *client)
         return;
 
     assert(!client->clientIds);
-    client->clientIds = calloc(1, sizeof(ClientIdRec));
+    client->clientIds = calloc(1, sizeof(struct _ClientId));
     if (!client->clientIds)
         return;
 

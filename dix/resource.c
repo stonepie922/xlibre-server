@@ -72,7 +72,7 @@ Equipment Corporation.
 
 ******************************************************************/
 /* XSERVER_DTRACE additions:
- * Copyright (c) 2005-2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005-2006, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -112,16 +112,25 @@ Equipment Corporation.
  *      like it belongs to a client.  This ID, however,  must not be one
  *      the client actually can create, or we have the potential for conflict.
  *      The 31st bit of the ID is reserved for the server's use for this
- *      purpose.  By setting CLIENT_ID(id) to the client, the SERVER_BIT to
+ *      purpose.  By setting dixClientIdForXID(id) to the client, the SERVER_BIT to
  *      1, and an otherwise arbitrary ID in the low 22 bits, we can create a
  *      resource "owned" by the client.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
+
+#include "dix/colormap_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/dixgrabs_priv.h"
+#include "dix/gc_priv.h"
+#include "dix/registry_priv.h"
+#include "dix/resource_priv.h"
+#include "os/osdep.h"
+#include "Xext/panoramiX.h"
+#include "Xext/panoramiXsrv.h"
+
 #include "misc.h"
 #include "os.h"
 #include "resource.h"
@@ -131,16 +140,9 @@ Equipment Corporation.
 #include "dixfont.h"
 #include "colormap.h"
 #include "inputstr.h"
-#include "dixevents.h"
-#include "dixgrabs.h"
 #include "cursor.h"
-#ifdef PANORAMIX
-#include "panoramiX.h"
-#include "panoramiXsrv.h"
-#endif
 #include "xace.h"
 #include <assert.h>
-#include "registry.h"
 #include "gcstruct.h"
 
 #ifdef XSERVER_DTRACE
@@ -296,7 +298,7 @@ GetPixmapBytes(void *value, XID id, ResourceSizePtr size)
 static void
 GetWindowBytes(void *value, XID id, ResourceSizePtr size)
 {
-    SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(RT_PIXMAP);
+    SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(X11_RESTYPE_PIXMAP);
     ResourceSizeRec pixmapSize = { 0, 0, 0 };
     WindowPtr window = value;
 
@@ -345,12 +347,12 @@ FindWindowSubRes(void *value, FindAllRes func, void *cdata)
     if (window->backgroundState == BackgroundPixmap)
     {
         PixmapPtr pixmap = window->background.pixmap;
-        func(window->background.pixmap, pixmap->drawable.id, RT_PIXMAP, cdata);
+        func(window->background.pixmap, pixmap->drawable.id, X11_RESTYPE_PIXMAP, cdata);
     }
     if (window->border.pixmap && !window->borderIsPixel)
     {
         PixmapPtr pixmap = window->border.pixmap;
-        func(window->background.pixmap, pixmap->drawable.id, RT_PIXMAP, cdata);
+        func(window->background.pixmap, pixmap->drawable.id, X11_RESTYPE_PIXMAP, cdata);
     }
 }
 
@@ -369,7 +371,7 @@ FindWindowSubRes(void *value, FindAllRes func, void *cdata)
 static void
 GetGcBytes(void *value, XID id, ResourceSizePtr size)
 {
-    SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(RT_PIXMAP);
+    SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(X11_RESTYPE_PIXMAP);
     ResourceSizeRec pixmapSize = { 0, 0, 0 };
     GCPtr gc = value;
 
@@ -417,73 +419,73 @@ FindGCSubRes(void *value, FindAllRes func, void *cdata)
     if (gc->stipple)
     {
         PixmapPtr pixmap = gc->stipple;
-        func(pixmap, pixmap->drawable.id, RT_PIXMAP, cdata);
+        func(pixmap, pixmap->drawable.id, X11_RESTYPE_PIXMAP, cdata);
     }
     if (gc->tile.pixmap && !gc->tileIsPixel)
     {
         PixmapPtr pixmap = gc->tile.pixmap;
-        func(pixmap, pixmap->drawable.id, RT_PIXMAP, cdata);
+        func(pixmap, pixmap->drawable.id, X11_RESTYPE_PIXMAP, cdata);
     }
 }
 
 static struct ResourceType *resourceTypes;
 
 static const struct ResourceType predefTypes[] = {
-    [RT_NONE & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_NONE & (RC_LASTPREDEF - 1)] = {
                                        .deleteFunc = (DeleteType) NoopDDA,
                                        .sizeFunc = GetDefaultBytes,
                                        .findSubResFunc = DefaultFindSubRes,
                                        .errorValue = BadValue,
                                        },
-    [RT_WINDOW & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_WINDOW & (RC_LASTPREDEF - 1)] = {
                                          .deleteFunc = DeleteWindow,
                                          .sizeFunc = GetWindowBytes,
                                          .findSubResFunc = FindWindowSubRes,
                                          .errorValue = BadWindow,
                                          },
-    [RT_PIXMAP & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_PIXMAP & (RC_LASTPREDEF - 1)] = {
                                          .deleteFunc = dixDestroyPixmap,
                                          .sizeFunc = GetPixmapBytes,
                                          .findSubResFunc = DefaultFindSubRes,
                                          .errorValue = BadPixmap,
                                          },
-    [RT_GC & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_GC & (RC_LASTPREDEF - 1)] = {
                                      .deleteFunc = FreeGC,
                                      .sizeFunc = GetGcBytes,
                                      .findSubResFunc = FindGCSubRes,
                                      .errorValue = BadGC,
                                      },
-    [RT_FONT & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_FONT & (RC_LASTPREDEF - 1)] = {
                                        .deleteFunc = CloseFont,
                                        .sizeFunc = GetDefaultBytes,
                                        .findSubResFunc = DefaultFindSubRes,
                                        .errorValue = BadFont,
                                        },
-    [RT_CURSOR & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_CURSOR & (RC_LASTPREDEF - 1)] = {
                                          .deleteFunc = FreeCursor,
                                          .sizeFunc = GetDefaultBytes,
                                          .findSubResFunc = DefaultFindSubRes,
                                          .errorValue = BadCursor,
                                          },
-    [RT_COLORMAP & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_COLORMAP & (RC_LASTPREDEF - 1)] = {
                                            .deleteFunc = FreeColormap,
                                            .sizeFunc = GetDefaultBytes,
                                            .findSubResFunc = DefaultFindSubRes,
                                            .errorValue = BadColor,
                                            },
-    [RT_CMAPENTRY & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_CMAPENTRY & (RC_LASTPREDEF - 1)] = {
                                             .deleteFunc = FreeClientPixels,
                                             .sizeFunc = GetDefaultBytes,
                                             .findSubResFunc = DefaultFindSubRes,
                                             .errorValue = BadColor,
                                             },
-    [RT_OTHERCLIENT & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_OTHERCLIENT & (RC_LASTPREDEF - 1)] = {
                                               .deleteFunc = OtherClientGone,
                                               .sizeFunc = GetDefaultBytes,
                                               .findSubResFunc = DefaultFindSubRes,
                                               .errorValue = BadValue,
                                               },
-    [RT_PASSIVEGRAB & (RC_LASTPREDEF - 1)] = {
+    [X11_RESTYPE_PASSIVEGRAB & (RC_LASTPREDEF - 1)] = {
                                               .deleteFunc = DeletePassiveGrab,
                                               .sizeFunc = GetDefaultBytes,
                                               .findSubResFunc = DefaultFindSubRes,
@@ -493,7 +495,7 @@ static const struct ResourceType predefTypes[] = {
 
 CallbackListPtr ResourceStateCallback;
 
-static _X_INLINE void
+static inline void
 CallResourceStateCallback(ResourceState state, ResourceRec * res)
 {
     if (ResourceStateCallback) {
@@ -549,7 +551,7 @@ GetResourceTypeSizeFunc(RESTYPE type)
  * Override the default function that calculates resource size. For
  * example, video driver knows better how to calculate pixmap memory
  * usage and can therefore wrap or override size calculation for
- * RT_PIXMAP.
+ * X11_RESTYPE_PIXMAP.
  *
  * @param[in] type     Resource type used in size calculations.
  *
@@ -643,17 +645,17 @@ InitClientResources(ClientPtr client)
     int i, j;
 
     if (client == serverClient) {
-        lastResourceType = RT_LASTPREDEF;
+        lastResourceType = X11_RESTYPE_LASTPREDEF;
         lastResourceClass = RC_LASTPREDEF;
         TypeMask = RC_LASTPREDEF - 1;
         free(resourceTypes);
-        resourceTypes = malloc(sizeof(predefTypes));
+        resourceTypes = calloc(1, sizeof(predefTypes));
         if (!resourceTypes)
             return FALSE;
         memcpy(resourceTypes, predefTypes, sizeof(predefTypes));
     }
     clientTable[i = client->index].resources =
-        malloc(INITBUCKETS * sizeof(ResourcePtr));
+        calloc(INITBUCKETS, sizeof(ResourcePtr));
     if (!clientTable[i].resources)
         return FALSE;
     clientTable[i].buckets = INITBUCKETS;
@@ -786,18 +788,28 @@ FakeClientID(int client)
     XID id, maxid;
 
     id = clientTable[client].fakeID++;
+
+    // extra paranoid protection, because many places expect 0 as
+    // sign for resource not existing
+    if (!id)
+        return FakeClientID(client);
+
     if (id != clientTable[client].endFakeID)
         return id;
     GetXIDRange(client, TRUE, &id, &maxid);
     if (!id) {
         if (!client)
             FatalError("FakeClientID: server internal ids exhausted\n");
-        MarkClientException(clients[client]);
+        dixMarkClientException(clients[client]);
         id = ((Mask) client << CLIENTOFFSET) | (SERVER_BIT * 3);
         maxid = id | RESOURCE_ID_MASK;
     }
     clientTable[client].fakeID = id + 1;
     clientTable[client].endFakeID = maxid + 1;
+
+    if (!id)
+        return FakeClientID(client);
+
     return id;
 }
 
@@ -806,12 +818,12 @@ AddResource(XID id, RESTYPE type, void *value)
 {
     int client;
     ClientResourceRec *rrec;
-    ResourcePtr res, *head;
+    ResourcePtr *head;
 
 #ifdef XSERVER_DTRACE
     XSERVER_RESOURCE_ALLOC(id, type, value, TypeNameString(type));
 #endif
-    client = CLIENT_ID(id);
+    client = dixClientIdForXID(id);
     rrec = &clientTable[client];
     if (!rrec->buckets) {
         ErrorF("[dix] AddResource(%lx, %x, %lx), client=%d \n",
@@ -821,7 +833,7 @@ AddResource(XID id, RESTYPE type, void *value)
     if ((rrec->elements >= 4 * rrec->buckets) && (rrec->hashsize < MAXHASHSIZE))
         RebuildTable(client);
     head = &rrec->resources[HashResourceID(id, clientTable[client].hashsize)];
-    res = malloc(sizeof(ResourceRec));
+    ResourcePtr res = calloc(1, sizeof(ResourceRec));
     if (!res) {
         (*resourceTypes[type & TypeMask].deleteFunc) (value, id);
         return FALSE;
@@ -850,10 +862,10 @@ RebuildTable(int client)
      */
 
     j = 2 * clientTable[client].buckets;
-    tails =  xallocarray(j, sizeof(ResourcePtr *));
+    tails =  calloc(j, sizeof(ResourcePtr *));
     if (!tails)
         return;
-    resources =  xallocarray(j, sizeof(ResourcePtr));
+    resources =  calloc(j, sizeof(ResourcePtr));
     if (!resources) {
         free(tails);
         return;
@@ -899,7 +911,7 @@ FreeResource(XID id, RESTYPE skipDeleteFuncType)
     int *eltptr;
     int elements;
 
-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
+    if (((cid = dixClientIdForXID(id)) < LimitClients) && clientTable[cid].buckets) {
         head = &clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
         eltptr = &clientTable[cid].elements;
 
@@ -933,7 +945,7 @@ FreeResourceByType(XID id, RESTYPE type, Bool skipFree)
     ResourcePtr res;
     ResourcePtr *prev, *head;
 
-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
+    if (((cid = dixClientIdForXID(id)) < LimitClients) && clientTable[cid].buckets) {
         head = &clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
 
         prev = head;
@@ -968,7 +980,7 @@ ChangeResourceValue(XID id, RESTYPE rtype, void *value)
     int cid;
     ResourcePtr res;
 
-    if (((cid = CLIENT_ID(id)) < LimitClients) && clientTable[cid].buckets) {
+    if (((cid = dixClientIdForXID(id)) < LimitClients) && clientTable[cid].buckets) {
         res = clientTable[cid].resources[HashResourceID(id, clientTable[cid].hashsize)];
 
         for (; res; res = res->next)
@@ -1176,7 +1188,7 @@ LegalNewID(XID id, ClientPtr client)
     void *val;
     int rc;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     XID minid, maxid;
 
     if (!noPanoramiXExtension) {
@@ -1186,7 +1198,7 @@ LegalNewID(XID id, ClientPtr client)
         if ((id >= minid) && (id <= maxid))
             return TRUE;
     }
-#endif                          /* PANORAMIX */
+#endif /* XINERAMA */
     if (client->clientAsMask == (id & ~RESOURCE_ID_MASK)) {
         rc = dixLookupResourceByClass(&val, id, RC_ANY, serverClient,
                                       DixGetAttrAccess);
@@ -1199,7 +1211,7 @@ int
 dixLookupResourceByType(void **result, XID id, RESTYPE rtype,
                         ClientPtr client, Mask mode)
 {
-    int cid = CLIENT_ID(id);
+    int cid = dixClientIdForXID(id);
     ResourcePtr res = NULL;
 
     *result = NULL;
@@ -1220,8 +1232,8 @@ dixLookupResourceByType(void **result, XID id, RESTYPE rtype,
         return resourceTypes[rtype & TypeMask].errorValue;
 
     if (client) {
-        cid = XaceHook(XACE_RESOURCE_ACCESS, client, id, res->type,
-                       res->value, RT_NONE, NULL, mode);
+        cid = XaceHookResourceAccess(client, id, res->type,
+                       res->value, X11_RESTYPE_NONE, NULL, mode);
         if (cid == BadValue)
             return resourceTypes[rtype & TypeMask].errorValue;
         if (cid != Success)
@@ -1236,7 +1248,7 @@ int
 dixLookupResourceByClass(void **result, XID id, RESTYPE rclass,
                          ClientPtr client, Mask mode)
 {
-    int cid = CLIENT_ID(id);
+    int cid = dixClientIdForXID(id);
     ResourcePtr res = NULL;
 
     *result = NULL;
@@ -1255,12 +1267,18 @@ dixLookupResourceByClass(void **result, XID id, RESTYPE rclass,
         return BadValue;
 
     if (client) {
-        cid = XaceHook(XACE_RESOURCE_ACCESS, client, id, res->type,
-                       res->value, RT_NONE, NULL, mode);
+        cid = XaceHookResourceAccess(client, id, res->type,
+                       res->value, X11_RESTYPE_NONE, NULL, mode);
         if (cid != Success)
             return cid;
     }
 
     *result = res->value;
     return Success;
+}
+
+/* new API - try not to call FakeClientID() directly anymore */
+XID dixAllocServerXID(void)
+{
+    return FakeClientID(0);
 }

@@ -50,15 +50,15 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XIproto.h>
+
+#include "dix/resource_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
-#include <X11/extensions/XIproto.h>
 #include "exglobals.h"
-
 #include "ungrdev.h"
 
 /***********************************************************************
@@ -71,7 +71,6 @@ int _X_COLD
 SProcXUngrabDevice(ClientPtr client)
 {
     REQUEST(xUngrabDeviceReq);
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xUngrabDeviceReq);
     swapl(&stuff->time);
     return (ProcXUngrabDevice(client));

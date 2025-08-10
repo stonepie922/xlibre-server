@@ -19,6 +19,9 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
+
+#include "os/bug_priv.h"
 
 #include "glamor_priv.h"
 #include "glamor_program.h"
@@ -27,7 +30,7 @@
 
 static const glamor_facet glamor_facet_poly_lines = {
     .name = "poly_lines",
-    .vs_vars = "attribute vec2 primitive;\n",
+    .vs_vars = "in vec2 primitive;\n",
     .vs_exec = ("       vec2 pos = vec2(0.0,0.0);\n"
                 GLAMOR_POS(gl_Position, primitive.xy)),
 };
@@ -61,7 +64,7 @@ glamor_poly_lines_solid_gl(DrawablePtr drawable, GCPtr gc,
 
     glamor_make_current(glamor_priv);
 
-    prog = glamor_use_program_fill(pixmap, gc,
+    prog = glamor_use_program_fill(drawable, gc,
                                    &glamor_priv->poly_line_program,
                                    &glamor_facet_poly_lines);
 
@@ -100,6 +103,8 @@ glamor_poly_lines_solid_gl(DrawablePtr drawable, GCPtr gc,
 
     glEnable(GL_SCISSOR_TEST);
 
+    BUG_RETURN_VAL(!pixmap_priv, FALSE);
+
     glamor_pixmap_loop(pixmap_priv, box_index) {
         int nbox = RegionNumRects(gc->pCompositeClip);
         BoxPtr box = RegionRects(gc->pCompositeClip);
@@ -115,6 +120,7 @@ glamor_poly_lines_solid_gl(DrawablePtr drawable, GCPtr gc,
                       box->y2 - box->y1);
             box++;
             glDrawArrays(GL_LINE_STRIP, 0, n + add_last);
+            glDrawArrays(GL_POINTS, 0, n + add_last);
         }
     }
 

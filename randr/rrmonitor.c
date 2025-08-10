@@ -19,8 +19,12 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "randrstr.h"
+#include "dix/dix_priv.h"
+#include "randr/randrstr_priv.h"
+#include "randr/rrdispatch_priv.h"
+
 #include "swaprep.h"
 
 static Atom
@@ -156,8 +160,8 @@ RRMonitorGetGeometry(RRMonitorPtr monitor, RRMonitorGeometryPtr geometry)
 
         /* Adjust physical sizes to account for total area */
         if (active_crtcs > 1 && first.box.x2 != first.box.x1 && first.box.y2 != first.box.y1) {
-            geometry->mmWidth = (this.box.x2 - this.box.x1) / (first.box.x2 - first.box.x1) * first.mmWidth;
-            geometry->mmHeight = (this.box.y2 - this.box.y1) / (first.box.y2 - first.box.y1) * first.mmHeight;
+            geometry->mmWidth = ((double)(geometry->box.x2 - geometry->box.x1) / (first.box.x2 - first.box.x1)) * first.mmWidth;
+            geometry->mmHeight = ((double)(geometry->box.y2 - geometry->box.y1) / (first.box.y2 - first.box.y1)) * first.mmHeight;
         }
     } else {
         *geometry = monitor->geometry;
@@ -489,17 +493,6 @@ RRMonitorAdd(ClientPtr client, ScreenPtr screen, RRMonitorPtr monitor)
         }
     }
 
-    /* 'name' must not match the name of any Monitor on the screen, or
-     * a Value error results.
-     */
-
-    for (m = 0; m < pScrPriv->numMonitors; m++) {
-        if (pScrPriv->monitors[m]->name == monitor->name) {
-            client->errorValue = monitor->name;
-            return BadValue;
-        }
-    }
-
     /* Allocate space for the new pointer. This is done before
      * removing matching monitors as it may fail, and the request
      * needs to not have any side-effects on failure
@@ -509,7 +502,7 @@ RRMonitorAdd(ClientPtr client, ScreenPtr screen, RRMonitorPtr monitor)
                                 pScrPriv->numMonitors + 1,
                                 sizeof (RRMonitorPtr));
     else
-        monitors = malloc(sizeof (RRMonitorPtr));
+        monitors = calloc(1, sizeof(RRMonitorPtr));
 
     if (!monitors)
         return BadAlloc;
@@ -589,11 +582,6 @@ int
 ProcRRGetMonitors(ClientPtr client)
 {
     REQUEST(xRRGetMonitorsReq);
-    xRRGetMonitorsReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = 0,
-    };
     WindowPtr           window;
     ScreenPtr           screen;
     int                 r;
@@ -612,17 +600,21 @@ ProcRRGetMonitors(ClientPtr client)
     if (!RRMonitorMakeList(screen, get_active, &monitors, &nmonitors))
         return BadAlloc;
 
-    rep.timestamp = RRMonitorTimestamp(screen);
-
     noutputs = 0;
     for (m = 0; m < nmonitors; m++) {
-        rep.length += SIZEOF(xRRMonitorInfo) >> 2;
-        rep.length += monitors[m].numOutputs;
         noutputs += monitors[m].numOutputs;
     }
 
-    rep.nmonitors = nmonitors;
-    rep.noutputs = noutputs;
+    int payload_len = noutputs * sizeof(CARD32) + nmonitors * sizeof(xRRMonitorInfo);
+
+    xRRGetMonitorsReply rep = {
+        .type = X_Reply,
+        .sequenceNumber = client->sequence,
+        .timestamp = RRMonitorTimestamp(screen),
+        .length = bytes_to_int32(payload_len),
+        .nmonitors = nmonitors,
+        .noutputs = noutputs,
+    };
 
     if (client->swapped) {
         swaps(&rep.sequenceNumber);
@@ -633,11 +625,18 @@ ProcRRGetMonitors(ClientPtr client)
     }
     WriteToClient(client, sizeof(xRRGetMonitorsReply), &rep);
 
-    client->pSwapReplyFunc = (ReplySwapPtr) CopySwap32Write;
+    char *payload_buf = calloc(1, payload_len);
+    if (!payload_buf) {
+        RRMonitorFreeList(monitors, nmonitors);
+        return BadAlloc;
+    }
+
+    char *walk = payload_buf;
 
     for (m = 0; m < nmonitors; m++) {
         RRMonitorPtr    monitor = &monitors[m];
-        xRRMonitorInfo  info = {
+        xRRMonitorInfo  *info = (xRRMonitorInfo*) walk;
+        *info = (xRRMonitorInfo) {
             .name = monitor->name,
             .primary = monitor->primary,
             .automatic = monitor->automatic,
@@ -650,20 +649,27 @@ ProcRRGetMonitors(ClientPtr client)
             .heightInMillimeters = monitor->geometry.mmHeight,
         };
         if (client->swapped) {
-            swapl(&info.name);
-            swaps(&info.noutput);
-            swaps(&info.x);
-            swaps(&info.y);
-            swaps(&info.width);
-            swaps(&info.height);
-            swapl(&info.widthInMillimeters);
-            swapl(&info.heightInMillimeters);
+            swapl(&info->name);
+            swaps(&info->noutput);
+            swaps(&info->x);
+            swaps(&info->y);
+            swaps(&info->width);
+            swaps(&info->height);
+            swapl(&info->widthInMillimeters);
+            swapl(&info->heightInMillimeters);
         }
 
-        WriteToClient(client, sizeof(xRRMonitorInfo), &info);
-        WriteSwappedDataToClient(client, monitor->numOutputs * sizeof (RROutput), monitor->outputs);
+        walk += sizeof(xRRMonitorInfo);
+        memcpy(walk, monitor->outputs, monitor->numOutputs * sizeof (RROutput));
+        if (client->swapped)
+            SwapLongs((CARD32*)walk, monitor->numOutputs);
+
+        walk += monitor->numOutputs * sizeof (RROutput);
     }
 
+    WriteToClient(client, payload_len, payload_buf);
+
+    free(payload_buf);
     RRMonitorFreeList(monitors, nmonitors);
 
     return Success;
@@ -680,7 +686,7 @@ ProcRRSetMonitor(ClientPtr client)
 
     REQUEST_AT_LEAST_SIZE(xRRSetMonitorReq);
 
-    if (stuff->monitor.noutput != stuff->length - (SIZEOF(xRRSetMonitorReq) >> 2))
+    if (stuff->monitor.noutput != client->req_len - (sizeof(xRRSetMonitorReq) >> 2))
         return BadLength;
 
     r = dixLookupWindow(&window, stuff->window, client, DixGetAttrAccess);

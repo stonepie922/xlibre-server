@@ -20,9 +20,13 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "randrstr.h"
 #include <X11/Xatom.h>
+
+#include "dix/dix_priv.h"
+#include "randr/randrstr_priv.h"
+#include "randr/rrdispatch_priv.h"
 
 RESTYPE RROutputType;
 
@@ -80,10 +84,10 @@ RROutputCreate(ScreenPtr pScreen,
 
     pScrPriv->outputs = outputs;
 
-    output = malloc(sizeof(RROutputRec) + nameLength + 1);
+    output = calloc(1, sizeof(RROutputRec) + nameLength + 1);
     if (!output)
         return NULL;
-    output->id = FakeClientID(0);
+    output->id = dixAllocServerXID();
     output->pScreen = pScreen;
     output->name = (char *) (output + 1);
     output->nameLength = nameLength;
@@ -91,22 +95,6 @@ RROutputCreate(ScreenPtr pScreen,
     output->name[nameLength] = '\0';
     output->connection = RR_UnknownConnection;
     output->subpixelOrder = SubPixelUnknown;
-    output->mmWidth = 0;
-    output->mmHeight = 0;
-    output->crtc = NULL;
-    output->numCrtcs = 0;
-    output->crtcs = NULL;
-    output->numClones = 0;
-    output->clones = NULL;
-    output->numModes = 0;
-    output->numPreferred = 0;
-    output->modes = NULL;
-    output->numUserModes = 0;
-    output->userModes = NULL;
-    output->properties = NULL;
-    output->pendingProperties = FALSE;
-    output->changed = FALSE;
-    output->nonDesktop = FALSE;
     output->devPrivate = devPrivate;
 
     if (!AddResource(output->id, RROutputType, (void *) output))
@@ -132,7 +120,6 @@ RROutputCreate(ScreenPtr pScreen,
 Bool
 RROutputSetClones(RROutputPtr output, RROutputPtr * clones, int numClones)
 {
-    RROutputPtr *newClones;
     int i;
 
     if (numClones == output->numClones) {
@@ -142,15 +129,16 @@ RROutputSetClones(RROutputPtr output, RROutputPtr * clones, int numClones)
         if (i == numClones)
             return TRUE;
     }
+
+    RROutputPtr *newClones = NULL;
     if (numClones) {
-        newClones = xallocarray(numClones, sizeof(RROutputPtr));
+        newClones = calloc(numClones, sizeof(RROutputPtr));
         if (!newClones)
             return FALSE;
+        memcpy(newClones, clones, numClones * sizeof(RROutputPtr));
     }
-    else
-        newClones = NULL;
+
     free(output->clones);
-    memcpy(newClones, clones, numClones * sizeof(RROutputPtr));
     output->clones = newClones;
     output->numClones = numClones;
     RROutputChanged(output, TRUE);
@@ -161,7 +149,6 @@ Bool
 RROutputSetModes(RROutputPtr output,
                  RRModePtr * modes, int numModes, int numPreferred)
 {
-    RRModePtr *newModes;
     int i;
 
     if (numModes == output->numModes && numPreferred == output->numPreferred) {
@@ -175,19 +162,19 @@ RROutputSetModes(RROutputPtr output,
         }
     }
 
+    RRModePtr *newModes = NULL;
     if (numModes) {
-        newModes = xallocarray(numModes, sizeof(RRModePtr));
+        newModes = calloc(numModes, sizeof(RRModePtr));
         if (!newModes)
             return FALSE;
+        memcpy(newModes, modes, numModes * sizeof(RRModePtr));
     }
-    else
-        newModes = NULL;
+
     if (output->modes) {
         for (i = 0; i < output->numModes; i++)
             RRModeDestroy(output->modes[i]);
         free(output->modes);
     }
-    memcpy(newModes, modes, numModes * sizeof(RRModePtr));
     output->modes = newModes;
     output->numModes = numModes;
     output->numPreferred = numPreferred;
@@ -222,7 +209,7 @@ RROutputAddUserMode(RROutputPtr output, RRModePtr mode)
         newModes = reallocarray(output->userModes,
                                 output->numUserModes + 1, sizeof(RRModePtr));
     else
-        newModes = malloc(sizeof(RRModePtr));
+        newModes = calloc(1, sizeof(RRModePtr));
     if (!newModes)
         return BadAlloc;
 
@@ -264,7 +251,6 @@ RROutputDeleteUserMode(RROutputPtr output, RRModePtr mode)
 Bool
 RROutputSetCrtcs(RROutputPtr output, RRCrtcPtr * crtcs, int numCrtcs)
 {
-    RRCrtcPtr *newCrtcs;
     int i;
 
     if (numCrtcs == output->numCrtcs) {
@@ -274,15 +260,16 @@ RROutputSetCrtcs(RROutputPtr output, RRCrtcPtr * crtcs, int numCrtcs)
         if (i == numCrtcs)
             return TRUE;
     }
+
+    RRCrtcPtr *newCrtcs = NULL;
     if (numCrtcs) {
-        newCrtcs = xallocarray(numCrtcs, sizeof(RRCrtcPtr));
+        newCrtcs = calloc(numCrtcs, sizeof(RRCrtcPtr));
         if (!newCrtcs)
             return FALSE;
+        memcpy(newCrtcs, crtcs, numCrtcs * sizeof(RRCrtcPtr));
     }
-    else
-        newCrtcs = NULL;
+
     free(output->crtcs);
-    memcpy(newCrtcs, crtcs, numCrtcs * sizeof(RRCrtcPtr));
     output->crtcs = newCrtcs;
     output->numCrtcs = numCrtcs;
     RROutputChanged(output, TRUE);
@@ -299,15 +286,13 @@ RROutputSetConnection(RROutputPtr output, CARD8 connection)
     return TRUE;
 }
 
-Bool
-RROutputSetSubpixelOrder(RROutputPtr output, int subpixelOrder)
+void RROutputSetSubpixelOrder(RROutputPtr output, int subpixelOrder)
 {
     if (output->subpixelOrder == subpixelOrder)
-        return TRUE;
+        return;
 
     output->subpixelOrder = subpixelOrder;
     RROutputChanged(output, FALSE);
-    return TRUE;
 }
 
 Bool
@@ -452,14 +437,12 @@ ProcRRGetOutputInfo(ClientPtr client)
     REQUEST(xRRGetOutputInfoReq);
     xRRGetOutputInfoReply rep;
     RROutputPtr output;
-    CARD8 *extra;
     unsigned long extraLen;
     ScreenPtr pScreen;
     rrScrPrivPtr pScrPriv;
     RRCrtc *crtcs;
     RRMode *modes;
     RROutput *clones;
-    char *name;
     int i;
     Bool leased;
 
@@ -471,6 +454,8 @@ ProcRRGetOutputInfo(ClientPtr client)
     pScreen = output->pScreen;
     pScrPriv = rrGetScrPriv(pScreen);
 
+    CARD8 *extra = NULL;
+
     if (leased) {
         rep = (xRRGetOutputInfoReply) {
             .type = X_Reply,
@@ -478,28 +463,19 @@ ProcRRGetOutputInfo(ClientPtr client)
             .sequenceNumber = client->sequence,
             .length = bytes_to_int32(OutputInfoExtra),
             .timestamp = pScrPriv->lastSetTime.milliseconds,
-            .crtc = None,
-            .mmWidth = 0,
-            .mmHeight = 0,
             .connection = RR_Disconnected,
             .subpixelOrder = SubPixelUnknown,
-            .nCrtcs = 0,
-            .nModes = 0,
-            .nPreferred = 0,
-            .nClones = 0,
             .nameLength = output->nameLength
         };
         extraLen = bytes_to_int32(rep.nameLength) << 2;
-        if (extraLen) {
-            rep.length += bytes_to_int32(extraLen);
-            extra = calloc(1, extraLen);
-            if (!extra)
-                return BadAlloc;
-        }
-        else
-            extra = NULL;
+        if (!extraLen)
+            goto sendout;
 
-        name = (char *) extra;
+        rep.length += bytes_to_int32(extraLen);
+        extra = calloc(1, extraLen);
+        if (!extra)
+            return BadAlloc;
+        memcpy(extra, output->name, output->nameLength);
     } else {
         rep = (xRRGetOutputInfoReply) {
             .type = X_Reply,
@@ -522,25 +498,26 @@ ProcRRGetOutputInfo(ClientPtr client)
                      output->numModes + output->numUserModes +
                      output->numClones + bytes_to_int32(rep.nameLength)) << 2);
 
-        if (extraLen) {
-            rep.length += bytes_to_int32(extraLen);
-            extra = calloc(1, extraLen);
-            if (!extra)
-                return BadAlloc;
-        }
-        else
-            extra = NULL;
+        if (!extraLen)
+            goto sendout;
+
+        rep.length += bytes_to_int32(extraLen);
+        extra = calloc(1, extraLen);
+        if (!extra)
+            return BadAlloc;
 
         crtcs = (RRCrtc *) extra;
         modes = (RRMode *) (crtcs + output->numCrtcs);
         clones = (RROutput *) (modes + output->numModes + output->numUserModes);
-        name = (char *) (clones + output->numClones);
+
+        memcpy((clones + output->numClones), output->name, output->nameLength);
 
         for (i = 0; i < output->numCrtcs; i++) {
             crtcs[i] = output->crtcs[i]->id;
             if (client->swapped)
                 swapl(&crtcs[i]);
         }
+
         for (i = 0; i < output->numModes + output->numUserModes; i++) {
             if (i < output->numModes)
                 modes[i] = output->modes[i]->mode.id;
@@ -555,7 +532,8 @@ ProcRRGetOutputInfo(ClientPtr client)
                 swapl(&clones[i]);
         }
     }
-    memcpy(name, output->name, output->nameLength);
+
+sendout:
     if (client->swapped) {
         swaps(&rep.sequenceNumber);
         swapl(&rep.length);
@@ -569,11 +547,10 @@ ProcRRGetOutputInfo(ClientPtr client)
         swaps(&rep.nClones);
         swaps(&rep.nameLength);
     }
+
     WriteToClient(client, sizeof(xRRGetOutputInfoReply), &rep);
-    if (extraLen) {
-        WriteToClient(client, extraLen, extra);
-        free(extra);
-    }
+    WriteToClient(client, extraLen, extra);
+    free(extra);
 
     return Success;
 }
@@ -655,7 +632,6 @@ ProcRRGetOutputPrimary(ClientPtr client)
     REQUEST(xRRGetOutputPrimaryReq);
     WindowPtr pWin;
     rrScrPrivPtr pScrPriv;
-    xRRGetOutputPrimaryReply rep;
     RROutputPtr primary = NULL;
     int rc;
 
@@ -669,7 +645,7 @@ ProcRRGetOutputPrimary(ClientPtr client)
     if (pScrPriv)
         primary = pScrPriv->primaryOutput;
 
-    rep = (xRRGetOutputPrimaryReply) {
+    xRRGetOutputPrimaryReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
         .output = primary ? primary->id : None

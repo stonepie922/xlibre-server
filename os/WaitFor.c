@@ -48,30 +48,32 @@ SOFTWARE.
  * OS Dependent input routines:
  *
  *  WaitForSomething
- *  TimerForce, TimerSet, TimerCheck, TimerFree
+ *  TimerForce, TimerSet, TimerFree
  *
  *****************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <errno.h>
+#include <stdio.h>
 #ifdef WIN32
 #include <X11/Xwinsock.h>
 #endif
 #include <X11/Xos.h>            /* for strings, fcntl, time */
-#include <errno.h>
-#include <stdio.h>
 #include <X11/X.h>
-#include "misc.h"
 
+#include "dix/dix_priv.h"
+#include "os/busfault.h"
+#include "os/client_priv.h"
+#include "os/screensaver.h"
+
+#include "misc.h"
 #include "osdep.h"
-#include "dixstruct.h"
-#include "opaque.h"
+#include "dixstruct_priv.h"
+#include "globals.h"
 #ifdef DPMSExtension
 #include "dpmsproc.h"
 #endif
-#include "busfault.h"
 
 #ifdef WIN32
 /* Error codes from windows sockets differ from fileio error codes  */
@@ -180,17 +182,13 @@ WaitForSomething(Bool are_ready)
 
     were_ready = FALSE;
 
-#ifdef BUSFAULT
     busfault_check();
-#endif
 
     /* We need a while loop here to handle
        crashed connections and the screen saver timeout */
     while (1) {
         /* deal with any blocked jobs */
-        if (workQueue) {
-            ProcessWorkQueue();
-        }
+        ProcessWorkQueue();
 
         timeout = check_timers();
         are_ready = clients_are_ready();
@@ -373,12 +371,6 @@ TimerFree(OsTimerPtr timer)
         return;
     TimerCancel(timer);
     free(timer);
-}
-
-void
-TimerCheck(void)
-{
-    DoTimers(GetTimeInMillis());
 }
 
 void

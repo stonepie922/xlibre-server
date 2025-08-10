@@ -32,6 +32,8 @@
 #ifndef __GLAMOR_UTILS_H__
 #define __GLAMOR_UTILS_H__
 
+#include "os/bug_priv.h"
+
 #include "glamor_prepare.h"
 #include "mipict.h"
 
@@ -562,7 +564,9 @@
         (c)[1] = (float)y;				\
     } while(0)
 
+#ifndef ALIGN /* FreeBSD already has it */
 #define ALIGN(i,m)	(((i) + (m) - 1) & ~((m) - 1))
+#endif
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #define MAX(a,b)	((a) > (b) ? (a) : (b))
 
@@ -570,7 +574,10 @@
                                                     && (_w_) <= _glamor_->max_fbo_size  \
                                                     && (_h_) <= _glamor_->max_fbo_size)
 
-#define GLAMOR_PIXMAP_PRIV_HAS_FBO(pixmap_priv)    (pixmap_priv->gl_fbo == GLAMOR_FBO_NORMAL)
+static inline Bool GLAMOR_PIXMAP_PRIV_HAS_FBO(glamor_pixmap_private *pixmap_priv) {
+    BUG_RETURN_VAL(!pixmap_priv, FALSE);
+    return pixmap_priv->gl_fbo == GLAMOR_FBO_NORMAL;
+}
 
 #define REVERT_NONE       		0
 #define REVERT_NORMAL     		1
@@ -671,6 +678,17 @@ glamor_make_current(glamor_screen_private *glamor_priv)
     if (lastGLContext != glamor_priv->ctx.ctx) {
         lastGLContext = glamor_priv->ctx.ctx;
         glamor_priv->ctx.make_current(&glamor_priv->ctx);
+    }
+    glamor_priv->dirty = TRUE;
+}
+
+static inline void
+glamor_flush(glamor_screen_private *glamor_priv)
+{
+    if (glamor_priv->dirty) {
+        glamor_make_current(glamor_priv);
+        glFlush();
+        glamor_priv->dirty = FALSE;
     }
 }
 

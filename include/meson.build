@@ -11,11 +11,6 @@ dri_dep = dependency('dri', required: build_glx)
 conf_data = configuration_data()
 conf_data.set('_DIX_CONFIG_H_', '1')
 
-conf_data.set('HAVE_TYPEOF', cc.compiles('''
-    int foo(int bar) { typeof(bar) baz = 1; return baz; }
-''',
-    name: 'typeof()') ? '1' : false)
-
 # For feature macros we're using either false (boolean) or '1', which correspond to the macro being
 # not defined at all and defined to 1. This is to match autotools behavior and thus preserve
 # backwards  compatibility with all the existing code that uses #ifdef to check if feature is
@@ -44,6 +39,10 @@ else
     conf_data.set('X_BYTE_ORDER', 'X_BIG_ENDIAN')
 endif
 
+# Defining _XSERVER64 on 64bit builds is VITAL, since otherwise Xlib headers
+# would define lots X types (eg. Atom, XID, etc) as 64 bit, but inside the
+# Xserver we really need them to be 32 bit (CARD32). When _SERVER64 is defined
+# the xlib headers will typedef them exactly to CARD32.
 glx_align64 = []
 if cc.sizeof('unsigned long') == 8
    conf_data.set('_XSERVER64', '1')
@@ -91,14 +90,14 @@ endif
 
 conf_data.set('HAVE_LIBBSD', libbsd_dep.found() ? '1' : false)
 # Note: this symbol is used by libXtrans.
-conf_data.set('HAVE_SYSTEMD_DAEMON', libsystemd_daemon_dep.found() ? '1' : false)
+conf_data.set('HAVE_SYSTEMD_DAEMON', build_systemd ? '1' : false)
 conf_data.set('CONFIG_UDEV', build_udev ? '1' : false)
 conf_data.set('CONFIG_UDEV_KMS', build_udev_kms ? '1' : false)
 conf_data.set('HAVE_DBUS', build_dbus ? '1' : false)
 conf_data.set('CONFIG_HAL', build_hal ? '1' : false)
 conf_data.set('SYSTEMD_LOGIND', build_systemd_logind ? '1' : false)
 conf_data.set('NEED_DBUS', build_systemd_logind or build_hal ? '1' : false)
-conf_data.set('CONFIG_WSCONS', host_machine.system() == 'openbsd' ? '1' : false)
+conf_data.set('CONFIG_WSCONS', host_machine.system() in ['openbsd', 'netbsd'] ? '1' : false)
 
 conf_data.set('HAVE_XSHMFENCE', xshmfence_dep.found() ? '1' : false)
 conf_data.set('WITH_LIBDRM', libdrm_required ? '1' : false)
@@ -113,6 +112,10 @@ conf_data.set('GLAMOR_HAS_GBM_LINEAR',
               build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 10.6') ? '1' : false)
 conf_data.set('GBM_BO_WITH_MODIFIERS',
               build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 17.1') ? '1' : false)
+conf_data.set('GBM_BO_FD_FOR_PLANE',
+              build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 21.1') ? '1' : false)
+conf_data.set('GBM_BO_WITH_MODIFIERS2',
+              build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 21.3') ? '1' : false)
 
 conf_data.set_quoted('SERVER_MISC_CONFIG_PATH', serverconfigdir)
 conf_data.set_quoted('PROJECTROOT', get_option('prefix'))
@@ -123,22 +126,17 @@ conf_data.set_quoted('COMPILEDDEFAULTFONTPATH', default_font_path)
 conf_data.set('XORG_VERSION_CURRENT', release)
 
 conf_data.set('HASXDMAUTH', has_xdm_auth ? '1' : false)
-conf_data.set('SECURE_RPC', get_option('secure-rpc') ? '1' : false)
 
 conf_data.set('HAVE_DLFCN_H', cc.has_header('dlfcn.h') ? '1' : false)
 conf_data.set('HAVE_EXECINFO_H', cc.has_header('execinfo.h') ? '1' : false)
-conf_data.set('HAVE_FCNTL_H', cc.has_header('fcntl.h') ? '1' : false)
 conf_data.set('HAVE_FNMATCH_H', cc.has_header('fnmatch.h') ? '1' : false)
 conf_data.set('HAVE_LINUX_AGPGART_H', cc.has_header('linux/agpgart.h') ? '1' : false)
-conf_data.set('HAVE_STDLIB_H', cc.has_header('stdlib.h') ? '1' : false)
-conf_data.set('HAVE_STRING_H', cc.has_header('string.h') ? '1' : false)
 conf_data.set('HAVE_STRINGS_H', cc.has_header('strings.h') ? '1' : false)
 conf_data.set('HAVE_SYS_AGPGART_H', cc.has_header('sys/agpgart.h') ? '1' : false)
-conf_data.set('HAVE_SYS_AGPIO_H', cc.has_header('sys/agpio.h') ? '1' : false)
+conf_data.set('HAVE_SYS_UCRED_H', cc.has_header('sys/ucred.h') ? '1' : false)
 conf_data.set('HAVE_SYS_UN_H', cc.has_header('sys/un.h') ? '1' : false)
 conf_data.set('HAVE_SYS_UTSNAME_H', cc.has_header('sys/utsname.h') ? '1' : false)
 conf_data.set('HAVE_SYS_SYSMACROS_H', cc.has_header('sys/sysmacros.h') ? '1' : false)
-conf_data.set('HAVE_UNISTD_H', cc.has_header('unistd.h') ? '1' : false)
 
 conf_data.set('HAVE_ARC4RANDOM_BUF', cc.has_function('arc4random_buf', dependencies: libbsd_dep) ? '1' : false)
 conf_data.set('HAVE_BACKTRACE', cc.has_function('backtrace') ? '1' : false)
@@ -148,14 +146,17 @@ conf_data.set('HAVE_GETUID', cc.has_function('getuid') ? '1' : false)
 conf_data.set('HAVE_GETEUID', cc.has_function('geteuid') ? '1' : false)
 conf_data.set('HAVE_ISASTREAM', cc.has_function('isastream') ? '1' : false)
 conf_data.set('HAVE_ISSETUGID', cc.has_function('issetugid') ? '1' : false)
+conf_data.set('HAVE_GETADDRINFO', cc.has_function('getaddrinfo') ? '1' : false)
 conf_data.set('HAVE_GETIFADDRS', cc.has_function('getifaddrs') ? '1' : false)
 conf_data.set('HAVE_GETPEEREID', cc.has_function('getpeereid') ? '1' : false)
 conf_data.set('HAVE_GETPEERUCRED', cc.has_function('getpeerucred') ? '1' : false)
 conf_data.set('HAVE_GETPROGNAME', cc.has_function('getprogname') ? '1' : false)
 conf_data.set('HAVE_GETZONEID', cc.has_function('getzoneid') ? '1' : false)
+conf_data.set('HAVE_INET_NTOP', cc.has_function('inet_ntop') ? '1' : false)
 conf_data.set('HAVE_MEMFD_CREATE', cc.has_function('memfd_create') ? '1' : false)
 conf_data.set('HAVE_MKOSTEMP', cc.has_function('mkostemp') ? '1' : false)
 conf_data.set('HAVE_MMAP', cc.has_function('mmap') ? '1' : false)
+conf_data.set('HAVE_OPEN_DEVICE', cc.has_function('open_device') ? '1' : false)
 conf_data.set('HAVE_POLL', cc.has_function('poll') ? '1' : false)
 conf_data.set('HAVE_POLLSET_CREATE', cc.has_function('pollset_create') ? '1' : false)
 conf_data.set('HAVE_POSIX_FALLOCATE', cc.has_function('posix_fallocate') ? '1' : false)
@@ -168,11 +169,9 @@ conf_data.set('HAVE_SIGACTION', cc.has_function('sigaction') ? '1' : false)
 conf_data.set('HAVE_SIGPROCMASK', cc.has_function('sigprocmask') ? '1' : false)
 # HAVE_SOCKLEN_T is used by xtrans when IPv6 is disabled
 conf_data.set('HAVE_SOCKLEN_T', cc.has_type('socklen_t', prefix: '#include <sys/socket.h>') ? '1' : false)
-conf_data.set('HAVE_STRCASECMP', cc.has_function('strcasecmp') ? '1' : false)
 conf_data.set('HAVE_STRCASESTR', cc.has_function('strcasestr') ? '1' : false)
 conf_data.set('HAVE_STRLCAT', cc.has_function('strlcat', dependencies: libbsd_dep) ? '1' : false)
 conf_data.set('HAVE_STRLCPY', cc.has_function('strlcpy', dependencies: libbsd_dep) ? '1' : false)
-conf_data.set('HAVE_STRNCASECMP', cc.has_function('strncasecmp') ? '1' : false)
 conf_data.set('HAVE_STRNDUP', cc.has_function('strndup') and cc.has_header_symbol('string.h', 'strndup') ? '1' : false)
 # HAVE_STRUCT_SOCKADDR_STORAGE is used by xtrans >= 1.6
 conf_data.set('HAVE_STRUCT_SOCKADDR_STORAGE', cc.has_type('struct sockaddr_storage', prefix: '#include <sys/socket.h>') ? '1' : false)
@@ -180,8 +179,8 @@ conf_data.set('HAVE_TIMINGSAFE_MEMCMP', cc.has_function('timingsafe_memcmp') ? '
 conf_data.set('HAVE_VASPRINTF', cc.has_function('vasprintf') ? '1' : false)
 conf_data.set('HAVE_VSNPRINTF', cc.has_function('vsnprintf') ? '1' : false)
 conf_data.set('HAVE_WALKCONTEXT', cc.has_function('walkcontext') ? '1' : false)
-
-conf_data.set('BUSFAULT', conf_data.get('HAVE_SIGACTION'))
+conf_data.set('HAVE_XUCRED_CR_PID', cc.has_member('struct xucred', 'cr_pid', prefix : '#include <sys/ucred.h>') ? '1' : false)
+conf_data.set('LOCK_SERVER', host_machine.system() != 'windows' ? '1' : false)
 
 # Don't let X dependencies typedef 'pointer'
 conf_data.set('_XTYPEDEF_POINTER', '1')
@@ -196,7 +195,7 @@ if cc.has_header_symbol('sys/socket.h', 'SCM_RIGHTS')
 endif
 
 if conf_data.get('HAVE_GETPEEREID').to_int() == 0 and conf_data.get('HAVE_GETPEERUCRED').to_int() == 0
-    if not cc.has_header_symbol('sys/socket.h', 'SO_PEERCRED')
+    if not cc.has_header_symbol('sys/socket.h', 'SO_PEERCRED', args: '-D_GNU_SOURCE')
         conf_data.set('NO_LOCAL_CLIENT_CRED', 1)
     endif
 endif
@@ -205,8 +204,15 @@ conf_data.set('TCPCONN', '1')
 conf_data.set('UNIXCONN', host_machine.system() != 'windows' ? '1' : false)
 conf_data.set('IPv6', build_ipv6 ? '1' : false)
 
-conf_data.set('BIGREQS', '1')
+# potentially tunable - needed also in places that cannot include misc.h
+conf_data.set('MAXCLIENTS', 2048)
+
+# Must be a power of 2 and <= MAXCLIENTS */
+conf_data.set('DIX_LIMITCLIENTS', 256)
+
+# some drivers (eg. xf86-video-intel) still relying on this symbol being set
 conf_data.set('COMPOSITE', '1')
+
 conf_data.set('DAMAGE', '1')
 conf_data.set('DBE', '1')
 conf_data.set('DGA', build_dga ? '1' : false)
@@ -214,11 +220,14 @@ conf_data.set('DPMSExtension', build_dpms ? '1' : false)
 conf_data.set('DRI2', build_dri2 ? '1' : false)
 conf_data.set('DRI3', build_dri3 ? '1' : false)
 if build_glx
-    conf_data.set_quoted('DRI_DRIVER_PATH', dri_dep.get_pkgconfig_variable('dridriverdir'))
+    conf_data.set_quoted('DRI_DRIVER_PATH', dri_dep.get_variable(pkgconfig : 'dridriverdir'))
 endif
-conf_data.set('HAS_SHM', build_mitshm ? '1' : false)
 conf_data.set('MITSHM', build_mitshm ? '1' : false)
+
+# for backwards compat with drivers, still setting the old PANORAMIX symbol
 conf_data.set('PANORAMIX', build_xinerama ? '1' : false)
+conf_data.set('XINERAMA', build_xinerama ? '1' : false)
+
 conf_data.set('PRESENT', '1')
 conf_data.set('RANDR', '1')
 conf_data.set('RES', build_res ? '1' : false)
@@ -228,6 +237,7 @@ conf_data.set('SHAPE', '1')
 conf_data.set('XACE', build_xace ? '1' : false)
 conf_data.set('XCMISC', '1')
 conf_data.set('XCSECURITY', build_xsecurity ? '1' : false)
+conf_data.set('CONFIG_NAMESPACE', build_namespace ? '1' : false)
 conf_data.set('XDMCP', xdmcp_dep.found() ? '1' : false)
 conf_data.set('XF86BIGFONT', build_xf86bigfont ? '1' : false)
 conf_data.set('XF86DRI', build_dri1 ? '1' : false)
@@ -244,13 +254,18 @@ conf_data.set('XV', build_xv ? '1' : false)
 conf_data.set('XvExtension', build_xv ? '1' : false)
 conf_data.set('XvMCExtension', build_xvmc ? '1' : false)
 
+# needed by several extensions
+build_registry_resource = (build_xselinux or build_res or build_namespace)
+conf_data.set('X_REGISTRY_RESOURCE', build_registry_resource ? '1' : false)
+build_registry_request = (build_xselinux or build_xsecurity or with_dtrace or build_namespace)
+conf_data.set('X_REGISTRY_REQUEST', build_registry_request ? '1' : false)
+
 conf_data.set('HAVE_SHA1_IN_' + sha1.to_upper(), '1', description: 'Use @0@ SHA1 functions'.format(sha1))
 conf_data.set('HAVE_LIBUNWIND', get_option('libunwind'))
 
 conf_data.set('HAVE_APM', (build_apm or build_acpi) ? '1' : false)
 conf_data.set('HAVE_ACPI', build_acpi ? '1' : false)
 
-conf_data.set('DDXOSVERRORF', build_xwin ? '1' : false)
 conf_data.set('DDXBEFORERESET', build_xwin ? '1' : false)
 enable_debugging = get_option('buildtype') == 'debug'
 conf_data.set('DEBUG', enable_debugging ? '1' : false)
@@ -276,27 +291,23 @@ defines_svr4 = '''#if !defined(SVR4) && !defined(__svr4__) && !defined(__SVR4)
 '''
 
 # BSD specifics
-supports_pccons = false
 supports_pcvt = false
 supports_syscons = false
 supports_wscons = false
 csrg_based = false
 
 if host_machine.system() == 'freebsd' or host_machine.system() == 'dragonfly'
-  supports_pccons = true
   supports_pcvt = true
   supports_syscons = true
   csrg_based = true
 endif
 
 if host_machine.system() == 'kfreebsd'
-  supports_pccons = true
   supports_pcvt = true
   supports_syscons = true
 endif
 
 if host_machine.system() == 'netbsd'
-  supports_pccons = true
   supports_pcvt = true
   supports_wscons = true
   csrg_based = true
@@ -319,21 +330,12 @@ conf_data.set_quoted('XCONFIGFILE', 'xorg.conf')
 conf_data.set_quoted('__XSERVERNAME__', 'Xorg')
 conf_data.set('WITH_VGAHW', build_vgahw ? '1' : false)
 conf_data.set('CSRG_BASED', csrg_based ? '1' : false)
-conf_data.set('PCCONS_SUPPORT', supports_pccons ? '1' : false)
 conf_data.set('PCVT_SUPPORT', supports_pcvt ? '1' : false)
 conf_data.set('SYSCONS_SUPPORT', supports_syscons ? '1' : false)
 conf_data.set('WSCONS_SUPPORT', supports_wscons ? '1' : false)
 conf_data.set('XSERVER_LIBPCIACCESS', get_option('pciaccess') ? '1' : false)
 conf_data.set('XSERVER_PLATFORM_BUS', build_udev_kms ? '1' : false)
-
-configure_file(output : 'dix-config.h',
-               configuration : conf_data)
-
-configure_file(output : 'xorg-server.h',
-               input : 'xorg-server.h.meson.in',
-               configuration : conf_data,
-               install: build_xorg,
-               install_dir: xorgsdkdir)
+conf_data.set('XSERVER_SCREEN_VRR', '1')
 
 version_data = configuration_data()
 version_data.set('VENDOR_RELEASE', '@0@'.format(release))
@@ -380,16 +382,13 @@ xorg_data.set('WSCONS_SUPPORT',
 xorg_data.set('HAVE_STROPTS_H', cc.has_header('stropts.h') ? '1' : false)
 xorg_data.set('HAVE_SYS_KD_H', cc.has_header('sys/kd.h') ? '1' : false)
 xorg_data.set('HAVE_SYS_VT_H', cc.has_header('sys/vt.h') ? '1' : false)
+xorg_data.set('HAVE_MODESETTING_DRIVER', build_modesetting ? '1' : false)
 
 if host_machine.system() == 'freebsd' or host_machine.system() == 'dragonfly'
-    if host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'x86_64'
+    if host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'x86_64' or host_machine.cpu_family() == 'aarch64'
         xorg_data.set('USE_DEV_IO', '1')
     endif
-elif host_machine.system() == 'netbsd'
-    if host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'x86_64'
-        xorg_data.set('USE_I386_IOPL', '1')
-    endif
-elif host_machine.system() == 'openbsd'
+elif host_machine.system() == 'netbsd' or host_machine.system() == 'openbsd'
     if host_machine.cpu_family() == 'x86'
         xorg_data.set('USE_I386_IOPL', '1')
     endif
@@ -406,14 +405,9 @@ xwin_data = configuration_data()
 xwin_data.set_quoted('DEFAULT_LOGDIR', log_dir)
 xwin_data.set('HAS_WINSOCK', host_machine.system() == 'windows' ? '1' : false,
               description: 'Use Windows sockets')
-xwin_data.set('HAS_DEVWINDOWS', host_machine.system() == 'cygwin' ? '1' : false,
-              description: 'Has /dev/windows for signaling new win32 messages')
 xwin_data.set('RELOCATE_PROJECTROOT', host_machine.system() == 'windows' ? '1' : false,
               description: 'Make paths relative to the xserver installation location')
-# XXX: these three are all the same as DEBUG so we should just change to that
-xwin_data.set10('CYGDEBUG', enable_debugging)
-xwin_data.set10('CYGWINDOWING_DEBUG',enable_debugging)
-xwin_data.set10('CYGMULTIWINDOW_DEBUG', enable_debugging)
+xwin_data.set10('ENABLE_DEBUG', enable_debugging)
 
 configure_file(output : 'xwin-config.h',
                input : 'xwin-config.h.meson.in',
@@ -433,11 +427,9 @@ endif
 if build_xorg
     install_data(
         [
-            'XIstubs.h',
             'Xprintf.h',
             'callback.h',
             'client.h',
-            'closestr.h',
             'closure.h',
             'colormap.h',
             'colormapst.h',
@@ -446,21 +438,19 @@ if build_xorg
             'cursorstr.h',
             'dix.h',
             'dixaccess.h',
-            'dixevents.h',
             'dixfont.h',
             'dixfontstr.h',
-            'dixgrabs.h',
             'dixstruct.h',
             'events.h',
             'exevents.h',
             'extension.h',
             'extinit.h',
             'extnsionst.h',
+            'fd_notify.h',
             'fourcc.h',
             'gc.h',
             'gcstruct.h',
             'globals.h',
-            'glx_extinit.h',
             'glxvndabi.h',
             'input.h',
             'inputstr.h',
@@ -475,27 +465,22 @@ if build_xorg
             'pixmapstr.h',
             'privates.h',
             'property.h',
-            'propertyst.h',
             'ptrveloc.h',
             'region.h',
             'regionstr.h',
-            'registry.h',
             'resource.h',
             'rgb.h',
             'screenint.h',
             'scrnintstr.h',
-            'selection.h',
             'servermd.h',
             'validate.h',
             'displaymode.h',
             'window.h',
             'windowstr.h',
-            'xkbfile.h',
             'xkbsrv.h',
             'xkbstr.h',
             'xkbrules.h',
             'Xprintf.h',
-            'xserver_poll.h',
             'xserver-properties.h',
         ],
         install_dir: xorgsdkdir,

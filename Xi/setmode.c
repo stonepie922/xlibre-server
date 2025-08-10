@@ -50,31 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
+
+#include "dix/input_priv.h"
+#include "dix/resource_priv.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
 #include "XIstubs.h"
 #include "exglobals.h"
-
 #include "setmode.h"
-
-/***********************************************************************
- *
- * Handle a request from a client with a different byte order.
- *
- */
-
-int _X_COLD
-SProcXSetDeviceMode(ClientPtr client)
-{
-    REQUEST(xSetDeviceModeReq);
-    swaps(&stuff->length);
-    return (ProcXSetDeviceMode(client));
-}
 
 /***********************************************************************
  *
@@ -86,17 +73,15 @@ int
 ProcXSetDeviceMode(ClientPtr client)
 {
     DeviceIntPtr dev;
-    xSetDeviceModeReply rep;
     int rc;
 
     REQUEST(xSetDeviceModeReq);
     REQUEST_SIZE_MATCH(xSetDeviceModeReq);
 
-    rep = (xSetDeviceModeReply) {
+    xSetDeviceModeReply rep = {
         .repType = X_Reply,
         .RepType = X_SetDeviceMode,
         .sequenceNumber = client->sequence,
-        .length = 0
     };
 
     rc = dixLookupDevice(&dev, stuff->deviceid, client, DixSetAttrAccess);
@@ -127,21 +112,11 @@ ProcXSetDeviceMode(ClientPtr client)
         return rep.status;
     }
 
-    WriteReplyToClient(client, sizeof(xSetDeviceModeReply), &rep);
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+    }
+
+    WriteToClient(client, sizeof(xSetDeviceModeReply), &rep);
     return Success;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the XSetDeviceMode function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXSetDeviceMode(ClientPtr client, int size, xSetDeviceModeReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
 }

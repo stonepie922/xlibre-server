@@ -31,18 +31,22 @@ from The Open Group.
 #ifdef HAVE_XWIN_CONFIG_H
 #include <xwin-config.h>
 #endif
+
 #include "win.h"
+
+#include "dix/dix_priv.h"
+#include "dix/screenint_priv.h"
+#include "miext/extinit_priv.h"
+#include "os/ddx_priv.h"
+#include "os/log_priv.h"
+#include "os/osdep.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "winmsg.h"
 #include "winconfig.h"
 #include "winprefs.h"
 #ifdef DPMSExtension
 #include "dpmsproc.h"
-#endif
-#ifdef __CYGWIN__
-#include <mntent.h>
-#endif
-#if defined(WIN32)
-#include "xkbsrv.h"
 #endif
 #ifdef RELOCATE_PROJECTROOT
 #pragma push_macro("Status")
@@ -81,9 +85,6 @@ void
 void
  winLogVersionInfo(void);
 
-Bool
- winValidateArgs(void);
-
 #ifdef RELOCATE_PROJECTROOT
 const char *winGetBaseDir(void);
 #endif
@@ -111,7 +112,11 @@ static PixmapFormatRec g_PixmapFormats[] = {
     {32, 32, BITMAP_SCANLINE_PAD}
 };
 
+#ifdef GLXEXT
+#ifdef XWIN_WINDOWS_DRI
 static Bool noDriExtension;
+#endif
+#endif
 
 static const ExtensionModule xwinExtensions[] = {
 #ifdef GLXEXT
@@ -187,7 +192,7 @@ ddxGiveUp(enum ExitCode error)
 {
     int i;
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("ddxGiveUp\n");
 #endif
 
@@ -203,17 +208,6 @@ ddxGiveUp(enum ExitCode error)
 
     /* Notify the worker threads we're exiting */
     winDeinitMultiWindowWM();
-
-#ifdef HAS_DEVWINDOWS
-    /* Close our handle to our message queue */
-    if (g_fdMessageQueue != WIN_FD_INVALID) {
-        /* Close /dev/windows */
-        close(g_fdMessageQueue);
-
-        /* Set the file handle to invalid */
-        g_fdMessageQueue = WIN_FD_INVALID;
-    }
-#endif
 
     if (!g_fLogInited) {
         g_pszLogFile = LogInit(g_pszLogFile, ".old");
@@ -250,95 +244,6 @@ ddxGiveUp(enum ExitCode error)
 
     winDebug("ddxGiveUp - End\n");
 }
-
-#ifdef __CYGWIN__
-/* hasmntopt is currently not implemented for cygwin */
-static const char *
-winCheckMntOpt(const struct mntent *mnt, const char *opt)
-{
-    const char *s;
-    size_t len;
-
-    if (mnt == NULL)
-        return NULL;
-    if (opt == NULL)
-        return NULL;
-    if (mnt->mnt_opts == NULL)
-        return NULL;
-
-    len = strlen(opt);
-    s = strstr(mnt->mnt_opts, opt);
-    if (s == NULL)
-        return NULL;
-    if ((s == mnt->mnt_opts || *(s - 1) == ',') &&
-        (s[len] == 0 || s[len] == ','))
-        return (char *) opt;
-    return NULL;
-}
-
-static void
-winCheckMount(void)
-{
-    FILE *mnt;
-    struct mntent *ent;
-
-    enum { none = 0, sys_root, user_root, sys_tmp, user_tmp }
-        level = none, curlevel;
-    BOOL binary = TRUE;
-
-    mnt = setmntent("/etc/mtab", "r");
-    if (mnt == NULL) {
-        ErrorF("setmntent failed");
-        return;
-    }
-
-    while ((ent = getmntent(mnt)) != NULL) {
-        BOOL sys = (winCheckMntOpt(ent, "user") != NULL);
-        BOOL root = (strcmp(ent->mnt_dir, "/") == 0);
-        BOOL tmp = (strcmp(ent->mnt_dir, "/tmp") == 0);
-
-        if (sys) {
-            if (root)
-                curlevel = sys_root;
-            else if (tmp)
-                curlevel = sys_tmp;
-            else
-                continue;
-        }
-        else {
-            if (root)
-                curlevel = user_root;
-            else if (tmp)
-                curlevel = user_tmp;
-            else
-                continue;
-        }
-
-        if (curlevel <= level)
-            continue;
-        level = curlevel;
-
-        if ((winCheckMntOpt(ent, "binary") == NULL) &&
-            (winCheckMntOpt(ent, "binmode") == NULL))
-            binary = FALSE;
-        else
-            binary = TRUE;
-    }
-
-    if (endmntent(mnt) != 1) {
-        ErrorF("endmntent failed");
-        return;
-    }
-
-    if (!binary)
-        winMsg(X_WARNING, "/tmp mounted in textmode\n");
-}
-#else
-static void
-winCheckMount(void)
-{
-}
-#endif
 
 #ifdef RELOCATE_PROJECTROOT
 const char *
@@ -449,7 +354,7 @@ winFixupPaths(void)
 
                     /* allocate memory */
                     if (fontpath == NULL)
-                        fontpath = malloc(newsize + 1);
+                        fontpath = calloc(1, newsize + 1);
                     else
                         fontpath = realloc(fontpath, newsize + 1);
 
@@ -495,7 +400,7 @@ winFixupPaths(void)
         while (ptr != NULL) {
             size_t oldfp_len = (ptr - oldptr);
             size_t newsize = oldfp_len;
-            char *newpath = malloc(newsize + 1);
+            char *newpath = calloc(1, newsize + 1);
 
             strncpy(newpath, oldptr, newsize);
             newpath[newsize] = 0;
@@ -504,7 +409,7 @@ winFixupPaths(void)
                 char *compose;
 
                 newsize = newsize - libx11dir_len + basedirlen;
-                compose = malloc(newsize + 1);
+                compose = calloc(1, newsize + 1);
                 strcpy(compose, basedir);
                 strncat(compose, newpath + libx11dir_len, newsize - basedirlen);
                 compose[newsize] = 0;
@@ -518,7 +423,7 @@ winFixupPaths(void)
             newfp_len += newsize;
 
             if (newfp == NULL)
-                newfp = malloc(newfp_len + 1);
+                newfp = calloc(1, newfp_len + 1);
             else
                 newfp = realloc(newfp, newfp_len + 1);
 
@@ -573,9 +478,9 @@ winFixupPaths(void)
         putenv(buffer);
     }
     if (getenv("HOME") == NULL) {
-        char buffer[MAX_PATH + 5];
+        char buffer[MAX_PATH + 5] = {0};
 
-        strncpy(buffer, "HOME=", 5);
+        strncpy(buffer, "HOME=", 6);
 
         /* query appdata directory */
         if (SHGetFolderPathA
@@ -619,11 +524,6 @@ OsVendorInit(void)
 
     winFixupPaths();
 
-#ifdef DDXOSVERRORF
-    if (!OsVendorVErrorFProc)
-        OsVendorVErrorFProc = OsVendorVErrorF;
-#endif
-
     if (!g_fLogInited) {
         /* keep this order. If LogInit fails it calls Abort which then calls
          * ddxGiveUp where LogInit is called again and creates an infinite
@@ -634,15 +534,12 @@ OsVendorInit(void)
         g_pszLogFile = LogInit(g_pszLogFile, ".old");
 
     }
-    LogSetParameter(XLOG_FLUSH, 1);
-    LogSetParameter(XLOG_VERBOSITY, g_iLogVerbose);
-    LogSetParameter(XLOG_FILE_VERBOSITY, g_iLogVerbose);
+    xorgLogVerbosity = g_iLogVerbose;
+    xorgLogFileVerbosity = g_iLogVerbose;
 
     /* Log the version information */
     if (serverGeneration == 1)
         winLogVersionInfo();
-
-    winCheckMount();
 
     /* Add a default screen if no screens were specified */
     if (g_iNumScreens == 0) {
@@ -902,7 +799,7 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
     /* Log the command line */
     winLogCommandLine(argc, argv);
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("InitOutput\n");
 #endif
 
@@ -1020,7 +917,7 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
         winGenerateAuthorization();
 
 
-#if CYGDEBUG || YES
+#if ENABLE_DEBUG || YES
     winDebug("InitOutput - Returning.\n");
 #endif
 }

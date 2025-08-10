@@ -50,18 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>     /* control constants */
+
+#include "dix/exevents_priv.h"
+#include "dix/input_priv.h"
+#include "dix/resource_priv.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
 #include "XIstubs.h"
-
 #include "exglobals.h"
-#include "exevents.h"
-
 #include "chgdctl.h"
 
 /***********************************************************************
@@ -77,7 +77,6 @@ SProcXChangeDeviceControl(ClientPtr client)
     xDeviceCtl *ctl;
 
     REQUEST(xChangeDeviceControlReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_EXTRA_SIZE(xChangeDeviceControlReq, sizeof(xDeviceCtl));
     swaps(&stuff->control);
     ctl = (xDeviceCtl *) &stuff[1];
@@ -109,7 +108,6 @@ ProcXChangeDeviceControl(ClientPtr client)
     int i, status, ret = BadValue;
     DeviceIntPtr dev;
     xDeviceResolutionCtl *r;
-    xChangeDeviceControlReply rep;
     AxisInfoPtr a;
     CARD32 *resolution;
     xDeviceEnableCtl *e;
@@ -117,7 +115,7 @@ ProcXChangeDeviceControl(ClientPtr client)
     REQUEST(xChangeDeviceControlReq);
     REQUEST_AT_LEAST_EXTRA_SIZE(xChangeDeviceControlReq, sizeof(xDeviceCtl));
 
-    len = stuff->length - bytes_to_int32(sizeof(xChangeDeviceControlReq));
+    len = client->req_len - bytes_to_int32(sizeof(xChangeDeviceControlReq));
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixManageAccess);
     if (ret != Success)
         goto out;
@@ -128,11 +126,9 @@ ProcXChangeDeviceControl(ClientPtr client)
         goto out;
     }
 
-    rep = (xChangeDeviceControlReply) {
-        .repType = X_Reply,
+    xChangeDeviceControlReply rep = {
         .RepType = X_ChangeDeviceControl,
         .sequenceNumber = client->sequence,
-        .length = 0,
         .status = Success,
     };
 
@@ -234,24 +230,11 @@ ProcXChangeDeviceControl(ClientPtr client)
         SendEventToAllWindows(dev, DevicePresenceNotifyMask,
                               (xEvent *) &dpn, 1);
 
-        WriteReplyToClient(client, sizeof(xChangeDeviceControlReply), &rep);
+        if (client->swapped) {
+            swaps(&rep.sequenceNumber);
+        }
+        WriteToClient(client, sizeof(xChangeDeviceControlReply), &rep);
     }
 
     return ret;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the xChangeDeviceControl function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXChangeDeviceControl(ClientPtr client, int size,
-                         xChangeDeviceControlReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
 }

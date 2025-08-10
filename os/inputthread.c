@@ -25,15 +25,17 @@
  *          Tiago Vignatti <vignatti at freedesktop org>
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+
+#include "dix/input_priv.h"
+#include "os/ddx_priv.h"
+#include "os/log_priv.h"
 
 #include "inputstr.h"
 #include "opaque.h"
@@ -408,7 +410,7 @@ InputThreadPreInit(void)
      if (pipe(hotplugPipe) < 0)
         FatalError("input-thread: could not create pipe");
 
-    inputThreadInfo = malloc(sizeof(InputThreadInfo));
+    inputThreadInfo = calloc(1, sizeof(InputThreadInfo));
     if (!inputThreadInfo)
         FatalError("input-thread: could not allocate memory");
 

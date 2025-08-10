@@ -34,11 +34,16 @@
 #ifdef HAVE_XWIN_CONFIG_H
 #include <xwin-config.h>
 #endif
+
+#include "mi/mi_priv.h"
+
 #include "win.h"
+
+#include "dix/dix_priv.h"
+
 #include "winkeybd.h"
 #include "winconfig.h"
 #include "winmsg.h"
-
 #include "xkbsrv.h"
 
 /* C does not have a logical XOR operator, so we use a macro instead */
@@ -464,12 +469,6 @@ void
 winKeybdReleaseKeys(void)
 {
     int i;
-
-#ifdef HAS_DEVWINDOWS
-    /* Verify that the mi input system has been initialized */
-    if (g_fdMessageQueue == WIN_FD_INVALID)
-        return;
-#endif
 
     /* Loop through all keys */
     for (i = 0; i < NUM_KEYCODES; ++i) {

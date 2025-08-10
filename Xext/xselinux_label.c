@@ -17,13 +17,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <selinux/label.h>
 
-#include "registry.h"
+#include "dix/registry_priv.h"
+
 #include "xselinuxint.h"
 
 /* selection and property atom cache */
@@ -322,13 +321,13 @@ SELinuxTypeToClass(RESTYPE type)
 
         if (type & RC_DRAWABLE)
             class = SECCLASS_X_DRAWABLE;
-        else if (type == RT_GC)
+        else if (type == X11_RESTYPE_GC)
             class = SECCLASS_X_GC;
-        else if (type == RT_FONT)
+        else if (type == X11_RESTYPE_FONT)
             class = SECCLASS_X_FONT;
-        else if (type == RT_CURSOR)
+        else if (type == X11_RESTYPE_CURSOR)
             class = SECCLASS_X_CURSOR;
-        else if (type == RT_COLORMAP)
+        else if (type == X11_RESTYPE_COLORMAP)
             class = SECCLASS_X_COLORMAP;
         else {
             /* Need to do a string lookup */

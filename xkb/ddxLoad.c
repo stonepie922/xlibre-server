@@ -24,26 +24,31 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <xkb-config.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <X11/X.h>
 #include <X11/Xos.h>
 #include <X11/Xproto.h>
 #include <X11/keysym.h>
+#include <X11/extensions/XI.h>
 #include <X11/extensions/XKM.h>
+
+#include "dix/dix_priv.h"
+#include "os/log_priv.h"
+#include "os/osdep.h"
+#include "xkb/xkbfile_priv.h"
+#include "xkb/xkbfmisc_priv.h"
+#include "xkb/xkbrules_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "inputstr.h"
 #include "scrnintstr.h"
 #include "windowstr.h"
-#define	XKBSRV_NEED_FILE_FUNCS
-#include <xkbsrv.h>
-#include <X11/extensions/XI.h>
-#include "xkb.h"
 
 #define	PRE_ERROR_MSG "\"The XKEYBOARD keymap compiler (xkbcomp) reports:\""
 #define	ERROR_PREFIX	"\"> \""
@@ -70,9 +75,17 @@ OutputDirectory(char *outdir, size_t size)
     /* Can we write an xkm and then open it too? */
     if (access(XKM_OUTPUT_DIR, W_OK | X_OK) == 0) {
         directory = XKM_OUTPUT_DIR;
-        if (XKM_OUTPUT_DIR[strlen(XKM_OUTPUT_DIR) - 1] != '/')
-            pathsep = "/";
+    } else {
+        const char *xdg_runtime_dir = getenv("XDG_RUNTIME_DIR");
+
+        if (xdg_runtime_dir && xdg_runtime_dir[0] == '/' &&
+            access(xdg_runtime_dir, W_OK | X_OK) == 0)
+            directory = xdg_runtime_dir;
     }
+
+    if (directory && directory[strlen(directory) - 1] != '/')
+        pathsep = "/";
+
 #else
     directory = Win32TempDir();
     pathsep = "\\";
@@ -173,7 +186,7 @@ RunXkbComp(xkbcomp_buffer_callback callback, void *userdata)
 #ifndef WIN32
         if (Pclose(out) == 0)
 #else
-        if (fclose(out) == 0 && System(buf) >= 0)
+        if (fclose(out) == 0 && system(buf) >= 0)
 #endif
         {
             if (xkbDebugFlags)
@@ -182,7 +195,7 @@ RunXkbComp(xkbcomp_buffer_callback callback, void *userdata)
 #ifdef WIN32
             unlink(tmpname);
 #endif
-            return xnfstrdup(keymap);
+            return strdup(keymap);
         }
         else {
             LogMessage(X_ERROR, "Error compiling keymap (%s) executing '%s'\n",
@@ -377,7 +390,7 @@ XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
         (names->compat == NULL) && (names->symbols == NULL) &&
         (names->geometry == NULL)) {
         LogMessage(X_ERROR, "XKB: No components provided for device %s\n",
-                   keybd->name ? keybd->name : "(unnamed keyboard)");
+                   keybd && keybd->name ? keybd->name : "(unnamed keyboard)");
         return 0;
     }
     else if (!XkbDDXCompileKeymapByNames(xkb, names, want, need,
@@ -424,14 +437,14 @@ XkbDDXNamesFromRules(DeviceIntPtr keybd,
     if (!XkbRF_LoadRules(file, rules)) {
         LogMessage(X_ERROR, "XKB: Couldn't parse rules file %s\n", rules_name);
         fclose(file);
-        XkbRF_Free(rules, TRUE);
+        XkbRF_Free(rules);
         return FALSE;
     }
 
     memset(names, 0, sizeof(*names));
     complete = XkbRF_GetComponents(rules, defs, names);
     fclose(file);
-    XkbRF_Free(rules, TRUE);
+    XkbRF_Free(rules);
 
     if (!complete)
         LogMessage(X_ERROR, "XKB: Rules returned no components\n");

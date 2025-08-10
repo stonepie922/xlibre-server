@@ -24,24 +24,22 @@
 
  ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
-
 #include <X11/Xos.h>
-
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/extensions/XKMformat.h>
+
+#include "xkb/xkbtext_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
 #include "dix.h"
 #include "xkbstr.h"
-#define XKBSRV_NEED_FILE_FUNCS	1
 #include <xkbsrv.h>
 #include "xkbgeom.h"
 
@@ -64,7 +62,7 @@ tbGetBuffer(unsigned size)
 
     if (size > tb->size) {
         free(tb->buffer);
-        tb->buffer = xnfalloc(size);
+        tb->buffer = XNFalloc(size);
         tb->size = size;
     }
     return tb->buffer;
@@ -102,9 +100,9 @@ XkbAtomText(Atom atm, unsigned format)
     }
     if (format == XkbCFile) {
         for (tmp = rtrn; *tmp != '\0'; tmp++) {
-            if ((tmp == rtrn) && (!isalpha(*tmp)))
+            if ((tmp == rtrn) && (!isalpha((unsigned char)*tmp)))
                 *tmp = '_';
-            else if (!isalnum(*tmp))
+            else if (!isalnum((unsigned char)*tmp))
                 *tmp = '_';
         }
     }
@@ -540,7 +538,7 @@ XkbControlsMaskText(unsigned ctrls, unsigned format)
                 if (len != 0)
                     buf[len++] = '|';
                 sprintf(&buf[len], "Xkb%sMask", ctrlNames[i]);
-                buf[len + 3] = toupper(buf[len + 3]);
+                buf[len + 3] = toupper((unsigned char)buf[len + 3]);
             }
             else {
                 if (len != 0)
@@ -571,7 +569,7 @@ XkbStringText(char *str, unsigned format)
     else if (format == XkbXKMFile)
         return str;
     for (ok = TRUE, len = 0, in = str; *in != '\0'; in++, len++) {
-        if (!isprint(*in)) {
+        if (!isprint((unsigned char)*in)) {
             ok = FALSE;
             switch (*in) {
             case '\n':
@@ -592,7 +590,7 @@ XkbStringText(char *str, unsigned format)
         return str;
     buf = tbGetBuffer(len + 1);
     for (in = str, out = buf; *in != '\0'; in++) {
-        if (isprint(*in))
+        if (isprint((unsigned char)*in))
             *out++ = *in;
         else {
             *out++ = '\\';
@@ -988,8 +986,7 @@ CopySetLockControlsArgs(XkbDescPtr xkb, XkbAction *action, char *buf, int *sz)
         int nOut = 0;
 
         if (tmp & XkbRepeatKeysMask) {
-            snprintf(tbuf, sizeof(tbuf), "%sRepeatKeys", (nOut > 0 ? "+" : ""));
-            TryCopyStr(buf, tbuf, sz);
+            TryCopyStr(buf, "RepeatKeys", sz);
             nOut++;
         }
         if (tmp & XkbSlowKeysMask) {

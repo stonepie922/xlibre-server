@@ -23,21 +23,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "dix/dixgrabs_priv.h"
+#include "dix/eventconvert.h"
+#include "dix/input_priv.h"
+#include "dix/resource_priv.h"
+#include "mi/mi_priv.h"
+#include "os/bug_priv.h"
 
 #include "inputstr.h"
 #include "scrnintstr.h"
-#include "dixgrabs.h"
-
 #include "eventstr.h"
 #include "exevents.h"
 #include "exglobals.h"
 #include "inpututils.h"
-#include "eventconvert.h"
 #include "windowstr.h"
-#include "mi.h"
 
 #define GESTURE_HISTORY_SIZE 100
 
@@ -56,6 +58,12 @@ GestureInitGestureInfo(GestureInfoPtr gi)
     gi->sprite.hotPhys.pScreen = screenInfo.screens[0];
 
     return TRUE;
+}
+
+void
+GestureFreeGestureInfo(GestureInfoPtr gi)
+{
+    free(gi->sprite.spriteTrace);
 }
 
 /**
@@ -108,10 +116,8 @@ void
 GestureEndGesture(GestureInfoPtr gi)
 {
     if (gi->has_listener) {
-        if (gi->listener.grab) {
-            FreeGrab(gi->listener.grab);
-            gi->listener.grab = NULL;
-        }
+        FreeGrab(gi->listener.grab);
+        gi->listener.grab = NULL;
         gi->listener.listener = 0;
         gi->has_listener = FALSE;
     }
@@ -194,8 +200,8 @@ GestureAddGrabListener(DeviceIntPtr dev, GestureInfoPtr gi, GrabPtr grab)
         BUG_RETURN_MSG(1, "Unsupported grab type\n");
     }
 
-    /* grab listeners are always RT_NONE since we keep the grab pointer */
-    GestureAddListener(gi, grab->resource, RT_NONE, type, grab->window, grab);
+    /* grab listeners are always X11_RESTYPE_NONE since we keep the grab pointer */
+    GestureAddListener(gi, grab->resource, X11_RESTYPE_NONE, type, grab->window, grab);
 }
 
 /**
@@ -231,7 +237,7 @@ GestureAddRegularListener(DeviceIntPtr dev, GestureInfoPtr gi, WindowPtr win, In
 
     inputMasks = wOtherInputMasks(win);
 
-    if (mask & EVENT_XI2_MASK) {
+    if ((mask & EVENT_XI2_MASK) && (inputMasks != NULL)) {
         nt_list_for_each_entry(iclients, inputMasks->inputClients, next) {
             if (!xi2mask_isset(iclients->xi2mask, dev, evtype))
                 continue;

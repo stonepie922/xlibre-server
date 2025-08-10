@@ -339,8 +339,8 @@ struct _xf86Crtc {
      */
     PictTransform crtc_to_framebuffer;
     /* framebuffer_to_crtc was removed in ABI 2 */
-    struct pict_f_transform f_crtc_to_framebuffer;      /* ABI 2 */
-    struct pict_f_transform f_framebuffer_to_crtc;      /* ABI 2 */
+    struct pixman_f_transform f_crtc_to_framebuffer;      /* ABI 2 */
+    struct pixman_f_transform f_framebuffer_to_crtc;      /* ABI 2 */
     PictFilterPtr filter;       /* ABI 2 */
     xFixed *params;             /* ABI 2 */
     int nparams;                /* ABI 2 */
@@ -799,7 +799,7 @@ typedef struct _xf86CrtcConfig {
 
     CreateScreenResourcesProcPtr CreateScreenResources;
 
-    CloseScreenProcPtr CloseScreen;
+    void *_dummy1; // required in place of a removed field for ABI compatibility
 
     /* Cursor information */
     xf86CursorInfoPtr cursor_info;
@@ -837,11 +837,11 @@ extern _X_EXPORT int xf86CrtcConfigPrivateIndex;
 static _X_INLINE xf86OutputPtr
 xf86CompatOutput(ScrnInfoPtr pScrn)
 {
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+    xf86CrtcConfigPtr config;
 
     if (xf86CrtcConfigPrivateIndex == -1)
         return NULL;
-
+    config = XF86_CRTC_CONFIG_PTR(pScrn);
     if (config->compat_output < 0)
         return NULL;
     return config->output[config->compat_output];
@@ -911,6 +911,11 @@ extern _X_EXPORT void
  */
 extern _X_EXPORT Bool
  xf86CrtcRotate(xf86CrtcPtr crtc);
+
+extern _X_EXPORT void
+ xf86RotateCrtcRedisplay(xf86CrtcPtr crtc, PixmapPtr dst_pixmap,
+                         DrawableRec *src_drawable, RegionPtr region,
+                         Bool transform_src);
 
 /*
  * Clean up any rotation data, used when a crtc is turned off

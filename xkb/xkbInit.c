@@ -24,9 +24,7 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <xkb-config.h>
 
@@ -39,17 +37,21 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <X11/Xproto.h>
 #include <X11/keysym.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/XKMformat.h>
+
+#include "os/bug_priv.h"
+#include "os/cmdline.h"
+#include "os/log_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
 #include "opaque.h"
 #include "property.h"
 #include "scrnintstr.h"
-#define	XKBSRV_NEED_FILE_FUNCS
-#include <xkbsrv.h>
 #include "xkbgeom.h"
-#include <X11/extensions/XKMformat.h>
-#include "xkbfile.h"
-#include "xkb.h"
+
+#define      _XKB_RF_NAMES_PROP_ATOM         "_XKB_RULES_NAMES"
 
 #define	CREATE_ATOM(s)	MakeAtom(s,sizeof(s)-1,1)
 
@@ -73,13 +75,6 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define	PHYS_LEDS	0x07
 #endif
 #endif
-
-#define	MAX_TOC	16
-typedef struct _SrvXkmInfo {
-    DeviceIntPtr dev;
-    FILE *file;
-    XkbDescPtr xkb;
-} SrvXkmInfo;
 
 /***====================================================================***/
 
@@ -146,7 +141,6 @@ XkbWriteRulesProp(void)
 {
     int len, out;
     Atom name;
-    char *pval;
 
     len = (XkbRulesUsed ? strlen(XkbRulesUsed) : 0);
     len += (XkbModelUsed ? strlen(XkbModelUsed) : 0);
@@ -164,7 +158,7 @@ XkbWriteRulesProp(void)
         ErrorF("[xkb] Atom error: %s not created\n", _XKB_RF_NAMES_PROP_ATOM);
         return TRUE;
     }
-    pval = (char *) malloc(len);
+    char *pval = calloc(1, len);
     if (!pval) {
         ErrorF("[xkb] Allocation error: %s proprerty not created\n",
                _XKB_RF_NAMES_PROP_ATOM);
@@ -214,11 +208,11 @@ XkbInitRules(XkbRMLVOSet *rmlvo,
              const char *variant,
              const char *options)
 {
-    rmlvo->rules = rules ? xnfstrdup(rules) : NULL;
-    rmlvo->model = model ? xnfstrdup(model) : NULL;
-    rmlvo->layout = layout ? xnfstrdup(layout) : NULL;
-    rmlvo->variant = variant ? xnfstrdup(variant) : NULL;
-    rmlvo->options = options ? xnfstrdup(options) : NULL;
+    rmlvo->rules = rules ? strdup(rules) : NULL;
+    rmlvo->model = model ? strdup(model) : NULL;
+    rmlvo->layout = layout ? strdup(layout) : NULL;
+    rmlvo->variant = variant ? strdup(variant) : NULL;
+    rmlvo->options = options ? strdup(options) : NULL;
 }
 
 static void
@@ -664,7 +658,7 @@ InitKeyboardDeviceStructInternal(DeviceIntPtr dev, XkbRMLVOSet * rmlvo,
     return FALSE;
 }
 
-_X_EXPORT Bool
+Bool
 InitKeyboardDeviceStruct(DeviceIntPtr dev, XkbRMLVOSet * rmlvo,
                          BellProcPtr bell_func, KbdCtrlProcPtr ctrl_func)
 {
@@ -672,7 +666,7 @@ InitKeyboardDeviceStruct(DeviceIntPtr dev, XkbRMLVOSet * rmlvo,
                                             NULL, 0, bell_func, ctrl_func);
 }
 
-_X_EXPORT Bool
+Bool
 InitKeyboardDeviceStructFromString(DeviceIntPtr dev,
                                    const char *keymap, int keymap_length,
                                    BellProcPtr bell_func, KbdCtrlProcPtr ctrl_func)
@@ -725,6 +719,7 @@ XkbFreeInfo(XkbSrvInfoPtr xkbi)
         XkbFreeKeyboard(xkbi->desc, XkbAllComponentsMask, TRUE);
         xkbi->desc = NULL;
     }
+    free(xkbi->filters);
     free(xkbi);
     return;
 }
@@ -744,7 +739,7 @@ XkbProcessArguments(int argc, char *argv[], int i)
 {
     if (strncmp(argv[i], "-xkbdir", 7) == 0) {
         if (++i < argc) {
-#if !defined(WIN32) && !defined(__CYGWIN__)
+#if !defined(WIN32)
             if (getuid() != geteuid()) {
                 LogMessage(X_WARNING,
                            "-xkbdir is not available for setuid X servers\n");
@@ -776,11 +771,11 @@ XkbProcessArguments(int argc, char *argv[], int i)
         else {
             XkbWantAccessX = 1;
 
-            if (((i + 1) < argc) && (isdigit(argv[i + 1][0]))) {
+            if (((i + 1) < argc) && (isdigit((unsigned char)argv[i + 1][0]))) {
                 XkbDfltAccessXTimeout = atoi(argv[++i]);
                 j++;
 
-                if (((i + 1) < argc) && (isdigit(argv[i + 1][0]))) {
+                if (((i + 1) < argc) && (isdigit((unsigned char)argv[i + 1][0]))) {
                     /*
                      * presumption that the reasonably useful range of
                      * values fits in 0..MAXINT since SunOS 4 doesn't
@@ -790,14 +785,14 @@ XkbProcessArguments(int argc, char *argv[], int i)
                         strtol(argv[++i], NULL, 16);
                     j++;
                 }
-                if (((i + 1) < argc) && (isdigit(argv[i + 1][0]))) {
+                if (((i + 1) < argc) && (isdigit((unsigned char)argv[i + 1][0]))) {
                     if (argv[++i][0] == '1')
                         XkbDfltAccessXFeedback = XkbAccessXFeedbackMask;
                     else
                         XkbDfltAccessXFeedback = 0;
                     j++;
                 }
-                if (((i + 1) < argc) && (isdigit(argv[i + 1][0]))) {
+                if (((i + 1) < argc) && (isdigit((unsigned char)argv[i + 1][0]))) {
                     XkbDfltAccessXOptions = (unsigned short)
                         strtol(argv[++i], NULL, 16);
                     j++;

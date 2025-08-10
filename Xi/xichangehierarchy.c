@@ -30,28 +30,29 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>              /* for inputstr.h    */
 #include <X11/Xproto.h>         /* Request macro     */
-#include "inputstr.h"           /* DeviceIntPtr      */
-#include "windowstr.h"          /* window structure  */
-#include "scrnintstr.h"         /* screen structure  */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XI2proto.h>
 #include <X11/extensions/geproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/exevents_priv.h"
+#include "dix/extension_priv.h"
+#include "dix/input_priv.h"
+#include "os/bug_priv.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
+#include "windowstr.h"          /* window structure  */
+#include "scrnintstr.h"         /* screen structure  */
 #include "extnsionst.h"
-#include "exevents.h"
 #include "exglobals.h"
-#include "geext.h"
 #include "misc.h"
 #include "xace.h"
 #include "xiquerydevice.h"      /* for GetDeviceUse */
-
 #include "xkbsrv.h"
-
 #include "xichangehierarchy.h"
 #include "xibarriers.h"
 
@@ -75,7 +76,7 @@ XISendDeviceHierarchyEvent(int flags[MAXDEVICES])
     if (!ev)
         return;
     ev->type = GenericEvent;
-    ev->extension = IReqCode;
+    ev->extension = EXTENSION_MAJOR_XINPUT;
     ev->evtype = XI_HierarchyChanged;
     ev->time = GetTimeInMillis();
     ev->flags = 0;
@@ -127,14 +128,6 @@ XISendDeviceHierarchyEvent(int flags[MAXDEVICES])
  * adding new master devices, removing them, etc.
  *
  */
-
-int _X_COLD
-SProcXIChangeHierarchy(ClientPtr client)
-{
-    REQUEST(xXIChangeHierarchyReq);
-    swaps(&stuff->length);
-    return (ProcXIChangeHierarchy(client));
-}
 
 static int
 add_master(ClientPtr client, xXIAddMasterInfo * c, int flags[MAXDEVICES])
@@ -244,7 +237,7 @@ remove_master(ClientPtr client, xXIRemoveMasterInfo * r, int flags[MAXDEVICES])
     if (rc != Success)
         goto unwind;
 
-    if (!IsMaster(dev)) {
+    if (!InputDevIsMaster(dev)) {
         client->errorValue = r->deviceid;
         rc = BadDevice;
         goto unwind;
@@ -293,7 +286,7 @@ remove_master(ClientPtr client, xXIRemoveMasterInfo * r, int flags[MAXDEVICES])
         if (rc != Success)
             goto unwind;
 
-        if (!IsMaster(newptr)) {
+        if (!InputDevIsMaster(newptr) || !IsPointerDevice(newptr)) {
             client->errorValue = r->return_pointer;
             rc = BadDevice;
             goto unwind;
@@ -304,14 +297,14 @@ remove_master(ClientPtr client, xXIRemoveMasterInfo * r, int flags[MAXDEVICES])
         if (rc != Success)
             goto unwind;
 
-        if (!IsMaster(newkeybd)) {
+        if (!InputDevIsMaster(newkeybd) || !IsKeyboardDevice(newkeybd)) {
             client->errorValue = r->return_keyboard;
             rc = BadDevice;
             goto unwind;
         }
 
         for (attached = inputInfo.devices; attached; attached = attached->next) {
-            if (!IsMaster(attached)) {
+            if (!InputDevIsMaster(attached)) {
                 if (GetMaster(attached, MASTER_ATTACHED) == ptr) {
                     AttachDevice(client, attached, newptr);
                     flags[attached->id] |= XISlaveAttached;
@@ -362,7 +355,7 @@ detach_slave(ClientPtr client, xXIDetachSlaveInfo * c, int flags[MAXDEVICES])
     if (rc != Success)
         goto unwind;
 
-    if (IsMaster(dev)) {
+    if (InputDevIsMaster(dev)) {
         client->errorValue = c->deviceid;
         rc = BadDevice;
         goto unwind;
@@ -394,7 +387,7 @@ attach_slave(ClientPtr client, xXIAttachSlaveInfo * c, int flags[MAXDEVICES])
     if (rc != Success)
         goto unwind;
 
-    if (IsMaster(dev)) {
+    if (InputDevIsMaster(dev)) {
         client->errorValue = c->deviceid;
         rc = BadDevice;
         goto unwind;
@@ -410,7 +403,7 @@ attach_slave(ClientPtr client, xXIAttachSlaveInfo * c, int flags[MAXDEVICES])
     rc = dixLookupDevice(&newmaster, c->new_master, client, DixAddAccess);
     if (rc != Success)
         goto unwind;
-    if (!IsMaster(newmaster)) {
+    if (!InputDevIsMaster(newmaster)) {
         client->errorValue = c->new_master;
         rc = BadDevice;
         goto unwind;

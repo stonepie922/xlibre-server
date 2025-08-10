@@ -27,6 +27,8 @@
 #include <xorg-config.h>
 #endif
 
+#include "os/fmt.h"
+
 #include "os.h"
 #include "xf86Parser.h"
 #include "xf86tokens.h"
@@ -57,10 +59,13 @@ xf86freeOutputClassList(XF86ConfOutputClassPtr ptr)
         TestFree(ptr->modulepath);
 
         xorg_list_for_each_entry_safe(group, next, &ptr->match_driver, entry) {
-            xorg_list_del(&group->entry);
-            for (list = group->values; *list; list++)
+            for (list = group->values; *list; list++) {
                 free(*list);
+                *list = NULL;
+            }
+            xorg_list_del(&group->entry);
             free(group);
+            group = NULL;
         }
 
         xf86optionListFree(ptr->option_lst);
@@ -78,9 +83,7 @@ xf86freeOutputClassList(XF86ConfOutputClassPtr ptr)
 static void
 add_group_entry(struct xorg_list *head, char **values)
 {
-    xf86MatchGroup *group;
-
-    group = malloc(sizeof(*group));
+    xf86MatchGroup *group = calloc(1, sizeof(xf86MatchGroup));
     if (group) {
         group->values = values;
         xorg_list_add(&group->entry, head);
@@ -106,7 +109,7 @@ xf86parseOutputClassSection(void)
             xf86_lex_val.str = NULL;
             break;
         case IDENTIFIER:
-            if (xf86getSubToken(&(ptr->comment)) != STRING)
+            if (xf86getSubToken(&(ptr->comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Identifier");
             if (has_ident == TRUE)
                 Error(MULTIPLE_MSG, "Identifier");
@@ -114,13 +117,13 @@ xf86parseOutputClassSection(void)
             has_ident = TRUE;
             break;
         case DRIVER:
-            if (xf86getSubToken(&(ptr->comment)) != STRING)
+            if (xf86getSubToken(&(ptr->comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Driver");
             else
                 ptr->driver = xf86_lex_val.str;
             break;
         case MODULEPATH:
-            if (xf86getSubToken(&(ptr->comment)) != STRING)
+            if (xf86getSubToken(&(ptr->comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "ModulePath");
             if (ptr->modulepath) {
                 char *path;
@@ -136,7 +139,7 @@ xf86parseOutputClassSection(void)
             ptr->option_lst = xf86parseOption(ptr->option_lst);
             break;
         case MATCH_DRIVER:
-            if (xf86getSubToken(&(ptr->comment)) != STRING)
+            if (xf86getSubToken(&(ptr->comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "MatchDriver");
             add_group_entry(&ptr->match_driver,
                             xstrtokenize(xf86_lex_val.str, TOKEN_SEP));

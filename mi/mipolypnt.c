@@ -43,9 +43,7 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 
 ******************************************************************/
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/Xprotostr.h>
@@ -67,7 +65,7 @@ miPolyPoint(DrawablePtr pDrawable, GCPtr pGC, int mode, /* Origin or Previous */
     int i;
     xPoint *ppt;
 
-    if (!(pwidthInit = xallocarray(npt, sizeof(int))))
+    if (!(pwidthInit = calloc(npt, sizeof(int))))
         return;
 
     /* make pointlist origin relative */

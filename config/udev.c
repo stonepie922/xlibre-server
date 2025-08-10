@@ -23,21 +23,22 @@
  * Author: Julien Cristau <jcristau@debian.org>
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <libudev.h>
 #include <ctype.h>
 #include <unistd.h>
 
+#include "config/hotplug_priv.h"
+#include "os/fmt.h"
+
 #include "input.h"
 #include "inputstr.h"
-#include "hotplug.h"
 #include "config-backends.h"
 #include "os.h"
 #include "globals.h"
-#include "systemd-logind.h"
+
+#include "../hw/xfree86/os-support/linux/systemd-logind.h"
 
 #ifdef HAVE_SYS_SYSMACROS_H
 #include <sys/sysmacros.h>
@@ -552,6 +553,9 @@ config_udev_odev_setup_attribs(struct udev_device *udev_device, const char *path
 
         attribs->busid = XNFstrdup(value);
         attribs->busid[3] = ':';
+    } else if (value && (str = strrstr(value, "platform-"))) {
+        value = str + 9;
+        attribs->busid = XNFstrdup(value);
     }
 
     if (!value)

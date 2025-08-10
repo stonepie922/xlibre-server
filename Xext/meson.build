@@ -9,8 +9,6 @@ srcs_xext = [
 ]
 
 hdrs_xext = [
-    'geext.h',
-    'geint.h',
     'syncsdk.h',
 ]
 
@@ -37,7 +35,6 @@ endif
 
 if build_xace
     srcs_xext += 'xace.c'
-    hdrs_xext += ['xace.h', 'xacestr.h']
 endif
 
 if build_xf86bigfont
@@ -46,7 +43,6 @@ endif
 
 if build_xinerama
     srcs_xext += ['panoramiX.c', 'panoramiXprocs.c', 'panoramiXSwap.c']
-    hdrs_xext += ['panoramiX.h', 'panoramiXsrv.h']
 endif
 
 if build_xsecurity
@@ -62,13 +58,13 @@ if build_xv
     hdrs_xext += ['xvdix.h', 'xvmcext.h']
 endif
 
-libxserver_xext = static_library('libxserver_xext',
+libxserver_xext = static_library('xserver_xext',
     srcs_xext,
     include_directories: inc,
     dependencies: common_dep,
 )
 
-libxserver_xext_vidmode = static_library('libxserver_xext_vidmode',
+libxserver_xext_vidmode = static_library('xserver_xext_vidmode',
     'vidmode.c',
     include_directories: inc,
     dependencies: common_dep,

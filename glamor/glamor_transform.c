@@ -19,6 +19,7 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
 #include "glamor_priv.h"
 #include "glamor_transform.h"
@@ -130,7 +131,7 @@ glamor_set_color_depth(ScreenPtr      pScreen,
 }
 
 Bool
-glamor_set_solid(PixmapPtr      pixmap,
+glamor_set_solid(DrawablePtr    drawable,
                  GCPtr          gc,
                  Bool           use_alu,
                  GLint          uniform)
@@ -143,7 +144,7 @@ glamor_set_solid(PixmapPtr      pixmap,
 
     pixel = gc->fgPixel;
 
-    if (!glamor_set_alu(pixmap->drawable.pScreen, alu)) {
+    if (!glamor_set_alu(drawable, alu)) {
         switch (gc->alu) {
         case GXclear:
             pixel = 0;
@@ -158,7 +159,7 @@ glamor_set_solid(PixmapPtr      pixmap,
             return FALSE;
         }
     }
-    glamor_set_color(pixmap, pixel, uniform);
+    glamor_set_color(drawable, pixel, uniform);
 
     return TRUE;
 }
@@ -204,12 +205,12 @@ glamor_set_texture(PixmapPtr    texture,
 }
 
 Bool
-glamor_set_tiled(PixmapPtr      pixmap,
+glamor_set_tiled(DrawablePtr    drawable,
                  GCPtr          gc,
                  GLint          offset_uniform,
                  GLint          size_inv_uniform)
 {
-    if (!glamor_set_alu(pixmap->drawable.pScreen, gc->alu))
+    if (!glamor_set_alu(drawable, gc->alu))
         return FALSE;
 
     if (!glamor_set_planemask(gc->depth, gc->planemask))
@@ -282,7 +283,7 @@ bail:
 }
 
 Bool
-glamor_set_stippled(PixmapPtr      pixmap,
+glamor_set_stippled(DrawablePtr    drawable,
                     GCPtr          gc,
                     GLint          fg_uniform,
                     GLint          offset_uniform,
@@ -294,7 +295,7 @@ glamor_set_stippled(PixmapPtr      pixmap,
     if (!stipple)
         return FALSE;
 
-    if (!glamor_set_solid(pixmap, gc, TRUE, fg_uniform))
+    if (!glamor_set_solid(drawable, gc, TRUE, fg_uniform))
         return FALSE;
 
     return glamor_set_texture(stipple,

@@ -51,11 +51,11 @@ SOFTWARE.
  *
  *****************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #undef DEBUG_COMMUNICATION
+
+#include "dixstruct_priv.h"
 
 #ifdef WIN32
 #include <X11/Xwinsock.h>
@@ -72,8 +72,13 @@ SOFTWARE.
 #endif
 #include <X11/X.h>
 #include <X11/Xproto.h>
+
+#include "dix/dix_priv.h"
+#include "os/bug_priv.h"
+#include "os/client_priv.h"
+#include "os/osdep.h"
+
 #include "os.h"
-#include "osdep.h"
 #include "opaque.h"
 #include "dixstruct.h"
 #include "misc.h"
@@ -358,13 +363,8 @@ ReadRequestFromClient(ClientPtr client)
         if (result <= 0) {
             if ((result < 0) && ETEST(errno)) {
                 mark_client_not_ready(client);
-#if defined(SVR4) && defined(__i386__) && !defined(__sun)
-                if (0)
-#endif
-                {
-                    YieldControlNoInput(client);
-                    return 0;
-                }
+                YieldControlNoInput(client);
+                return 0;
             }
             YieldControlDeath();
             return -1;
@@ -748,7 +748,7 @@ WriteToClient(ClientPtr who, int count, const void *__buf)
         }
         else if (!(oco = AllocateOutputBuffer())) {
             AbortClient(who);
-            MarkClientException(who);
+            dixMarkClientException(who);
             return -1;
         }
         oc->output = oco;
@@ -796,7 +796,7 @@ WriteToClient(ClientPtr who, int count, const void *__buf)
         }
     }
 #endif
-    if (oco->count == 0 || oco->count + count + padBytes > oco->size) {
+    if ((oco->count == 0 && who->local) || oco->count + count + padBytes > oco->size) {
         output_pending_clear(who);
         if (!any_output_pending()) {
             CriticalOutputPending = FALSE;
@@ -896,9 +896,6 @@ FlushClient(ClientPtr who, OsCommPtr oc, const void *__extraBuf, int extraCount)
             todo = notWritten;
         }
         else if (ETEST(errno)
-#ifdef SUNSYSV                  /* check for another brain-damaged OS bug */
-                 || (errno == 0)
-#endif
 #ifdef EMSGSIZE                 /* check for another brain-damaged OS bug */
                  || ((errno == EMSGSIZE) && (todo == 1))
 #endif
@@ -929,7 +926,7 @@ FlushClient(ClientPtr who, OsCommPtr oc, const void *__extraBuf, int extraCount)
                 }
                 if (!obuf) {
                     AbortClient(who);
-                    MarkClientException(who);
+                    dixMarkClientException(who);
                     oco->count = 0;
                     return -1;
                 }
@@ -956,7 +953,7 @@ FlushClient(ClientPtr who, OsCommPtr oc, const void *__extraBuf, int extraCount)
 #endif
         else {
             AbortClient(who);
-            MarkClientException(who);
+            dixMarkClientException(who);
             oco->count = 0;
             return -1;
         }
@@ -981,12 +978,10 @@ FlushClient(ClientPtr who, OsCommPtr oc, const void *__extraBuf, int extraCount)
 static ConnectionInputPtr
 AllocateInputBuffer(void)
 {
-    ConnectionInputPtr oci;
-
-    oci = malloc(sizeof(ConnectionInput));
+    ConnectionInputPtr oci = calloc(1, sizeof(ConnectionInput));
     if (!oci)
         return NULL;
-    oci->buffer = malloc(BUFSIZE);
+    oci->buffer = calloc(1, BUFSIZE);
     if (!oci->buffer) {
         free(oci);
         return NULL;
@@ -1002,9 +997,7 @@ AllocateInputBuffer(void)
 static ConnectionOutputPtr
 AllocateOutputBuffer(void)
 {
-    ConnectionOutputPtr oco;
-
-    oco = malloc(sizeof(ConnectionOutput));
+    ConnectionOutputPtr oco = calloc(1, sizeof(ConnectionOutput));
     if (!oco)
         return NULL;
     oco->buf = calloc(1, BUFSIZE);

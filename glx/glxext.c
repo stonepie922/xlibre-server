@@ -28,18 +28,18 @@
  * Silicon Graphics, Inc.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <string.h>
+
+#include "dix/dix_priv.h"
+#include "os/client_priv.h"
+
 #include "glxserver.h"
 #include <windowstr.h>
 #include <propertyst.h>
-#include <registry.h>
 #include "privates.h"
 #include <os.h>
-#include "extinit.h"
 #include "glx_extinit.h"
 #include "unpack.h"
 #include "glxutil.h"
@@ -309,7 +309,7 @@ GetGLXDrawableBytes(void *value, XID id, ResourceSizePtr size)
     size->refCnt = 1;
 
     if (draw->type == GLX_DRAWABLE_PIXMAP) {
-        SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(RT_PIXMAP);
+        SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(X11_RESTYPE_PIXMAP);
         ResourceSizeRec pixmapSize = { 0, };
         pixmapSizeFunc((PixmapPtr)draw->pDraw, draw->pDraw->id, &pixmapSize);
         size->pixmapRefSize += pixmapSize.pixmapRefSize;

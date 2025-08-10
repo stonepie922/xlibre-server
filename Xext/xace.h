@@ -25,11 +25,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define XACE_MAJOR_VERSION		2
 #define XACE_MINOR_VERSION		0
 
+#include "dix/selection_priv.h"
+
+#include "extnsionst.h"
 #include "pixmap.h"
 #include "region.h"
 #include "window.h"
 #include "property.h"
-#include "selection.h"
 
 /* Default window background */
 #define XaceBackgroundNoneState(w) ((w)->forcedBG ? BackgroundPixel : None)
@@ -37,7 +39,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* security hooks */
 /* Constants used to identify the available security hooks
  */
-#define XACE_CORE_DISPATCH		0
 #define XACE_EXT_DISPATCH		1
 #define XACE_RESOURCE_ACCESS		2
 #define XACE_DEVICE_ACCESS		3
@@ -54,56 +55,62 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define XACE_KEY_AVAIL			14
 #define XACE_NUM_HOOKS			15
 
-extern _X_EXPORT CallbackListPtr XaceHooks[XACE_NUM_HOOKS];
+extern CallbackListPtr XaceHooks[XACE_NUM_HOOKS];
 
 /* Entry point for hook functions.  Called by Xserver.
- * Required by libdbe and libextmod
+ * Required by several modules
  */
-extern _X_EXPORT int XaceHook(int /*hook */ ,
-                              ...       /*appropriate args for hook */
-    );
+_X_EXPORT Bool XaceRegisterCallback(int hook, CallbackProcPtr callback, void *data);
+_X_EXPORT Bool XaceDeleteCallback(int hook, CallbackProcPtr callback, void *data);
 
 /* determine whether any callbacks are present for the XACE hook */
-extern _X_EXPORT int XaceHookIsSet(int hook);
+int XaceHookIsSet(int hook);
 
 /* Special-cased hook functions
  */
-extern _X_EXPORT int XaceHookDispatch(ClientPtr ptr, int major);
+int XaceHookDispatch0(ClientPtr ptr, int major);
 #define XaceHookDispatch(c, m) \
     ((XaceHooks[XACE_EXT_DISPATCH] && (m) >= EXTENSION_BASE) ? \
-    XaceHookDispatch((c), (m)) : \
+    XaceHookDispatch0((c), (m)) : \
     Success)
 
-extern _X_EXPORT int XaceHookPropertyAccess(ClientPtr ptr, WindowPtr pWin,
-                                            PropertyPtr *ppProp,
-                                            Mask access_mode);
-extern _X_EXPORT int XaceHookSelectionAccess(ClientPtr ptr, Selection ** ppSel,
-                                             Mask access_mode);
+int XaceHookPropertyAccess(ClientPtr ptr, WindowPtr pWin, PropertyPtr *ppProp,
+                           Mask access_mode);
+int XaceHookSelectionAccess(ClientPtr ptr, Selection ** ppSel, Mask access_mode);
 
-/* Register a callback for a given hook.
- */
-#define XaceRegisterCallback(hook,callback,data) \
-    AddCallback(XaceHooks+(hook), callback, data)
+/* needs to be exported for in-tree modesetting, but not part of public API */
+_X_EXPORT int XaceHookResourceAccess(ClientPtr client, XID id, RESTYPE rtype, void *res,
+                           RESTYPE ptype, void *parent, Mask access_mode);
 
-/* Unregister an existing callback for a given hook.
- */
-#define XaceDeleteCallback(hook,callback,data) \
-    DeleteCallback(XaceHooks+(hook), callback, data)
+int XaceHookDeviceAccess(ClientPtr client, DeviceIntPtr dev, Mask access_mode);
+
+int XaceHookSendAccess(ClientPtr client, DeviceIntPtr dev, WindowPtr win,
+                       xEventPtr ev, int count);
+int XaceHookReceiveAccess(ClientPtr client, WindowPtr win, xEventPtr ev, int count);
+int XaceHookClientAccess(ClientPtr client, ClientPtr target, Mask access_mode);
+int XaceHookExtAccess(ClientPtr client, ExtensionEntry *ext);
+int XaceHookServerAccess(ClientPtr client, Mask access_mode);
+int XaceHookScreenAccess(ClientPtr client, ScreenPtr screen, Mask access_mode);
+int XaceHookScreensaverAccess(ClientPtr client, ScreenPtr screen, Mask access_mode);
+int XaceHookAuthAvail(ClientPtr client, XID authId);
+int XaceHookKeyAvail(xEventPtr ev, DeviceIntPtr dev, int count);
+
+/* Register / unregister a callback for a given hook. */
 
 /* XTrans wrappers for use by security modules
  */
-extern _X_EXPORT int XaceGetConnectionNumber(ClientPtr ptr);
-extern _X_EXPORT int XaceIsLocal(ClientPtr ptr);
+int XaceGetConnectionNumber(ClientPtr ptr);
+int XaceIsLocal(ClientPtr ptr);
 
 /* From the original Security extension...
  */
 
-extern _X_EXPORT void XaceCensorImage(ClientPtr client,
-                                      RegionPtr pVisibleRegion,
-                                      long widthBytesLine,
-                                      DrawablePtr pDraw,
-                                      int x, int y, int w, int h,
-                                      unsigned int format, char *pBuf);
+void XaceCensorImage(ClientPtr client,
+                     RegionPtr pVisibleRegion,
+                     long widthBytesLine,
+                     DrawablePtr pDraw,
+                     int x, int y, int w, int h,
+                     unsigned int format, char *pBuf);
 
 #else                           /* XACE */
 
@@ -113,14 +120,12 @@ extern _X_EXPORT void XaceCensorImage(ClientPtr client,
 /* Define calls away when XACE is not being built. */
 
 #ifdef __GNUC__
-#define XaceHook(args...) Success
 #define XaceHookIsSet(args...) 0
 #define XaceHookDispatch(args...) Success
 #define XaceHookPropertyAccess(args...) Success
 #define XaceHookSelectionAccess(args...) Success
 #define XaceCensorImage(args...) { ; }
 #else
-#define XaceHook(...) Success
 #define XaceHookIsSet(...) 0
 #define XaceHookDispatch(...) Success
 #define XaceHookPropertyAccess(...) Success

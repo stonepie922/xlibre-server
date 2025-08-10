@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2003 by The XFree86 Project, Inc.
  *
@@ -34,10 +33,9 @@
 
 /*** These are DDX layer privates ***/
 
-extern _X_EXPORT DevPrivateKey XF86XvScreenKey;
+extern DevPrivateKey XF86XvScreenKey;
 
 typedef struct {
-    DestroyWindowProcPtr DestroyWindow;
     ClipNotifyProcPtr ClipNotify;
     WindowExposuresProcPtr WindowExposures;
     PostValidateTreeProcPtr PostValidateTree;
@@ -45,7 +43,6 @@ typedef struct {
     Bool (*EnterVT) (ScrnInfoPtr);
     void (*LeaveVT) (ScrnInfoPtr);
     xf86ModeSetProc *ModeSet;
-    CloseScreenProcPtr CloseScreen;
 } XF86XVScreenRec, *XF86XVScreenPtr;
 
 typedef struct {

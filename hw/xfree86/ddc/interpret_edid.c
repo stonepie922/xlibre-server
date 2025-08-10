@@ -32,7 +32,7 @@
 #include "xf86.h"
 #include "xf86_OSproc.h"
 #define _PARSE_EDID_
-#include "xf86DDC.h"
+#include "xf86DDC_priv.h"
 #include <string.h>
 
 static void get_vendor_section(Uchar *, struct vendor *);
@@ -89,8 +89,8 @@ handle_edid_quirks(xf86MonPtr m)
 
         xf86ForEachDetailedBlock(m, find_max_detailed_clock, &clock);
         if (clock && (ranges->max_clock * 1e6 < clock)) {
-            xf86Msg(X_WARNING, "EDID timing clock %.2f exceeds claimed max "
-                    "%dMHz, fixing\n", clock / 1.0e6, ranges->max_clock);
+            LogMessageVerb(X_WARNING, 1, "EDID timing clock %.2f exceeds claimed max "
+                           "%dMHz, fixing\n", clock / 1.0e6, ranges->max_clock);
             ranges->max_clock = (clock + 999999) / 1e6;
         }
     }
@@ -159,8 +159,8 @@ encode_aspect_ratio(xf86MonPtr m)
             m->features.vsize = (p.real_vsize + 5) / 10;
         }
 
-        xf86Msg(X_INFO, "Quirked EDID physical size to %dx%d cm\n",
-                m->features.hsize, m->features.vsize);
+        LogMessageVerb(X_INFO, 1, "Quirked EDID physical size to %dx%d cm\n",
+                       m->features.hsize, m->features.vsize);
     }
 }
 
@@ -171,7 +171,7 @@ xf86InterpretEDID(int scrnIndex, Uchar * block)
 
     if (!block)
         return NULL;
-    if (!(m = xnfcalloc(sizeof(xf86Monitor), 1)))
+    if (!(m = XNFcallocarray(1, sizeof(xf86Monitor))))
         return NULL;
     m->scrnIndex = scrnIndex;
     m->rawData = block;
@@ -776,13 +776,4 @@ gtf_supported(xf86MonPtr mon)
     }
 
     return FALSE;
-}
-
-/*
- * Returns true if HDMI, false if definitely not or unknown.
- */
-Bool
-xf86MonitorIsHDMI(xf86MonPtr mon)
-{
-    return xf86MonitorFindHDMIBlock(mon) != NULL;
 }

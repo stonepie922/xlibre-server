@@ -22,18 +22,16 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "glxserver.h"
 #include "glxutil.h"
 #include "glxext.h"
+#include "misc.h"
 #include "singlesize.h"
 #include "unpack.h"
 #include "indirect_size_get.h"
 #include "indirect_dispatch.h"
-#include "glxbyteorder.h"
 
 static int DoSwapInterval(__GLXclientState * cl, GLbyte * pc, int do_swap);
 

@@ -20,11 +20,12 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
+
+#include "dix/screen_hooks_priv.h"
+#include "os/osdep.h"
 
 #include    <X11/X.h>
 #include    "scrnintstr.h"
@@ -40,6 +41,7 @@
 #include    "gcstruct.h"
 #include    "damage.h"
 #include    "damagestr.h"
+#include    "glyphstr_priv.h"
 
 #define wrap(priv, real, mem, func) {\
     priv->mem = real->mem; \
@@ -142,15 +144,12 @@ damageRegionAppend(DrawablePtr pDrawable, RegionPtr pRegion, Bool clip,
     RegionRec pixClip;
     int draw_x, draw_y;
 
-#ifdef COMPOSITE
     int screen_x = 0, screen_y = 0;
-#endif
 
     /* short circuit for empty regions */
     if (!RegionNotEmpty(pRegion))
         return;
 
-#ifdef COMPOSITE
     /*
      * When drawing to a pixmap which is storing window contents,
      * the region presented is in pixmap relative coordinates which
@@ -162,7 +161,6 @@ damageRegionAppend(DrawablePtr pDrawable, RegionPtr pRegion, Bool clip,
     }
     if (screen_x || screen_y)
         RegionTranslate(pRegion, screen_x, screen_y);
-#endif
 
     if (pDrawable->type == DRAWABLE_WINDOW &&
         ((WindowPtr) (pDrawable))->backingStore == NotUseful) {
@@ -201,7 +199,6 @@ damageRegionAppend(DrawablePtr pDrawable, RegionPtr pRegion, Bool clip,
 
         draw_x = pDamage->pDrawable->x;
         draw_y = pDamage->pDrawable->y;
-#ifdef COMPOSITE
         /*
          * Need to move everyone to screen coordinates
          * XXX what about off-screen pixmaps with non-zero x/y?
@@ -210,7 +207,6 @@ damageRegionAppend(DrawablePtr pDrawable, RegionPtr pRegion, Bool clip,
             draw_x += ((PixmapPtr) pDamage->pDrawable)->screen_x;
             draw_y += ((PixmapPtr) pDamage->pDrawable)->screen_y;
         }
-#endif
 
         /*
          * Clip against border or pixmap bounds
@@ -274,10 +270,8 @@ damageRegionAppend(DrawablePtr pDrawable, RegionPtr pRegion, Bool clip,
         if (pDamageRegion == pRegion && (draw_x || draw_y))
             RegionTranslate(pDamageRegion, draw_x, draw_y);
     }
-#ifdef COMPOSITE
     if (screen_x || screen_y)
         RegionTranslate(pRegion, -screen_x, -screen_y);
-#endif
 
     RegionUninit(&clippedRec);
 }
@@ -633,7 +627,7 @@ damageAddTraps(PicturePtr pPicture,
 
 static void
 damageFillSpans(DrawablePtr pDrawable,
-                GC * pGC, int npt, DDXPointPtr ppt, int *pwidth, int fSorted)
+                GCPtr pGC, int npt, DDXPointPtr ppt, int *pwidth, int fSorted)
 {
     DAMAGE_GC_OP_PROLOGUE(pGC, pDrawable);
 
@@ -752,7 +746,7 @@ damagePutImage(DrawablePtr pDrawable,
 static RegionPtr
 damageCopyArea(DrawablePtr pSrc,
                DrawablePtr pDst,
-               GC * pGC,
+               GCPtr pGC,
                int srcx, int srcy, int width, int height, int dstx, int dsty)
 {
     RegionPtr ret;
@@ -1324,7 +1318,7 @@ damageText(DrawablePtr pDrawable,
     if (!checkGCDamage(pDrawable, pGC))
         return;
 
-    charinfo = xallocarray(count, sizeof(CharInfoPtr));
+    charinfo = calloc(count, sizeof(CharInfoPtr));
     if (!charinfo)
         return;
 
@@ -1483,27 +1477,16 @@ damageInsertDamage(DamagePtr * pPrev, DamagePtr pDamage)
     *pPrev = pDamage;
 }
 
-static Bool
-damageDestroyPixmap(PixmapPtr pPixmap)
+static void damagePixmapDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, PixmapPtr pPixmap)
 {
-    ScreenPtr pScreen = pPixmap->drawable.pScreen;
+    DamagePtr *pPrev = getPixmapDamageRef(pPixmap);
+    DamagePtr pDamage;
 
-    damageScrPriv(pScreen);
-
-    if (pPixmap->refcnt == 1) {
-        DamagePtr *pPrev = getPixmapDamageRef(pPixmap);
-        DamagePtr pDamage;
-
-        while ((pDamage = *pPrev)) {
-            damageRemoveDamage(pPrev, pDamage);
-            if (!pDamage->isWindow)
-                DamageDestroy(pDamage);
-        }
+    while ((pDamage = *pPrev)) {
+        damageRemoveDamage(pPrev, pDamage);
+        if (!pDamage->isWindow)
+            DamageDestroy(pDamage);
     }
-    unwrap(pScrPriv, pScreen, DestroyPixmap);
-    (*pScreen->DestroyPixmap) (pPixmap);
-    wrap(pScrPriv, pScreen, DestroyPixmap, damageDestroyPixmap);
-    return TRUE;
 }
 
 static void
@@ -1574,35 +1557,31 @@ damageSetWindowPixmap(WindowPtr pWindow, PixmapPtr pPixmap)
     }
 }
 
-static Bool
-damageDestroyWindow(WindowPtr pWindow)
+static void
+damageWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWindow)
 {
     DamagePtr pDamage;
-    ScreenPtr pScreen = pWindow->drawable.pScreen;
-    Bool ret;
-
-    damageScrPriv(pScreen);
 
     while ((pDamage = damageGetWinPriv(pWindow))) {
         DamageDestroy(pDamage);
     }
-    unwrap(pScrPriv, pScreen, DestroyWindow);
-    ret = (*pScreen->DestroyWindow) (pWindow);
-    wrap(pScrPriv, pScreen, DestroyWindow, damageDestroyWindow);
-    return ret;
 }
 
-static Bool
-damageCloseScreen(ScreenPtr pScreen)
+static void damageCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
-    damageScrPriv(pScreen);
+    dixScreenUnhookPostClose(pScreen, damageCloseScreen);
+    dixScreenUnhookWindowDestroy(pScreen, damageWindowDestroy);
+    dixScreenUnhookPixmapDestroy(pScreen, damagePixmapDestroy);
 
-    unwrap(pScrPriv, pScreen, DestroyPixmap);
+    damageScrPriv(pScreen);
+    if (!pScrPriv)
+        return;
+
     unwrap(pScrPriv, pScreen, CreateGC);
     unwrap(pScrPriv, pScreen, CopyWindow);
-    unwrap(pScrPriv, pScreen, CloseScreen);
+
+    dixSetPrivate(&pScreen->devPrivates, damageScrPrivateKey, NULL);
     free(pScrPriv);
-    return (*pScreen->CloseScreen) (pScreen);
 }
 
 /**
@@ -1659,7 +1638,6 @@ miDamageDestroy(DamagePtr pDamage)
 Bool
 DamageSetup(ScreenPtr pScreen)
 {
-    DamageScrPrivPtr pScrPriv;
     PictureScreenPtr ps = GetPictureScreenIfSet(pScreen);
 
     const DamageScreenFuncsRec miFuncs = {
@@ -1682,19 +1660,20 @@ DamageSetup(ScreenPtr pScreen)
     if (!dixRegisterPrivateKey(&damageWinPrivateKeyRec, PRIVATE_WINDOW, 0))
         return FALSE;
 
-    pScrPriv = malloc(sizeof(DamageScrPrivRec));
+    DamageScrPrivPtr pScrPriv = calloc(1, sizeof(DamageScrPrivRec));
     if (!pScrPriv)
         return FALSE;
 
     pScrPriv->internalLevel = 0;
     pScrPriv->pScreenDamage = 0;
 
-    wrap(pScrPriv, pScreen, DestroyPixmap, damageDestroyPixmap);
+    dixScreenHookPostClose(pScreen, damageCloseScreen);
+    dixScreenHookWindowDestroy(pScreen, damageWindowDestroy);
+    dixScreenHookPixmapDestroy(pScreen, damagePixmapDestroy);
+
     wrap(pScrPriv, pScreen, CreateGC, damageCreateGC);
-    wrap(pScrPriv, pScreen, DestroyWindow, damageDestroyWindow);
     wrap(pScrPriv, pScreen, SetWindowPixmap, damageSetWindowPixmap);
     wrap(pScrPriv, pScreen, CopyWindow, damageCopyWindow);
-    wrap(pScrPriv, pScreen, CloseScreen, damageCloseScreen);
     if (ps) {
         wrap(pScrPriv, ps, Glyphs, damageGlyphs);
         wrap(pScrPriv, ps, Composite, damageComposite);

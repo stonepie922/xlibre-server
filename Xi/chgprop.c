@@ -50,18 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
-#include "windowstr.h"
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
 
+#include "dix/dix_priv.h"
+#include "dix/exevents_priv.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
+#include "windowstr.h"
 #include "exevents.h"
 #include "exglobals.h"
-
 #include "chgprop.h"
 #include "grabdev.h"
 
@@ -75,7 +75,6 @@ int _X_COLD
 SProcXChangeDeviceDontPropagateList(ClientPtr client)
 {
     REQUEST(xChangeDeviceDontPropagateListReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xChangeDeviceDontPropagateListReq);
     swapl(&stuff->window);
     swaps(&stuff->count);
@@ -102,7 +101,7 @@ ProcXChangeDeviceDontPropagateList(ClientPtr client)
     REQUEST(xChangeDeviceDontPropagateListReq);
     REQUEST_AT_LEAST_SIZE(xChangeDeviceDontPropagateListReq);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xChangeDeviceDontPropagateListReq)) +
         stuff->count)
         return BadLength;

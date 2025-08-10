@@ -22,25 +22,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * All rights reserved.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <errno.h>
 #include <sys/socket.h>
 #include <stdio.h>
 #include <stdarg.h>
-
 #include <libaudit.h>
-
 #include <X11/Xatom.h>
-#include "selection.h"
+#include <X11/Xfuncproto.h>
+
+#include "dix/input_priv.h"
+#include "dix/registry_priv.h"
+#include "dix/resource_priv.h"
+#include "dix/selection_priv.h"
+#include "os/client_priv.h"
+
 #include "inputstr.h"
 #include "scrnintstr.h"
 #include "windowstr.h"
 #include "propertyst.h"
 #include "extnsionst.h"
 #include "xacestr.h"
-#include "client.h"
 #define _XSELINUX_NEED_FLASK_MAP
 #include "xselinuxint.h"
 
@@ -199,7 +202,7 @@ SELinuxLabelInitial(void)
 
         /* Do the default colormap */
         dixLookupResourceByType(&unused, screenInfo.screens[i]->defColormap,
-                                RT_COLORMAP, serverClient, DixCreateAccess);
+                                X11_RESTYPE_COLORMAP, serverClient, DixCreateAccess);
     }
 }
 
@@ -629,7 +632,10 @@ SELinuxResource(CallbackListPtr *pcbl, void *unused, void *calldata)
     if (offset < 0) {
         /* No: use the SID of the owning client */
         class = SECCLASS_X_RESOURCE;
-        privatePtr = &clients[CLIENT_ID(rec->id)]->devPrivates;
+        ClientPtr owner = dixClientForXID(rec->id);
+        if (!owner)
+            return;
+        privatePtr = &owner->devPrivates;
         obj = dixLookupPrivate(privatePtr, objectKey);
     }
     else {
@@ -662,7 +668,7 @@ SELinuxResource(CallbackListPtr *pcbl, void *unused, void *calldata)
         rec->status = rc;
 
     /* Perform the background none check on windows */
-    if (access_mode & DixCreateAccess && rec->rtype == RT_WINDOW) {
+    if (access_mode & DixCreateAccess && rec->rtype == X11_RESTYPE_WINDOW) {
         rc = SELinuxDoCheck(subj, obj, class, DixBlendAccess, &auditdata);
         if (rc != Success)
             ((WindowPtr) rec->res)->forcedBG = TRUE;
@@ -764,13 +770,13 @@ SELinuxResourceState(CallbackListPtr *pcbl, void *unused, void *calldata)
     SELinuxObjectRec *obj;
     WindowPtr pWin;
 
-    if (rec->type != RT_WINDOW)
+    if (rec->type != X11_RESTYPE_WINDOW)
         return;
     if (rec->state != ResourceStateAdding)
         return;
 
     pWin = (WindowPtr) rec->value;
-    subj = dixLookupPrivate(&wClient(pWin)->devPrivates, subjectKey);
+    subj = dixLookupPrivate(&dixClientForWindow(pWin)->devPrivates, subjectKey);
 
     if (subj->sid) {
         char *ctx;

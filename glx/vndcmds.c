@@ -30,7 +30,7 @@
 #include <dix-config.h>
 
 #include "hashtable.h"
-#include "vndserver.h"
+#include "vndserver_priv.h"
 #include "vndservervendor.h"
 
 /**
@@ -110,7 +110,7 @@ static int dispatch_GLXQueryVersion(ClientPtr client)
     reply.majorVersion = GlxCheckSwap(client, 1);
     reply.minorVersion = GlxCheckSwap(client, 4);
 
-    WriteToClient(client, sz_xGLXQueryVersionReply, &reply);
+    WriteToClient(client, sizeof(xGLXQueryVersionReply), &reply);
     return Success;
 }
 
@@ -126,7 +126,6 @@ static int dispatch_GLXQueryVersion(ClientPtr client)
 static int dispatch_GLXClientInfo(ClientPtr client)
 {
     GlxServerVendor *vendor;
-    void *requestCopy = NULL;
     size_t requestSize = client->req_len * 4;
 
     if (client->minorOp == X_GLXClientInfo) {
@@ -142,7 +141,7 @@ static int dispatch_GLXClientInfo(ClientPtr client)
     // We'll forward this request to each vendor library. Since a vendor might
     // modify the request data in place (e.g., for byte swapping), make a copy
     // of the request first.
-    requestCopy = malloc(requestSize);
+    void *requestCopy = calloc(1, requestSize);
     if (requestCopy == NULL) {
         return BadAlloc;
     }
@@ -165,9 +164,6 @@ static int CommonLoseCurrent(ClientPtr client, GlxContextTagInfo *tagInfo)
             tagInfo->tag, // No old context tag,
             None, None, None, 0);
 
-    if (ret == Success) {
-        GlxFreeContextTag(tagInfo);
-    }
     return ret;
 }
 
@@ -259,7 +255,6 @@ static int CommonMakeCurrent(ClientPtr client,
             if (ret != Success) {
                 return ret;
             }
-            oldTag = NULL;
         }
 
         if (newVendor != NULL) {
@@ -270,10 +265,13 @@ static int CommonMakeCurrent(ClientPtr client,
         } else {
             reply.contextTag = 0;
         }
+
+        GlxFreeContextTag(oldTag);
+        oldTag = NULL;
     }
 
     reply.contextTag = GlxCheckSwap(client, reply.contextTag);
-    WriteToClient(client, sz_xGLXMakeCurrentReply, &reply);
+    WriteToClient(client, sizeof(xGLXMakeCurrentReply), &reply);
     return Success;
 }
 

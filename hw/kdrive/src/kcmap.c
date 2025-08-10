@@ -20,10 +20,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 #include "kdrive.h"
+
+#include "dix/colormap_priv.h"
 
 /*
  * Put the entire colormap into the DAC
@@ -84,7 +84,7 @@ KdEnableColormap(ScreenPtr pScreen)
     KdScreenPriv(pScreen);
     int i;
 
-    if (!pScreenPriv->card->cfuncs->putColors)
+    if (!pScreenPriv->card->cfuncs->getColors)
         return;
 
     if (pScreenPriv->screen->fb.depth <= KD_MAX_PSEUDO_DEPTH) {
@@ -169,7 +169,7 @@ KdUninstallColormap(ColormapPtr pCmap)
         return;
 
     /* install default */
-    dixLookupResourceByType((void **) &defMap, defMapID, RT_COLORMAP,
+    dixLookupResourceByType((void **) &defMap, defMapID, X11_RESTYPE_COLORMAP,
                             serverClient, DixInstallAccess);
     if (defMap)
         (*pCmap->pScreen->InstallColormap) (defMap);

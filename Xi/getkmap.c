@@ -50,9 +50,7 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
@@ -66,21 +64,6 @@ SOFTWARE.
 
 /***********************************************************************
  *
- * This procedure gets the key mapping for an extension device,
- * for clients on machines with a different byte ordering than the server.
- *
- */
-
-int _X_COLD
-SProcXGetDeviceKeyMapping(ClientPtr client)
-{
-    REQUEST(xGetDeviceKeyMappingReq);
-    swaps(&stuff->length);
-    return (ProcXGetDeviceKeyMapping(client));
-}
-
-/***********************************************************************
- *
  * Get the device key mapping.
  *
  */
@@ -88,7 +71,6 @@ SProcXGetDeviceKeyMapping(ClientPtr client)
 int
 ProcXGetDeviceKeyMapping(ClientPtr client)
 {
-    xGetDeviceKeyMappingReply rep;
     DeviceIntPtr dev;
     XkbDescPtr xkb;
     KeySymsPtr syms;
@@ -119,14 +101,19 @@ ProcXGetDeviceKeyMapping(ClientPtr client)
     if (!syms)
         return BadAlloc;
 
-    rep = (xGetDeviceKeyMappingReply) {
+    xGetDeviceKeyMappingReply rep = {
         .repType = X_Reply,
         .RepType = X_GetDeviceKeyMapping,
         .sequenceNumber = client->sequence,
         .keySymsPerKeyCode = syms->mapWidth,
         .length = (syms->mapWidth * stuff->count) /* KeySyms are 4 bytes */
     };
-    WriteReplyToClient(client, sizeof(xGetDeviceKeyMappingReply), &rep);
+
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+    }
+    WriteToClient(client, sizeof(xGetDeviceKeyMappingReply), &rep);
 
     client->pSwapReplyFunc = (ReplySwapPtr) CopySwap32Write;
     WriteSwappedDataToClient(client,
@@ -137,20 +124,4 @@ ProcXGetDeviceKeyMapping(ClientPtr client)
     free(syms);
 
     return Success;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the XGetDeviceKeyMapping function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGetDeviceKeyMapping(ClientPtr client, int size,
-                         xGetDeviceKeyMappingReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
 }

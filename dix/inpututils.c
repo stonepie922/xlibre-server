@@ -23,14 +23,14 @@
  * Author: Daniel Stone <daniel@fooishbar.org>
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include "dix-config.h"
-#endif
 
-#include "exevents.h"
+#include "dix/exevents_priv.h"
+#include "dix/input_priv.h"
+#include "os/bug_priv.h"
+
 #include "exglobals.h"
 #include "misc.h"
-#include "input.h"
 #include "inputstr.h"
 #include "xace.h"
 #include "xkbsrv.h"
@@ -53,7 +53,7 @@ check_butmap_change(DeviceIntPtr dev, CARD8 *map, int len, CARD32 *errval_out,
         return BadDevice;
     }
 
-    ret = XaceHook(XACE_DEVICE_ACCESS, client, dev, DixManageAccess);
+    ret = XaceHookDeviceAccess(client, dev, DixManageAccess);
     if (ret != Success) {
         client->errorValue = dev->id;
         return ret;
@@ -134,7 +134,7 @@ check_modmap_change(ClientPtr client, DeviceIntPtr dev, KeyCode *modmap)
     int ret, i;
     XkbDescPtr xkb;
 
-    ret = XaceHook(XACE_DEVICE_ACCESS, client, dev, DixManageAccess);
+    ret = XaceHookDeviceAccess(client, dev, DixManageAccess);
     if (ret != Success)
         return ret;
 
@@ -150,7 +150,7 @@ check_modmap_change(ClientPtr client, DeviceIntPtr dev, KeyCode *modmap)
          * keycode range. */
         if (i < xkb->min_key_code || i > xkb->max_key_code) {
             client->errorValue = i;
-            return -1;
+            return BadValue;
         }
 
         /* None of the new modifiers may be down while we change the
@@ -266,14 +266,14 @@ change_modmap(ClientPtr client, DeviceIntPtr dev, KeyCode *modkeymap,
     do_modmap_change(client, dev, modmap);
 
     /* Change any attached masters/slaves. */
-    if (IsMaster(dev)) {
+    if (InputDevIsMaster(dev)) {
         for (tmp = inputInfo.devices; tmp; tmp = tmp->next) {
-            if (!IsMaster(tmp) && GetMaster(tmp, MASTER_KEYBOARD) == dev)
+            if (!InputDevIsMaster(tmp) && GetMaster(tmp, MASTER_KEYBOARD) == dev)
                 if (check_modmap_change_slave(client, dev, tmp, modmap))
                     do_modmap_change(client, tmp, modmap);
         }
     }
-    else if (!IsFloating(dev) &&
+    else if (!InputDevIsFloating(dev) &&
              GetMaster(dev, MASTER_KEYBOARD)->lastSlave == dev) {
         /* If this fails, expect the results to be weird. */
         if (check_modmap_change(client, dev->master, modmap) == Success)
@@ -292,7 +292,7 @@ generate_modkeymap(ClientPtr client, DeviceIntPtr dev,
     KeyCode *modkeymap = NULL;
     int i, j, ret;
 
-    ret = XaceHook(XACE_DEVICE_ACCESS, client, dev, DixGetAttrAccess);
+    ret = XaceHookDeviceAccess(client, dev, DixGetAttrAccess);
     if (ret != Success)
         return ret;
 
@@ -690,19 +690,6 @@ valuator_mask_fetch_unaccelerated(const ValuatorMask *mask,
         return FALSE;
 }
 
-int
-CountBits(const uint8_t * mask, int len)
-{
-    int i;
-    int ret = 0;
-
-    for (i = 0; i < len; i++)
-        if (BitIsOn(mask, i))
-            ret++;
-
-    return ret;
-}
-
 /**
  * Verifies sanity of the event. If the event is not an internal event,
  * memdumps the first 32 bytes of event to the log, a backtrace, then kill
@@ -718,7 +705,7 @@ verify_internal_event(const InternalEvent *ev)
         ErrorF("dix: invalid event type %d\n", ev->any.header);
 
         for (i = 0; i < sizeof(xEvent); i++, data++) {
-            ErrorF("%02hhx ", *data);
+            ErrorF("%02hx ", *data);
 
             if ((i % 8) == 7)
                 ErrorF("\n");
@@ -1016,8 +1003,7 @@ void
 input_option_set_value(InputOption *opt, const char *value)
 {
     free(opt->opt_val);
-    if (value)
-        opt->opt_val = strdup(value);
+    opt->opt_val = (value ? strdup(value) : NULL);
 }
 
 /* FP1616/FP3232 conversion functions.
@@ -1158,7 +1144,7 @@ xi2mask_isset(XI2Mask *mask, const DeviceIntPtr dev, int event_type)
         set = 1;
     else if (xi2mask_isset_for_device(mask, dev, event_type))
         set = 1;
-    else if (IsMaster(dev) && xi2mask_isset_for_device(mask, inputInfo.all_master_devices, event_type))
+    else if (InputDevIsMaster(dev) && xi2mask_isset_for_device(mask, inputInfo.all_master_devices, event_type))
         set = 1;
 
     return set;

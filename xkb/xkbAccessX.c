@@ -24,27 +24,35 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#if !defined(WIN32)
+#include <sys/time.h>
+#endif
 #include <stdio.h>
 #include <math.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/keysym.h>
-#include "exglobals.h"
 #include <X11/extensions/XIproto.h>
+
+#include "dix/input_priv.h"
+#include "os/log_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
+#include "exglobals.h"
 #include "inputstr.h"
 #include "eventstr.h"
 #include "inpututils.h"
-#include <xkbsrv.h>
-#if !defined(WIN32)
-#include <sys/time.h>
-#endif
 
 int XkbDfltRepeatDelay = 660;
 int XkbDfltRepeatInterval = 40;
+
+#define _OFF_TIMER              0
+#define _KRG_WARN_TIMER         1
+#define _KRG_TIMER              2
+#define _SK_TIMEOUT_TIMER       3
+#define _ALL_TIMEOUT_TIMER      4
 
 #define	DFLT_TIMEOUT_CTRLS (XkbAX_KRGMask|XkbStickyKeysMask|XkbMouseKeysMask)
 #define	DFLT_TIMEOUT_OPTS  (XkbAX_IndicatorFBMask)
@@ -709,14 +717,14 @@ extern int xkbDevicePrivateIndex;
 void
 ProcessPointerEvent(InternalEvent *ev, DeviceIntPtr mouse)
 {
-    DeviceIntPtr dev;
     XkbSrvInfoPtr xkbi = NULL;
     unsigned changed = 0;
     ProcessInputProc backupproc;
     xkbDeviceInfoPtr xkbPrivPtr = XKBDEVICEINFO(mouse);
     DeviceEvent *event = &ev->device_event;
 
-    dev = IsFloating(mouse) ? mouse : GetMaster(mouse, MASTER_KEYBOARD);
+    DeviceIntPtr dev = InputDevIsFloating(mouse)
+        ? mouse : GetMaster(mouse, MASTER_KEYBOARD);
 
     if (dev && dev->key) {
         xkbi = dev->key->xkbInfo;
@@ -728,7 +736,7 @@ ProcessPointerEvent(InternalEvent *ev, DeviceIntPtr mouse)
         changed |= XkbPointerButtonMask;
     }
     else if (event->type == ET_ButtonRelease) {
-        if (IsMaster(dev)) {
+        if (InputDevIsMaster(dev)) {
             DeviceIntPtr source;
             int rc;
 

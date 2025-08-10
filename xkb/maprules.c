@@ -24,9 +24,7 @@
 
  ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <ctype.h>
@@ -42,15 +40,22 @@
 #include <X11/Xfuncs.h>
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
+
+#include "os/log_priv.h"
+#include "xkb/xkbrules_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
 #include "dix.h"
 #include "os.h"
 #include "xkbstr.h"
-#define XKBSRV_NEED_FILE_FUNCS
 #include <xkbsrv.h>
 
-/***====================================================================***/
+
+#define XkbRF_PendingMatch      (1L<<1)
+#define XkbRF_Option            (1L<<2)
+#define XkbRF_Append            (1L<<3)
+#define XkbRF_Normal            (1L<<4)
 
 #define DFLT_LINE_SIZE	128
 
@@ -89,7 +94,9 @@ InputLineAddChar(InputLine * line, int ch)
 {
     if (line->num_line >= line->sz_line) {
         if (line->line == line->buf) {
-            line->line = xallocarray(line->sz_line, 2);
+            line->line = calloc(line->sz_line, 2);
+            if (line->line == NULL)
+                return -1;
             memcpy(line->line, line->buf, line->sz_line);
         }
         else {
@@ -258,7 +265,6 @@ SetUpRemap(InputLine * line, RemapSpec * remap)
 {
     char *tok, *str;
     unsigned present, l_ndx_present, v_ndx_present;
-    register int i;
     int len, ndx;
     _Xstrtokparams strtok_buf;
     Bool found;
@@ -273,7 +279,7 @@ SetUpRemap(InputLine * line, RemapSpec * remap)
         str = NULL;
         if (strcmp(tok, "=") == 0)
             continue;
-        for (i = 0; i < MAX_WORDS; i++) {
+        for (int i = 0; i < MAX_WORDS; i++) {
             len = strlen(cname[i]);
             if (strncmp(cname[i], tok, len) == 0) {
                 if (strlen(tok) > len) {
@@ -319,7 +325,7 @@ SetUpRemap(InputLine * line, RemapSpec * remap)
         unsigned mask = PART_MASK;
 
         ErrorF("Mapping needs at least one of ");
-        for (i = 0; (i < MAX_WORDS); i++) {
+        for (int i = 0; (i < MAX_WORDS); i++) {
             if ((1L << i) & mask) {
                 mask &= ~(1L << i);
                 if (mask)
@@ -372,12 +378,11 @@ CheckLine(InputLine * line,
           RemapSpec * remap, XkbRF_RulePtr rule, XkbRF_GroupPtr group)
 {
     char *str, *tok;
-    register int nread, i;
-    FileSpec tmp;
+    register int nread;
     _Xstrtokparams strtok_buf;
     Bool append = FALSE;
 
-    if (line->line[0] == '!') {
+    if (line && line->line && line->line[0] == '!') {
         if (line->line[1] == '$' ||
             (line->line[1] == ' ' && line->line[2] == '$')) {
             char *gname = strchr(line->line, '$');
@@ -394,6 +399,8 @@ CheckLine(InputLine * line,
                 return FALSE;
             group->name = Xstrdup(gname);
             group->words = Xstrdup(words);
+
+            int i;
             for (i = 1, words = group->words; *words; words++) {
                 if (*words == ' ') {
                     *words++ = '\0';
@@ -414,7 +421,9 @@ CheckLine(InputLine * line,
         DebugF("Illegal line of data ignored\n");
         return FALSE;
     }
-    memset((char *) &tmp, 0, sizeof(FileSpec));
+
+    FileSpec tmp = { 0 };
+
     str = line->line;
     for (nread = 0; (tok = _XStrtok(str, " ", strtok_buf)) != NULL; nread++) {
         str = NULL;
@@ -457,7 +466,7 @@ CheckLine(InputLine * line,
     rule->geometry = Xstrdup(tmp.name[GEOMETRY]);
 
     rule->layout_num = rule->variant_num = 0;
-    for (i = 0; i < nread; i++) {
+    for (int i = 0; i < nread; i++) {
         if (remap->remap[i].index) {
             if (remap->remap[i].word == LAYOUT)
                 rule->layout_num = remap->remap[i].index;
@@ -485,9 +494,7 @@ _Concat(char *str1, const char *str2)
 static void
 squeeze_spaces(char *p1)
 {
-    char *p2;
-
-    for (p2 = p1; *p2; p2++) {
+    for (char *p2 = p1; *p2; p2++) {
         *p1 = *p2;
         if (*p1 != ' ')
             p1++;
@@ -513,7 +520,6 @@ MakeMultiDefs(XkbRF_MultiDefsPtr mdefs, XkbRF_VarDefsPtr defs)
         else {
             char *p;
             char *layout;
-            int i;
 
             layout = Xstrdup(defs->layout);
             if (layout == NULL)
@@ -521,7 +527,7 @@ MakeMultiDefs(XkbRF_MultiDefsPtr mdefs, XkbRF_VarDefsPtr defs)
             squeeze_spaces(layout);
             mdefs->layout[1] = layout;
             p = layout;
-            for (i = 2; i <= XkbNumKbdGroups; i++) {
+            for (int i = 2; i <= XkbNumKbdGroups; i++) {
                 if ((p = strchr(p, ','))) {
                     *p++ = '\0';
                     mdefs->layout[i] = p;
@@ -542,7 +548,6 @@ MakeMultiDefs(XkbRF_MultiDefsPtr mdefs, XkbRF_VarDefsPtr defs)
         else {
             char *p;
             char *variant;
-            int i;
 
             variant = Xstrdup(defs->variant);
             if (variant == NULL)
@@ -550,7 +555,7 @@ MakeMultiDefs(XkbRF_MultiDefsPtr mdefs, XkbRF_VarDefsPtr defs)
             squeeze_spaces(variant);
             mdefs->variant[1] = variant;
             p = variant;
-            for (i = 2; i <= XkbNumKbdGroups; i++) {
+            for (int i = 2; i <= XkbNumKbdGroups; i++) {
                 if ((p = strchr(p, ','))) {
                     *p++ = '\0';
                     mdefs->variant[i] = p;
@@ -789,7 +794,7 @@ XkbRF_SubstituteVars(char *name, XkbRF_MultiDefsPtr mdefs)
         }
         str = index(&str[0], '%');
     }
-    name = malloc(len + 1);
+    name = calloc(1, len + 1);
     str = orig;
     outstr = name;
     while (*str != '\0') {
@@ -893,12 +898,14 @@ XkbRF_AddRule(XkbRF_RulesPtr rules)
     if (rules->sz_rules < 1) {
         rules->sz_rules = 16;
         rules->num_rules = 0;
-        rules->rules = calloc(rules->sz_rules, sizeof(XkbRF_RuleRec));
+        if (!(rules->rules = calloc(rules->sz_rules, sizeof(XkbRF_RuleRec))))
+            return NULL;
     }
     else if (rules->num_rules >= rules->sz_rules) {
         rules->sz_rules *= 2;
-        rules->rules = reallocarray(rules->rules,
-                                    rules->sz_rules, sizeof(XkbRF_RuleRec));
+        if (!(rules->rules = reallocarray(rules->rules,
+                                    rules->sz_rules, sizeof(XkbRF_RuleRec))))
+            return NULL;
     }
     if (!rules->rules) {
         rules->sz_rules = rules->num_rules = 0;
@@ -915,12 +922,14 @@ XkbRF_AddGroup(XkbRF_RulesPtr rules)
     if (rules->sz_groups < 1) {
         rules->sz_groups = 16;
         rules->num_groups = 0;
-        rules->groups = calloc(rules->sz_groups, sizeof(XkbRF_GroupRec));
+        if (!(rules->groups = calloc(rules->sz_groups, sizeof(XkbRF_GroupRec))))
+            return NULL;
     }
     else if (rules->num_groups >= rules->sz_groups) {
         rules->sz_groups *= 2;
-        rules->groups = reallocarray(rules->groups,
-                                     rules->sz_groups, sizeof(XkbRF_GroupRec));
+        if (!(rules->groups = reallocarray(rules->groups,
+                                     rules->sz_groups, sizeof(XkbRF_GroupRec))))
+            return NULL;
     }
     if (!rules->groups) {
         rules->sz_groups = rules->num_groups = 0;
@@ -966,84 +975,41 @@ XkbRF_LoadRules(FILE * file, XkbRF_RulesPtr rules)
     return TRUE;
 }
 
-Bool
-XkbRF_LoadRulesByName(char *base, char *locale, XkbRF_RulesPtr rules)
-{
-    FILE *file;
-    char buf[PATH_MAX];
-    Bool ok;
-
-    if ((!base) || (!rules))
-        return FALSE;
-    if (locale) {
-        if (snprintf(buf, PATH_MAX, "%s-%s", base, locale) >= PATH_MAX)
-            return FALSE;
-    }
-    else {
-        if (strlen(base) + 1 > PATH_MAX)
-            return FALSE;
-        strcpy(buf, base);
-    }
-
-    file = fopen(buf, "r");
-    if ((!file) && (locale)) {  /* fallback if locale was specified */
-        strcpy(buf, base);
-        file = fopen(buf, "r");
-    }
-    if (!file)
-        return FALSE;
-    ok = XkbRF_LoadRules(file, rules);
-    fclose(file);
-    return ok;
-}
-
-/***====================================================================***/
-
-XkbRF_RulesPtr
-XkbRF_Create(void)
-{
-    return calloc(1, sizeof(XkbRF_RulesRec));
-}
-
-/***====================================================================***/
-
 void
-XkbRF_Free(XkbRF_RulesPtr rules, Bool freeRules)
+XkbRF_Free(XkbRF_RulesPtr rules)
 {
-    int i;
-    XkbRF_RulePtr rule;
-    XkbRF_GroupPtr group;
-
     if (!rules)
         return;
+
     if (rules->rules) {
-        for (i = 0, rule = rules->rules; i < rules->num_rules; i++, rule++) {
-            free((void *) rule->model);
-            free((void *) rule->layout);
-            free((void *) rule->variant);
-            free((void *) rule->option);
-            free((void *) rule->keycodes);
-            free((void *) rule->symbols);
-            free((void *) rule->types);
-            free((void *) rule->compat);
-            free((void *) rule->geometry);
-            memset((char *) rule, 0, sizeof(XkbRF_RuleRec));
+        XkbRF_RulePtr r = rules->rules;
+        int num = rules->num_rules;
+        for (int i = 0; i < num; i++) {
+            // the typecast on free() is necessary because the pointers are const
+            free((void *) r[i].model);
+            free((void *) r[i].layout);
+            free((void *) r[i].variant);
+            free((void *) r[i].option);
+            free((void *) r[i].keycodes);
+            free((void *) r[i].symbols);
+            free((void *) r[i].types);
+            free((void *) r[i].compat);
+            free((void *) r[i].geometry);
         }
         free(rules->rules);
-        rules->num_rules = rules->sz_rules = 0;
-        rules->rules = NULL;
     }
 
     if (rules->groups) {
-        for (i = 0, group = rules->groups; i < rules->num_groups; i++, group++) {
-            free((void *) group->name);
-            free(group->words);
+        XkbRF_GroupPtr g = rules->groups;
+        int num = rules->num_groups;
+        for (int i = 0; i < num; i++) {
+            // the typecast on free() is necessary because the pointers are const
+            free((void *) g[i].name);
+            free(g[i].words);
         }
         free(rules->groups);
-        rules->num_groups = 0;
-        rules->groups = NULL;
     }
-    if (freeRules)
-        free(rules);
+
+    free(rules);
     return;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  * Copyright 2010, 2021 Red Hat, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -51,24 +51,25 @@
 
 #include <X11/X.h>
 #include <X11/Xproto.h>
+#include <X11/extensions/xfixesproto.h>
+
+#include "dix/selection_priv.h"
+
 #include "misc.h"
 #include "os.h"
 #include "dixstruct.h"
 #include "extnsionst.h"
-#include <X11/extensions/xfixesproto.h>
 #include "windowstr.h"
-#include "selection.h"
 #include "xfixes.h"
 
 extern int XFixesEventBase;
+extern int XFixesUseXinerama;
 
 typedef struct _XFixesClient {
     CARD32 major_version;
 } XFixesClientRec, *XFixesClientPtr;
 
 #define GetXFixesClient(pClient) ((XFixesClientPtr)dixLookupPrivate(&(pClient)->devPrivates, XFixesClientPrivateKey))
-
-extern int (*ProcXFixesVector[XFixesNumberRequests]) (ClientPtr);
 
 /* Save set */
 int
@@ -109,9 +110,6 @@ SXFixesCursorNotifyEvent(xXFixesCursorNotifyEvent * from,
 int
  ProcXFixesGetCursorImage(ClientPtr client);
 
-int
- SProcXFixesGetCursorImage(ClientPtr client);
-
 /* Cursor names (Version 2) */
 
 int
@@ -128,9 +126,6 @@ int
 
 int
  ProcXFixesGetCursorImageAndName(ClientPtr client);
-
-int
- SProcXFixesGetCursorImageAndName(ClientPtr client);
 
 /* Cursor replacement (Version 2) */
 
@@ -252,15 +247,6 @@ int
 int
  SProcXFixesExpandRegion(ClientPtr client);
 
-int
- PanoramiXFixesSetGCClipRegion(ClientPtr client);
-
-int
- PanoramiXFixesSetWindowShapeRegion(ClientPtr client);
-
-int
- PanoramiXFixesSetPictureClipRegion(ClientPtr client);
-
 /* Cursor Visibility (Version 4) */
 
 int
@@ -303,17 +289,13 @@ int
 int
  SProcXFixesSetClientDisconnectMode(ClientPtr client);
 
-int
- SProcXFixesGetClientDisconnectMode(ClientPtr client);
-
 Bool
  XFixesShouldDisconnectClient(ClientPtr client);
 
 /* Xinerama */
-#ifdef PANORAMIX
-extern int (*PanoramiXSaveXFixesVector[XFixesNumberRequests]) (ClientPtr);
+#ifdef XINERAMA
 void PanoramiXFixesInit(void);
 void PanoramiXFixesReset(void);
-#endif
+#endif /* XINERAMA */
 
 #endif                          /* _XFIXESINT_H_ */

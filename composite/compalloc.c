@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,9 +41,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/resource_priv.h"
+#include "os/bug_priv.h"
 
 #include "compint.h"
 
@@ -135,8 +136,9 @@ compHandleMarkedWindows(WindowPtr pWin, WindowPtr pLayerWin)
 int
 compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
 {
+    BUG_RETURN_VAL(!pClient, BadMatch);
+
     CompWindowPtr cw = GetCompWindow(pWin);
-    CompClientWindowPtr ccw;
     CompScreenPtr cs = GetCompScreen(pWin->drawable.pScreen);
     WindowPtr pLayerWin;
     Bool anyMarked = FALSE;
@@ -153,7 +155,7 @@ compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
      * Only one Manual update is allowed
      */
     if (cw && update == CompositeRedirectManual)
-        for (ccw = cw->clients; ccw; ccw = ccw->next)
+        for (CompClientWindowPtr ccw = cw->clients; ccw; ccw = ccw->next)
             if (ccw->update == CompositeRedirectManual)
                 return BadAccess;
 
@@ -162,7 +164,7 @@ compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
      * The client *could* allocate multiple, but while supported,
      * it is not expected to be common
      */
-    ccw = malloc(sizeof(CompClientWindowRec));
+    CompClientWindowPtr ccw = calloc(1, sizeof(CompClientWindowRec));
     if (!ccw)
         return BadAlloc;
     ccw->id = FakeClientID(pClient->index);
@@ -171,7 +173,7 @@ compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
      * Now make sure there's a per-window structure to hang this from
      */
     if (!cw) {
-        cw = malloc(sizeof(CompWindowRec));
+        cw = calloc(1, sizeof(CompWindowRec));
         if (!cw) {
             free(ccw);
             return BadAlloc;
@@ -218,7 +220,7 @@ compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
     }
 
     if (!compCheckRedirect(pWin)) {
-        FreeResource(ccw->id, RT_NONE);
+        FreeResource(ccw->id, X11_RESTYPE_NONE);
         status = BadAlloc;
     }
 
@@ -248,7 +250,7 @@ compRestoreWindow(WindowPtr pWin, PixmapPtr pPixmap)
             val.val = IncludeInferiors;
             ChangeGC(NullClient, pGC, GCSubwindowMode, &val);
             ValidateGC(&pWin->drawable, pGC);
-            (*pGC->ops->CopyArea) (&pPixmap->drawable,
+            (void) (*pGC->ops->CopyArea) (&pPixmap->drawable,
                                    &pWin->drawable, pGC, x, y, w, h, 0, 0);
             FreeScratchGC(pGC);
         }
@@ -311,7 +313,7 @@ compFreeClientWindow(WindowPtr pWin, XID id)
 
     if (pPixmap) {
         compRestoreWindow(pWin, pPixmap);
-        (*pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
     }
 }
 
@@ -325,12 +327,14 @@ compUnredirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
     CompWindowPtr cw = GetCompWindow(pWin);
     CompClientWindowPtr ccw;
 
+    BUG_RETURN_VAL(!pClient, BadValue);
+
     if (!cw)
         return BadValue;
 
     for (ccw = cw->clients; ccw; ccw = ccw->next)
-        if (ccw->update == update && CLIENT_ID(ccw->id) == pClient->index) {
-            FreeResource(ccw->id, RT_NONE);
+        if (ccw->update == update && dixClientIdForXID(ccw->id) == pClient->index) {
+            FreeResource(ccw->id, X11_RESTYPE_NONE);
             return Success;
         }
     return BadValue;
@@ -344,14 +348,13 @@ int
 compRedirectSubwindows(ClientPtr pClient, WindowPtr pWin, int update)
 {
     CompSubwindowsPtr csw = GetCompSubwindows(pWin);
-    CompClientWindowPtr ccw;
     WindowPtr pChild;
 
     /*
      * Only one Manual update is allowed
      */
     if (csw && update == CompositeRedirectManual)
-        for (ccw = csw->clients; ccw; ccw = ccw->next)
+        for (CompClientWindowPtr ccw = csw->clients; ccw; ccw = ccw->next)
             if (ccw->update == CompositeRedirectManual)
                 return BadAccess;
     /*
@@ -359,7 +362,7 @@ compRedirectSubwindows(ClientPtr pClient, WindowPtr pWin, int update)
      * The client *could* allocate multiple, but while supported,
      * it is not expected to be common
      */
-    ccw = malloc(sizeof(CompClientWindowRec));
+    CompClientWindowPtr ccw = calloc(1, sizeof(CompClientWindowRec));
     if (!ccw)
         return BadAlloc;
     ccw->id = FakeClientID(pClient->index);
@@ -368,7 +371,7 @@ compRedirectSubwindows(ClientPtr pClient, WindowPtr pWin, int update)
      * Now make sure there's a per-window structure to hang this from
      */
     if (!csw) {
-        csw = malloc(sizeof(CompSubwindowsRec));
+        csw = calloc(1, sizeof(CompSubwindowsRec));
         if (!csw) {
             free(ccw);
             return BadAlloc;
@@ -428,7 +431,7 @@ compFreeClientSubwindows(WindowPtr pWin, XID id)
         return;
     for (prev = &csw->clients; (ccw = *prev); prev = &ccw->next) {
         if (ccw->id == id) {
-            ClientPtr pClient = clients[CLIENT_ID(id)];
+            ClientPtr pClient = dixClientForXID(id);
 
             *prev = ccw->next;
             if (ccw->update == CompositeRedirectManual) {
@@ -477,8 +480,8 @@ compUnredirectSubwindows(ClientPtr pClient, WindowPtr pWin, int update)
     if (!csw)
         return BadValue;
     for (ccw = csw->clients; ccw; ccw = ccw->next)
-        if (ccw->update == update && CLIENT_ID(ccw->id) == pClient->index) {
-            FreeResource(ccw->id, RT_NONE);
+        if (ccw->update == update && dixClientIdForXID(ccw->id) == pClient->index) {
+            FreeResource(ccw->id, X11_RESTYPE_NONE);
             return Success;
         }
     return BadValue;
@@ -497,9 +500,8 @@ compRedirectOneSubwindow(WindowPtr pParent, WindowPtr pWin)
     if (!csw)
         return Success;
     for (ccw = csw->clients; ccw; ccw = ccw->next) {
-        int ret = compRedirectWindow(clients[CLIENT_ID(ccw->id)],
+        int ret = compRedirectWindow(dixClientForXID(ccw->id),
                                      pWin, ccw->update);
-
         if (ret != Success)
             return ret;
     }
@@ -519,9 +521,8 @@ compUnredirectOneSubwindow(WindowPtr pParent, WindowPtr pWin)
     if (!csw)
         return Success;
     for (ccw = csw->clients; ccw; ccw = ccw->next) {
-        int ret = compUnredirectWindow(clients[CLIENT_ID(ccw->id)],
+        int ret = compUnredirectWindow(dixClientForXID(ccw->id),
                                        pWin, ccw->update);
-
         if (ret != Success)
             return ret;
     }
@@ -553,11 +554,12 @@ compNewPixmap(WindowPtr pWin, int x, int y, int w, int h)
             val.val = IncludeInferiors;
             ChangeGC(NullClient, pGC, GCSubwindowMode, &val);
             ValidateGC(&pPixmap->drawable, pGC);
-            (*pGC->ops->CopyArea) (&pParent->drawable,
-                                   &pPixmap->drawable,
-                                   pGC,
-                                   x - pParent->drawable.x,
-                                   y - pParent->drawable.y, w, h, 0, 0);
+            (void) (*pGC->ops->CopyArea) (&pParent->drawable,
+                                          &pPixmap->drawable,
+                                          pGC,
+                                          x - pParent->drawable.x,
+                                          y - pParent->drawable.y,
+                                          w, h, 0, 0);
             FreeScratchGC(pGC);
         }
     }

@@ -42,8 +42,6 @@
 #include "xf86Priv.h"
 
 #include "xf86Bus.h"
-
-#define XF86_OS_PRIVS
 #include "xf86_OSproc.h"
 
 Bool fbSlotClaimed = FALSE;
@@ -77,24 +75,5 @@ xf86ClaimFbSlot(DriverPtr drvp, int chipset, GDevPtr dev, Bool active)
     xf86AddDevToEntity(num, dev);
 
     fbSlotClaimed = TRUE;
-    return num;
-}
-
-/*
- * Get the list of FB "slots" claimed by a screen
- */
-int
-xf86GetFbInfoForScreen(int scrnIndex)
-{
-    int num = 0;
-    int i;
-    EntityPtr p;
-
-    for (i = 0; i < xf86Screens[scrnIndex]->numEntities; i++) {
-        p = xf86Entities[xf86Screens[scrnIndex]->entityList[i]];
-        if (p->bus.type == BUS_NONE) {
-            num++;
-        }
-    }
     return num;
 }

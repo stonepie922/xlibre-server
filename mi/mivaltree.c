@@ -88,21 +88,19 @@ Equipment Corporation.
   *             Bob Scheifler -- avoid miComputeClips for unmapped windows,
   *                              valdata changes
   */
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include    <X11/X.h>
+
+#include    "mi/mi_priv.h"
+
 #include    "scrnintstr.h"
 #include    "validate.h"
 #include    "windowstr.h"
-#include    "mi.h"
 #include    "regionstr.h"
 #include    "mivalidate.h"
 #include    "globals.h"
-#ifdef COMPOSITE
 #include    "compint.h"
-#endif
 
 /*
  * Compute the visibility of a shaped window
@@ -167,11 +165,7 @@ miShapedWindowIn(RegionPtr universe, RegionPtr bounding,
  * siblings or parent windows
  */
 
-#ifdef COMPOSITE
 #define TreatAsTransparent(w)	((w)->redirectDraw == RedirectDrawManual)
-#else
-#define TreatAsTransparent(w)	FALSE
-#endif
 
 #define HasParentRelativeBorder(w) (!(w)->borderIsPixel && \
 				    HasBorder(w) && \
@@ -228,7 +222,6 @@ miComputeClips(WindowPtr pParent,
         dy = 32767;
     borderSize.y2 = dy;
 
-#ifdef COMPOSITE
     /*
      * In redirected drawing case, reset universe to borderSize
      */
@@ -238,7 +231,6 @@ miComputeClips(WindowPtr pParent,
         compSetRedirectBorderClip (pParent, universe);
         RegionCopy(universe, &pParent->borderSize);
     }
-#endif
 
     oldVis = pParent->visibility;
     switch (RegionContainsRect(universe, &borderSize)) {
@@ -508,11 +500,9 @@ miTreeObscured(WindowPtr pParent)
 static RegionPtr
 getBorderClip(WindowPtr pWin)
 {
-#ifdef COMPOSITE
     if (pWin->redirectDraw != RedirectDrawNone)
         return compGetRedirectBorderClip(pWin);
     else
-#endif
         return &pWin->borderClip;
 }
 

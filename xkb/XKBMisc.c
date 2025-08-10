@@ -24,18 +24,18 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
+#include <X11/keysym.h>
+
+#include "xkb/xkbfmisc_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
-#include <X11/keysym.h>
-#define	XKBSRV_NEED_FILE_FUNCS
-#include <xkbsrv.h>
 
 /***====================================================================***/
 

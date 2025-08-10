@@ -26,13 +26,26 @@
 
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/xtestproto.h>
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/input_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/exevents_priv.h"
+#include "mi/mi_priv.h"
+#include "mi/mipointer_priv.h"
+#include "miext/extinit_priv.h"
+#include "os/client_priv.h"
+#include "os/osdep.h"
+#include "Xext/panoramiX.h"
+#include "Xext/panoramiXsrv.h"
+
 #include "misc.h"
 #include "os.h"
 #include "dixstruct.h"
@@ -40,22 +53,16 @@
 #include "windowstr.h"
 #include "inputstr.h"
 #include "scrnintstr.h"
-#include "dixevents.h"
 #include "sleepuntil.h"
-#include "mi.h"
 #include "xkbsrv.h"
 #include "xkbstr.h"
-#include <X11/extensions/xtestproto.h>
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "exglobals.h"
 #include "mipointer.h"
 #include "xserver-properties.h"
-#include "exevents.h"
 #include "eventstr.h"
 #include "inpututils.h"
 
-#include "extinit.h"
+Bool noTestExtensions = FALSE;
 
 /* XTest events are sent during request processing and may be interrupted by
  * a SIGIO. We need a separate event list to avoid events overwriting each
@@ -74,11 +81,6 @@ static InternalEvent *xtest_evlist;
  * Neither of these devices can be deleted.
  */
 DeviceIntPtr xtestpointer, xtestkeyboard;
-
-#ifdef PANORAMIX
-#include "panoramiX.h"
-#include "panoramiXsrv.h"
-#endif
 
 static int XTestSwapFakeInput(ClientPtr /* client */ ,
                               xReq *    /* req */
@@ -126,10 +128,10 @@ ProcXTestCompareCursor(ClientPtr client)
     if (stuff->cursor == None)
         pCursor = NullCursor;
     else if (stuff->cursor == XTestCurrentCursor)
-        pCursor = GetSpriteCursor(ptr);
+        pCursor = InputDevGetSpriteCursor(ptr);
     else {
         rc = dixLookupResourceByType((void **) &pCursor, stuff->cursor,
-                                     RT_CURSOR, client, DixReadAccess);
+                                     X11_RESTYPE_CURSOR, client, DixReadAccess);
         if (rc != Success) {
             client->errorValue = stuff->cursor;
             return rc;
@@ -148,6 +150,35 @@ ProcXTestCompareCursor(ClientPtr client)
     return Success;
 }
 
+void
+XTestDeviceSendEvents(DeviceIntPtr dev,
+                      int type,
+                      int detail,
+                      int flags,
+                      const ValuatorMask *mask)
+{
+    int nevents = 0;
+    int i;
+
+    switch (type) {
+    case MotionNotify:
+        nevents = GetPointerEvents(xtest_evlist, dev, type, 0, flags, mask);
+        break;
+    case ButtonPress:
+    case ButtonRelease:
+        nevents = GetPointerEvents(xtest_evlist, dev, type, detail, flags, mask);
+        break;
+    case KeyPress:
+    case KeyRelease:
+        nevents =
+            GetKeyboardEvents(xtest_evlist, dev, type, detail);
+        break;
+    }
+
+    for (i = 0; i < nevents; i++)
+        mieqProcessDeviceEvent(dev, &xtest_evlist[i], miPointerGetScreen(inputInfo.pointer));
+}
+
 static int
 ProcXTestFakeInput(ClientPtr client)
 {
@@ -161,13 +192,11 @@ ProcXTestFakeInput(ClientPtr client)
     int valuators[MAX_VALUATORS] = { 0 };
     int numValuators = 0;
     int firstValuator = 0;
-    int nevents = 0;
-    int i;
     int base = 0;
     int flags = 0;
     int need_ptr_update = 1;
 
-    nev = (stuff->length << 2) - sizeof(xReq);
+    nev = (client->req_len << 2) - sizeof(xReq);
     if ((nev % sizeof(xEvent)) || !nev)
         return BadLength;
     nev /= sizeof(xEvent);
@@ -343,7 +372,6 @@ ProcXTestFakeInput(ClientPtr client)
         /* swap the request back so we can simply re-execute it */
         if (client->swapped) {
             (void) XTestSwapFakeInput(client, (xReq *) stuff);
-            swaps(&stuff->length);
         }
         ResetCurrentRequest(client);
         client->sequence--;
@@ -353,7 +381,7 @@ ProcXTestFakeInput(ClientPtr client)
     switch (type) {
     case KeyPress:
     case KeyRelease:
-        if (!dev->key)
+        if ((!dev) || (!dev->key))
             return BadDevice;
 
         if (ev->u.u.detail < dev->key->xkbInfo->desc->min_key_code ||
@@ -365,7 +393,7 @@ ProcXTestFakeInput(ClientPtr client)
         need_ptr_update = 0;
         break;
     case MotionNotify:
-        if (!dev->valuator)
+        if (!dev || !dev->valuator)
             return BadDevice;
 
         if (!(extension || ev->u.keyButtonPointer.root == None)) {
@@ -382,7 +410,7 @@ ProcXTestFakeInput(ClientPtr client)
             if ((flags & POINTER_ABSOLUTE) && firstValuator <= 1 && numValuators > 0) {
                 if (firstValuator == 0)
                     valuators[0] += root->drawable.pScreen->x;
-                if (firstValuator < 2 && firstValuator + numValuators > 1)
+                if (firstValuator + numValuators > 1)
                     valuators[1 - firstValuator] += root->drawable.pScreen->y;
             }
         }
@@ -396,7 +424,7 @@ ProcXTestFakeInput(ClientPtr client)
         break;
     case ButtonPress:
     case ButtonRelease:
-        if (!dev->button)
+        if (!dev || !dev->button)
             return BadDevice;
 
         if (!ev->u.u.detail || ev->u.u.detail > dev->button->numButtons) {
@@ -408,26 +436,10 @@ ProcXTestFakeInput(ClientPtr client)
     if (screenIsSaved == SCREEN_SAVER_ON)
         dixSaveScreens(serverClient, SCREEN_SAVER_OFF, ScreenSaverReset);
 
-    switch (type) {
-    case MotionNotify:
-        valuator_mask_set_range(&mask, firstValuator, numValuators, valuators);
-        nevents = GetPointerEvents(xtest_evlist, dev, type, 0, flags, &mask);
-        break;
-    case ButtonPress:
-    case ButtonRelease:
-        valuator_mask_set_range(&mask, firstValuator, numValuators, valuators);
-        nevents = GetPointerEvents(xtest_evlist, dev, type, ev->u.u.detail,
-                                   flags, &mask);
-        break;
-    case KeyPress:
-    case KeyRelease:
-        nevents =
-            GetKeyboardEvents(xtest_evlist, dev, type, ev->u.u.detail);
-        break;
-    }
+    valuator_mask_set_range(&mask, firstValuator, numValuators, valuators);
 
-    for (i = 0; i < nevents; i++)
-        mieqProcessDeviceEvent(dev, &xtest_evlist[i], miPointerGetScreen(inputInfo.pointer));
+    if (dev && dev->sendEventsProc)
+        (*dev->sendEventsProc) (dev, type, ev->u.u.detail, flags, &mask);
 
     if (need_ptr_update)
         miPointerUpdateSprite(dev);
@@ -473,8 +485,6 @@ static int _X_COLD
 SProcXTestGetVersion(ClientPtr client)
 {
     REQUEST(xXTestGetVersionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXTestGetVersionReq);
     swaps(&stuff->minorVersion);
     return ProcXTestGetVersion(client);
@@ -484,8 +494,6 @@ static int _X_COLD
 SProcXTestCompareCursor(ClientPtr client)
 {
     REQUEST(xXTestCompareCursorReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXTestCompareCursorReq);
     swapl(&stuff->window);
     swapl(&stuff->cursor);
@@ -500,7 +508,7 @@ XTestSwapFakeInput(ClientPtr client, xReq * req)
     xEvent sev;
     EventSwapPtr proc;
 
-    nev = ((req->length << 2) - sizeof(xReq)) / sizeof(xEvent);
+    nev = ((client->req_len << 2) - sizeof(xReq)) / sizeof(xEvent);
     for (ev = (xEvent *) &req[1]; --nev >= 0; ev++) {
         int evtype = ev->u.u.type & 0177;
         /* Swap event */
@@ -523,21 +531,10 @@ SProcXTestFakeInput(ClientPtr client)
 
     REQUEST(xReq);
 
-    swaps(&stuff->length);
     n = XTestSwapFakeInput(client, stuff);
     if (n != Success)
         return n;
     return ProcXTestFakeInput(client);
-}
-
-static int _X_COLD
-SProcXTestGrabControl(ClientPtr client)
-{
-    REQUEST(xXTestGrabControlReq);
-
-    swaps(&stuff->length);
-    REQUEST_SIZE_MATCH(xXTestGrabControlReq);
-    return ProcXTestGrabControl(client);
 }
 
 static int _X_COLD
@@ -552,7 +549,7 @@ SProcXTestDispatch(ClientPtr client)
     case X_XTestFakeInput:
         return SProcXTestFakeInput(client);
     case X_XTestGrabControl:
-        return SProcXTestGrabControl(client);
+        return ProcXTestGrabControl(client);
     default:
         return BadRequest;
     }
@@ -650,7 +647,7 @@ AllocXTestDevice(ClientPtr client, const char *name,
 BOOL
 IsXTestDevice(DeviceIntPtr dev, DeviceIntPtr master)
 {
-    if (IsMaster(dev))
+    if (InputDevIsMaster(dev))
         return FALSE;
 
     /* deviceid 0 is reserved for XIAllDevices, non-zero mid means XTest

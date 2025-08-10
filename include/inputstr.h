@@ -54,20 +54,11 @@ SOFTWARE.
 #include "window.h"
 #include "dixstruct.h"
 #include "cursorstr.h"
-#include "geext.h"
 #include "privates.h"
-
-extern _X_EXPORT void AssignTypeAndName(DeviceIntPtr dev,
-                                        Atom type,
-                                        const char *name);
 
 #define BitIsOn(ptr, bit) (!!(((const BYTE *) (ptr))[(bit)>>3] & (1 << ((bit) & 7))))
 #define SetBit(ptr, bit)  (((BYTE *) (ptr))[(bit)>>3] |= (1 << ((bit) & 7)))
 #define ClearBit(ptr, bit) (((BYTE *)(ptr))[(bit)>>3] &= ~(1 << ((bit) & 7)))
-extern _X_EXPORT int CountBits(const uint8_t * mask, int len);
-
-#define SameClient(obj,client) \
-	(CLIENT_BITS((obj)->resource) == (client)->clientAsMask)
 
 #define EMASKSIZE	(MAXDEVICES + 2)
 
@@ -162,10 +153,6 @@ typedef struct _OtherInputMasks {
  * keyboard/pointer device) going at once in the server.
  */
 
-#define MasksPerDetailMask 8    /* 256 keycodes and 256 possible
-                                   modifier combinations, but only
-                                   3 buttons. */
-
 typedef struct _DetailRec {     /* Grab details may be bit masks */
     unsigned int exact;
     Mask *pMask;
@@ -223,13 +210,13 @@ typedef struct _SpriteRec {
     WindowPtr win;              /* window of logical position */
     HotSpot hot;                /* logical pointer position */
     HotSpot hotPhys;            /* physical pointer position */
-#ifdef PANORAMIX
+#ifdef XINERAMA
     ScreenPtr screen;           /* all others are in Screen 0 coordinates */
     RegionRec Reg1;             /* Region 1 for confining motion */
     RegionRec Reg2;             /* Region 2 for confining virtual motion */
     WindowPtr windows[MAXSCREENS];
     WindowPtr confineWin;       /* confine window */
-#endif
+#endif /* XINERAMA */
     /* The window trace information is used at dix/events.c to avoid having
      * to compute all the windows between the root and the current pointer
      * window each time a button or key goes down. The grabs on each of those
@@ -330,15 +317,6 @@ typedef struct _TouchPointInfo {
     size_t history_elements;    /* Number of current elements in history */
     size_t history_size;        /* Size of history in elements */
 } TouchPointInfoRec;
-
-typedef struct _DDXTouchPointInfo {
-    uint32_t client_id;         /* touch ID as seen in client events */
-    Bool active;                /* whether or not the touch is active */
-    uint32_t ddx_id;            /* touch ID given by the DDX */
-    Bool emulate_pointer;
-
-    ValuatorMask *valuators;    /* last axis values as posted, pre-transform */
-} DDXTouchPointInfoRec;
 
 typedef struct _TouchClassRec {
     int sourceid;
@@ -500,18 +478,6 @@ typedef struct _XIPropertyHandler {
     int (*DeleteProperty) (DeviceIntPtr dev, Atom property);
 } XIPropertyHandler, *XIPropertyHandlerPtr;
 
-/* states for devices */
-
-#define NOT_GRABBED		0
-#define THAWED			1
-#define THAWED_BOTH		2       /* not a real state */
-#define FREEZE_NEXT_EVENT	3
-#define FREEZE_BOTH_NEXT_EVENT	4
-#define FROZEN			5       /* any state >= has device frozen */
-#define FROZEN_NO_EVENT		5
-#define FROZEN_WITH_EVENT	6
-#define THAW_OTHERS		7
-
 typedef struct _GrabInfoRec {
     TimeStamp grabTime;
     Bool fromPassiveGrab;       /* true if from passive grab */
@@ -628,8 +594,11 @@ typedef struct _DeviceIntRec {
 
     /* XTest related master device id */
     int xtest_master_id;
+    DeviceSendEventsProc sendEventsProc;
 
     struct _SyncCounter *idle_counter;
+
+    Bool ignoreXkbActionsBehaviors; /* TRUE if keys don't trigger behaviors and actions */
 } DeviceIntRec;
 
 typedef struct {

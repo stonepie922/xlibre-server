@@ -24,9 +24,7 @@
  * SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -49,13 +47,6 @@
 #include "glxdricommon.h"
 
 #include "extension_string.h"
-
-/* RTLD_LOCAL is not defined on Cygwin */
-#ifdef __CYGWIN__
-#ifndef RTLD_LOCAL
-#define RTLD_LOCAL 0
-#endif
-#endif
 
 typedef struct __GLXDRIscreen __GLXDRIscreen;
 typedef struct __GLXDRIcontext __GLXDRIcontext;

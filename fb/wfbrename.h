@@ -1,3 +1,6 @@
+#ifndef XSERVER_WFBRENAME_H
+#define XSERVER_WFBRENAME_H
+
 #define fbAddTraps wfbAddTraps
 #define fbAddTriangles wfbAddTriangles
 #define fbAllocatePrivates wfbAllocatePrivates
@@ -43,6 +46,7 @@
 #define fbDots16 wfbDots16
 #define fbDots32 wfbDots32
 #define fbDots8 wfbDots8
+#define fbEvenTile wfbEvenTile
 #define fbExpandDirectColors wfbExpandDirectColors
 #define fbFill wfbFill
 #define fbFillRegionSolid wfbFillRegionSolid
@@ -58,26 +62,17 @@
 #define fbGlyph16 wfbGlyph16
 #define fbGlyph32 wfbGlyph32
 #define fbGlyph8 wfbGlyph8
-#define fbGlyphs wfbGlyphs
 #define fbImageGlyphBlt wfbImageGlyphBlt
 #define fbIn wfbIn
 #define fbInitializeColormap wfbInitializeColormap
 #define fbInitVisuals wfbInitVisuals
 #define fbListInstalledColormaps wfbListInstalledColormaps
 #define FbMergeRopBits wFbMergeRopBits
+#define fbOddTile wfbOddTile
 #define fbOver wfbOver
-#define fbOverlayCloseScreen wfbOverlayCloseScreen
-#define fbOverlayCopyWindow wfbOverlayCopyWindow
-#define fbOverlayCreateScreenResources wfbOverlayCreateScreenResources
-#define fbOverlayCreateWindow wfbOverlayCreateWindow
 #define fbOverlayFinishScreenInit wfbOverlayFinishScreenInit
 #define fbOverlayGeneration wfbOverlayGeneration
 #define fbOverlayGetScreenPrivateKey wfbOverlayGetScreenPrivateKey
-#define fbOverlayPaintKey wfbOverlayPaintKey
-#define fbOverlaySetupScreen wfbOverlaySetupScreen
-#define fbOverlayUpdateLayerRegion wfbOverlayUpdateLayerRegion
-#define fbOverlayWindowExposures wfbOverlayWindowExposures
-#define fbOverlayWindowLayer wfbOverlayWindowLayer
 #define fbPadPixmap wfbPadPixmap
 #define fbPictureInit wfbPictureInit
 #define fbPixmapToRegion wfbPixmapToRegion
@@ -116,6 +111,7 @@
 #define _fbSetWindowPixmap _wfbSetWindowPixmap
 #define fbSolid wfbSolid
 #define fbSolidBoxClipped wfbSolidBoxClipped
+#define fbTile wfbTile
 #define fbTrapezoids wfbTrapezoids
 #define fbTriangles wfbTriangles
 #define fbUninstallColormap wfbUninstallColormap
@@ -125,3 +121,5 @@
 #define fbWinPrivateKeyRec wfbWinPrivateKeyRec
 #define free_pixman_pict wfb_free_pixman_pict
 #define image_from_pict wfb_image_from_pict
+
+#endif /* XSERVER_WFBRENAME_H */

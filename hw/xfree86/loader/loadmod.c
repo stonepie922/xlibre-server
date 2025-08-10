@@ -55,6 +55,7 @@
 #include "loaderProcs.h"
 #include "xf86Module.h"
 #include "loader.h"
+#include "xf86Module_priv.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -141,7 +142,7 @@ InitPathList(const char *path)
                 free(fullpath);
                 return NULL;
             }
-            list[n] = malloc(len + 1);
+            list[n] = calloc(1, len + 1);
             if (!list[n]) {
                 FreeStringList(list);
                 free(fullpath);
@@ -174,6 +175,12 @@ LoaderSetPath(const char *path)
 
 /* Standard set of module subdirectories to search, in order of preference */
 static const char *stdSubdirs[] = {
+    // first try loading from per-ABI subdir
+    XORG_MODULE_ABI_TAG "/",
+    XORG_MODULE_ABI_TAG "/input/",
+    XORG_MODULE_ABI_TAG "/drivers/",
+    XORG_MODULE_ABI_TAG "/extensions/",
+    // now try loading from legacy / unversioned directories
     "",
     "input/",
     "drivers/",
@@ -190,15 +197,9 @@ static const char *stdSubdirs[] = {
  * to port this DDX to, say, Darwin, we'll need to fix this.
  */
 static PatternRec stdPatterns[] = {
-#ifdef __CYGWIN__
-    {"^cyg(.*)\\.dll$",},
-    {"(.*)_drv\\.dll$",},
-    {"(.*)\\.dll$",},
-#else
     {"^lib(.*)\\.so$",},
     {"(.*)_drv\\.so$",},
     {"(.*)\\.so$",},
-#endif
     {NULL,}
 };
 
@@ -227,7 +228,7 @@ InitPatterns(const char **patternlist)
         for (i = 0, s = patternlist; *s; i++, s++)
             if (*s == DEFAULT_LIST)
                 i += ARRAY_SIZE(stdPatterns) - 1 - 1;
-        patterns = xallocarray(i + 1, sizeof(PatternRec));
+        patterns = calloc(i + 1, sizeof(PatternRec));
         if (!patterns) {
             return NULL;
         }
@@ -287,33 +288,21 @@ FindModuleInSubdir(const char *dirpath, const char *module)
             continue;
         }
 
-#ifdef __CYGWIN__
-        snprintf(tmpBuf, PATH_MAX, "cyg%s.dll", module);
-#else
         snprintf(tmpBuf, PATH_MAX, "lib%s.so", module);
-#endif
         if (strcmp(direntry->d_name, tmpBuf) == 0) {
             if (asprintf(&ret, "%s%s", dirpath, tmpBuf) == -1)
                 ret = NULL;
             break;
         }
 
-#ifdef __CYGWIN__
-        snprintf(tmpBuf, PATH_MAX, "%s_drv.dll", module);
-#else
         snprintf(tmpBuf, PATH_MAX, "%s_drv.so", module);
-#endif
         if (strcmp(direntry->d_name, tmpBuf) == 0) {
             if (asprintf(&ret, "%s%s", dirpath, tmpBuf) == -1)
                 ret = NULL;
             break;
         }
 
-#ifdef __CYGWIN__
-        snprintf(tmpBuf, PATH_MAX, "%s.dll", module);
-#else
         snprintf(tmpBuf, PATH_MAX, "%s.so", module);
-#endif
         if (strcmp(direntry->d_name, tmpBuf) == 0) {
             if (asprintf(&ret, "%s%s", dirpath, tmpBuf) == -1)
                 ret = NULL;
@@ -397,7 +386,7 @@ LoaderListDir(const char *subdir, const char **patternlist)
                             closedir(d);
                             goto bail;
                         }
-                        listing[n] = malloc(len + 1);
+                        listing[n] = calloc(1, len + 1);
                         if (!listing[n]) {
                             FreeStringList(listing);
                             closedir(d);
@@ -428,7 +417,6 @@ CheckVersion(const char *module, XF86ModuleVersionInfo * data,
 {
     int vercode[4];
     long ver = data->xf86version;
-    MessageType errtype;
 
     LogMessage(X_INFO, "Module %s: vendor=\"%s\"\n",
                data->modname ? data->modname : "UNKNOWN!",
@@ -438,14 +426,14 @@ CheckVersion(const char *module, XF86ModuleVersionInfo * data,
     vercode[1] = (ver / 100000) % 100;
     vercode[2] = (ver / 1000) % 100;
     vercode[3] = ver % 1000;
-    LogWrite(1, "\tcompiled for %d.%d.%d", vercode[0], vercode[1], vercode[2]);
+    LogMessageVerb(X_NONE, 1, "\tcompiled for %d.%d.%d", vercode[0], vercode[1], vercode[2]);
     if (vercode[3] != 0)
-        LogWrite(1, ".%d", vercode[3]);
-    LogWrite(1, ", module version = %d.%d.%d\n", data->majorversion,
-             data->minorversion, data->patchlevel);
+        LogMessageVerb(X_NONE, 1, ".%d", vercode[3]);
+    LogMessageVerb(X_NONE, 1, ", module version = %d.%d.%d\n", data->majorversion,
+                   data->minorversion, data->patchlevel);
 
     if (data->moduleclass)
-        LogWrite(2, "\tModule class: %s\n", data->moduleclass);
+        LogMessageVerb(X_NONE, 2, "\tModule class: %s\n", data->moduleclass);
 
     ver = -1;
     if (data->abiclass) {
@@ -463,12 +451,13 @@ CheckVersion(const char *module, XF86ModuleVersionInfo * data,
 
         abimaj = GET_ABI_MAJOR(data->abiversion);
         abimin = GET_ABI_MINOR(data->abiversion);
-        LogWrite(2, "\tABI class: %s, version %d.%d\n",
-                 data->abiclass, abimaj, abimin);
+        LogMessageVerb(X_NONE, 2, "\tABI class: %s, version %d.%d\n",
+                       data->abiclass, abimaj, abimin);
         if (ver != -1) {
             vermaj = GET_ABI_MAJOR(ver);
             vermin = GET_ABI_MINOR(ver);
             if (abimaj != vermaj) {
+                MessageType errtype;
                 if (LoaderOptions & LDR_OPT_ABI_MISMATCH_NONFATAL)
                     errtype = X_WARNING;
                 else
@@ -480,6 +469,7 @@ CheckVersion(const char *module, XF86ModuleVersionInfo * data,
                     return FALSE;
             }
             else if (abimin > vermin) {
+                MessageType errtype;
                 if (LoaderOptions & LDR_OPT_ABI_MISMATCH_NONFATAL)
                     errtype = X_WARNING;
                 else
@@ -686,20 +676,22 @@ LoadModule(const char *module, void *options, const XF86ModReqInfo *modreq,
     name = LoaderGetCanonicalName(module, patterns);
     noncanonical = (name && strcmp(module, name) != 0);
     if (noncanonical) {
-        LogWrite(3, " (%s)\n", name);
+        LogMessageVerb(X_NONE, 3, " (%s)\n", name);
         LogMessageVerb(X_WARNING, 1,
                        "LoadModule: given non-canonical module name \"%s\"\n",
                        module);
         m = name;
     }
     else {
-        LogWrite(3, "\n");
+        LogMessageVerb(X_NONE, 3, "\n");
         m = (char *) module;
     }
 
     /* Backward compatibility, vbe and int10 are merged into int10 now */
     if (!strcmp(m, "vbe"))
         m = name = strdup("int10");
+
+    assert(m);
 
     for (cim = compiled_in_modules; *cim; cim++)
         if (!strcmp(m, *cim)) {
@@ -722,7 +714,7 @@ LoadModule(const char *module, void *options, const XF86ModReqInfo *modreq,
 
     pathlist = defaultPathList;
     if (!pathlist) {
-        /* This could be a malloc failure too */
+        /* This could be a calloc failure too */
         if (errmaj)
             *errmaj = LDR_BADUSAGE;
         goto LoadModule_fail;
@@ -733,7 +725,7 @@ LoadModule(const char *module, void *options, const XF86ModReqInfo *modreq,
      * check the elements in the path
      */
     if (PathIsAbsolute(module))
-        found = xstrdup(module);
+        found = Xstrdup(module);
     path_elem = pathlist;
     while (!found && *path_elem != NULL) {
         found = FindModule(m, *path_elem, patterns);
@@ -840,10 +832,8 @@ LoadModule(const char *module, void *options, const XF86ModReqInfo *modreq,
 }
 
 void
-UnloadModule(void *_mod)
+UnloadModule(ModuleDescPtr mod)
 {
-    ModuleDescPtr mod = _mod;
-
     if (mod == (ModuleDescPtr) 1)
         return;
 
@@ -854,9 +844,9 @@ UnloadModule(void *_mod)
         const char *name = mod->VersionInfo->modname;
 
         if (mod->parent)
-            LogMessageVerbSigSafe(X_INFO, 3, "UnloadSubModule: \"%s\"\n", name);
+            LogMessageVerb(X_INFO, 3, "UnloadSubModule: \"%s\"\n", name);
         else
-            LogMessageVerbSigSafe(X_INFO, 3, "UnloadModule: \"%s\"\n", name);
+            LogMessageVerb(X_INFO, 3, "UnloadModule: \"%s\"\n", name);
 
         if (mod->TearDownData != ModuleDuplicated) {
             if ((mod->TearDownProc) && (mod->TearDownData))
@@ -873,10 +863,8 @@ UnloadModule(void *_mod)
 }
 
 void
-UnloadSubModule(void *_mod)
+UnloadSubModule(ModuleDescPtr mod)
 {
-    ModuleDescPtr mod = (ModuleDescPtr) _mod;
-
     /* Some drivers are calling us on built-in submodules, ignore them */
     if (mod == (ModuleDescPtr) 1)
         return;
@@ -965,7 +953,6 @@ LoaderErrorMsg(const char *name, const char *modname, int errmaj, int errmin)
 static char *
 LoaderGetCanonicalName(const char *modname, PatternPtr patterns)
 {
-    char *str;
     const char *s;
     int len;
     PatternPtr p;
@@ -982,7 +969,7 @@ LoaderGetCanonicalName(const char *modname, PatternPtr patterns)
     for (p = patterns; p->pattern; p++)
         if (regexec(&p->rex, s, 2, match, 0) == 0 && match[1].rm_so != -1) {
             len = match[1].rm_eo - match[1].rm_so;
-            str = malloc(len + 1);
+            char *str = calloc(1, len + 1);
             if (!str)
                 return NULL;
             strncpy(str, s + match[1].rm_so, len);

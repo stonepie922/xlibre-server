@@ -20,9 +20,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "dix/resource_priv.h"
 
 #include "xfixesint.h"
 
@@ -64,7 +65,6 @@ SProcXFixesChangeSaveSet(ClientPtr client)
     REQUEST(xXFixesChangeSaveSetReq);
     REQUEST_SIZE_MATCH(xXFixesChangeSaveSetReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->window);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesChangeSaveSet(client);
 }

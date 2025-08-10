@@ -4,6 +4,7 @@
 #endif
 
 #include <string.h>
+#include <sys/mman.h>
 
 #include "xf86.h"
 #include "xf86Modes.h"
@@ -22,22 +23,20 @@
 #define PAGE_MASK               (~(getpagesize() - 1))
 
 static XF86ModuleVersionInfo fbdevHWVersRec = {
-    "fbdevhw",
-    MODULEVENDORSTRING,
-    MODINFOSTRING1,
-    MODINFOSTRING2,
-    XORG_VERSION_CURRENT,
-    0, 0, 2,
-    ABI_CLASS_VIDEODRV,
-    ABI_VIDEODRV_VERSION,
-    MOD_CLASS_NONE,
-    {0, 0, 0, 0}
+    .modname      = "fbdevhw",
+    .vendor       = MODULEVENDORSTRING,
+    ._modinfo1_   = MODINFOSTRING1,
+    ._modinfo2_   = MODINFOSTRING2,
+    .xf86version  = XORG_VERSION_CURRENT,
+    .majorversion = 0,
+    .minorversion = 0,
+    .patchlevel   = 2,
+    .abiclass     = ABI_CLASS_VIDEODRV,
+    .abiversion   = ABI_VIDEODRV_VERSION,
 };
 
 _X_EXPORT XF86ModuleData fbdevhwModuleData = {
-    &fbdevHWVersRec,
-    NULL,
-    NULL
+    .vers = &fbdevHWVersRec
 };
 
 #include <fcntl.h>
@@ -84,7 +83,7 @@ enum {
     FBIOBLANK_UNSUPPORTED = 0,
 };
 
-Bool
+static Bool
 fbdevHWGetRec(ScrnInfoPtr pScrn)
 {
     if (fbdevHWPrivateIndex < 0)
@@ -93,28 +92,8 @@ fbdevHWGetRec(ScrnInfoPtr pScrn)
     if (FBDEVHWPTR(pScrn) != NULL)
         return TRUE;
 
-    FBDEVHWPTRLVAL(pScrn) = xnfcalloc(sizeof(fbdevHWRec), 1);
+    FBDEVHWPTRLVAL(pScrn) = XNFcallocarray(1, sizeof(fbdevHWRec));
     return TRUE;
-}
-
-void
-fbdevHWFreeRec(ScrnInfoPtr pScrn)
-{
-    if (fbdevHWPrivateIndex < 0)
-        return;
-    free(FBDEVHWPTR(pScrn));
-    FBDEVHWPTRLVAL(pScrn) = NULL;
-}
-
-int
-fbdevHWGetFD(ScrnInfoPtr pScrn)
-{
-    fbdevHWPtr fPtr;
-
-    fbdevHWGetRec(pScrn);
-    fPtr = FBDEVHWPTR(pScrn);
-
-    return fPtr->fd;
 }
 
 /* -------------------------------------------------------------------- */
@@ -286,7 +265,7 @@ fbdev_open_pci(struct pci_device *pPci, char **namep)
             if (fd != -1) {
                 if (ioctl(fd, FBIOGET_FSCREENINFO, (void *) &fix) != -1) {
                     if (namep) {
-                        *namep = xnfalloc(16);
+                        *namep = XNFalloc(16);
                         strncpy(*namep, fix.id, 16);
                     }
 
@@ -302,6 +281,31 @@ fbdev_open_pci(struct pci_device *pPci, char **namep)
 
     xf86DrvMsg(-1, X_ERROR, "Unable to find a valid framebuffer device\n");
     return -1;
+}
+
+/* *
+ * Try to resolve a filename as symbolic link.  If the file is not a link, the
+ * original filename is returned.  NULL is returned if readlink raised an
+ * error.
+ */
+static const char *
+resolve_link(const char *filename, char *resolve_buf, size_t resolve_buf_size)
+{
+    ssize_t len = readlink(filename, resolve_buf, resolve_buf_size - 1);
+    /* if it is a link resolve it */
+    if (len >= 0) {
+        resolve_buf[len] = '\0';
+        return resolve_buf;
+    }
+    else {
+        if (errno == EINVAL) {
+            return filename;
+        }
+        else {
+            // Have caller handle error condition.
+            return NULL;
+        }
+    }
 }
 
 static int
@@ -331,9 +335,26 @@ fbdev_open(int scrnIndex, const char *dev, char **namep)
 
     /* only touch non-PCI devices on this path */
     {
+        char device_path_buf[PATH_MAX];
         char buf[PATH_MAX] = {0};
         char *sysfs_path = NULL;
-        char *node = strrchr(dev, '/') + 1;
+        char const *real_dev = resolve_link(dev, device_path_buf,
+                                            sizeof(device_path_buf));
+        if (real_dev == NULL) {
+            xf86DrvMsg(scrnIndex, X_ERROR,
+                       "Failed resolving symbolic link for device '%s': %s",
+                       dev, strerror(errno));
+            return -1;
+        }
+
+        const char *node = strrchr(real_dev, '/');
+
+        if (node == NULL) {
+            node = real_dev;
+        }
+        else {
+            node++;
+        }
 
         if (asprintf(&sysfs_path, "/sys/class/graphics/%s/device/subsystem", node) < 0 ||
             readlink(sysfs_path, buf, sizeof(buf) - 1) < 0 ||
@@ -353,7 +374,7 @@ fbdev_open(int scrnIndex, const char *dev, char **namep)
             return -1;
         }
         else {
-            *namep = xnfalloc(16);
+            *namep = XNFalloc(16);
             strncpy(*namep, fix.id, 16);
         }
     }
@@ -363,7 +384,7 @@ fbdev_open(int scrnIndex, const char *dev, char **namep)
 /* -------------------------------------------------------------------- */
 
 Bool
-fbdevHWProbe(struct pci_device *pPci, char *device, char **namep)
+fbdevHWProbe(struct pci_device *pPci, const char *device, char **namep)
 {
     int fd;
 
@@ -379,7 +400,7 @@ fbdevHWProbe(struct pci_device *pPci, char *device, char **namep)
 }
 
 Bool
-fbdevHWInit(ScrnInfoPtr pScrn, struct pci_device *pPci, char *device)
+fbdevHWInit(ScrnInfoPtr pScrn, struct pci_device *pPci, const char *device)
 {
     fbdevHWPtr fPtr;
 
@@ -564,14 +585,6 @@ fbdevHWSetVideoModes(ScrnInfoPtr pScrn)
         }
         last = this;
     }
-}
-
-DisplayModePtr
-fbdevHWGetBuildinMode(ScrnInfoPtr pScrn)
-{
-    fbdevHWPtr fPtr = FBDEVHWPTR(pScrn);
-
-    return &fPtr->buildin;
 }
 
 void
@@ -941,12 +954,6 @@ fbdevHWAdjustFrameWeak(void)
     return fbdevHWAdjustFrame;
 }
 
-xf86EnterVTProc *
-fbdevHWEnterVTWeak(void)
-{
-    return fbdevHWEnterVT;
-}
-
 xf86LeaveVTProc *
 fbdevHWLeaveVTWeak(void)
 {
@@ -969,10 +976,4 @@ xf86LoadPaletteProc *
 fbdevHWLoadPaletteWeak(void)
 {
     return fbdevHWLoadPalette;
-}
-
-SaveScreenProcPtr
-fbdevHWSaveScreenWeak(void)
-{
-    return fbdevHWSaveScreen;
 }

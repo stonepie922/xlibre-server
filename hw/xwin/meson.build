@@ -7,12 +7,8 @@ build_windowsdri = windowsdri_dep.found()
 xwin_sys_libs = []
 xwin_sys_libs += '-ldxguid'
 
-if host_machine.system() == 'cygwin'
-    server_name = 'XWin'
-else
-    server_name = 'Xming'
-    xwin_sys_libs += ['-lpthread', '-lws2_32']
-endif
+server_name = 'Xming'
+xwin_sys_libs += ['-lpthread', '-lws2_32']
 
 xwin_c_args = []
 xwin_c_args += '-DHAVE_XWIN_CONFIG_H'
@@ -107,7 +103,11 @@ srcs_windows += [
     '../../mi/miinitext.h',
 ]
 
-rsrc = windows.compile_resources('XWin.rc', include_directories: include_directories('../../include/'))
+rsrc = windows.compile_resources(
+     'XWin.rc',
+     include_directories: include_directories('../../include/', '../..'),
+     depend_files: ['XWin.exe.manifest', 'X.ico'],
+)
 srcs_windows += rsrc
 
 flex = find_program('flex')

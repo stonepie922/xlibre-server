@@ -29,22 +29,23 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>              /* for inputstr.h    */
 #include <X11/Xproto.h>         /* Request macro     */
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XI2proto.h>
+
+#include "dix/cursor_priv.h"
+#include "dix/dix_priv.h"
+
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
 #include "scrnintstr.h"         /* screen structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XI2proto.h>
 #include "extnsionst.h"
 #include "exevents.h"
 #include "exglobals.h"
 #include "input.h"
-
 #include "xichangecursor.h"
 
 /***********************************************************************
@@ -58,7 +59,6 @@ SProcXIChangeCursor(ClientPtr client)
 {
     REQUEST(xXIChangeCursorReq);
     REQUEST_SIZE_MATCH(xXIChangeCursorReq);
-    swaps(&stuff->length);
     swapl(&stuff->win);
     swapl(&stuff->cursor);
     swaps(&stuff->deviceid);
@@ -80,7 +80,7 @@ ProcXIChangeCursor(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    if (!IsMaster(pDev) || !IsPointerDevice(pDev))
+    if (!InputDevIsMaster(pDev) || !IsPointerDevice(pDev))
         return BadDevice;
 
     if (stuff->win != None) {
@@ -97,7 +97,7 @@ ProcXIChangeCursor(ClientPtr client)
     }
     else {
         rc = dixLookupResourceByType((void **) &pCursor, stuff->cursor,
-                                     RT_CURSOR, client, DixUseAccess);
+                                     X11_RESTYPE_CURSOR, client, DixUseAccess);
         if (rc != Success)
             return rc;
     }

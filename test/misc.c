@@ -24,16 +24,17 @@
 /* Test relies on assert() */
 #undef NDEBUG
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdint.h>
+
+#include "dix/input_priv.h"
+#include "os/fmt.h"
+
 #include "misc.h"
 #include "scrnintstr.h"
 #include "dix.h"
 #include "dixstruct.h"
-
 #include "tests-common.h"
 
 static void
@@ -223,13 +224,15 @@ bswap_test(void)
     assert(result_64 == expect_64);
 }
 
-int
+const testfunc_t*
 misc_test(void)
 {
-    dix_version_compare();
-    dix_update_desktop_dimensions();
-    dix_request_size_checks();
-    bswap_test();
-
-    return 0;
+    static const testfunc_t testfuncs[] = {
+        dix_version_compare,
+        dix_update_desktop_dimensions,
+        dix_request_size_checks,
+        bswap_test,
+        NULL,
+    };
+    return testfuncs;
 }

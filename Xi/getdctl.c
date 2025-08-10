@@ -50,9 +50,7 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
@@ -72,7 +70,6 @@ int _X_COLD
 SProcXGetDeviceControl(ClientPtr client)
 {
     REQUEST(xGetDeviceControlReq);
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xGetDeviceControlReq);
     swaps(&stuff->control);
     return (ProcXGetDeviceControl(client));
@@ -148,21 +145,6 @@ CopySwapDeviceEnable(ClientPtr client, DeviceIntPtr dev, char *buf)
 
 /***********************************************************************
  *
- * This procedure writes the reply for the xGetDeviceControl function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGetDeviceControl(ClientPtr client, int size, xGetDeviceControlReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
-}
-
-/***********************************************************************
- *
  * Get the state of the specified device control.
  *
  */
@@ -171,9 +153,8 @@ int
 ProcXGetDeviceControl(ClientPtr client)
 {
     int rc, total_length = 0;
-    char *buf, *savbuf;
+    char *savbuf;
     DeviceIntPtr dev;
-    xGetDeviceControlReply rep;
 
     REQUEST(xGetDeviceControlReq);
     REQUEST_SIZE_MATCH(xGetDeviceControlReq);
@@ -181,13 +162,6 @@ ProcXGetDeviceControl(ClientPtr client)
     rc = dixLookupDevice(&dev, stuff->deviceid, client, DixGetAttrAccess);
     if (rc != Success)
         return rc;
-
-    rep = (xGetDeviceControlReply) {
-        .repType = X_Reply,
-        .RepType = X_GetDeviceControl,
-        .sequenceNumber = client->sequence,
-        .length = 0
-    };
 
     switch (stuff->control) {
     case DEVICE_RESOLUTION:
@@ -209,7 +183,7 @@ ProcXGetDeviceControl(ClientPtr client)
         return BadValue;
     }
 
-    buf = (char *) malloc(total_length);
+    char *buf = calloc(1, total_length);
     if (!buf)
         return BadAlloc;
     savbuf = buf;
@@ -228,8 +202,18 @@ ProcXGetDeviceControl(ClientPtr client)
         break;
     }
 
-    rep.length = bytes_to_int32(total_length);
-    WriteReplyToClient(client, sizeof(xGetDeviceControlReply), &rep);
+    xGetDeviceControlReply rep = {
+        .repType = X_Reply,
+        .RepType = X_GetDeviceControl,
+        .sequenceNumber = client->sequence,
+        .length = bytes_to_int32(total_length),
+    };
+
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+    }
+    WriteToClient(client, sizeof(xGetDeviceControlReply), &rep);
     WriteToClient(client, total_length, savbuf);
     free(savbuf);
     return Success;

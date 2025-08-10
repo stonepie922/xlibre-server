@@ -31,9 +31,13 @@
  *
  * Render acceleration implementation
  */
+#include <dix-config.h>
+
+#include <assert.h>
+
+#include "os/bug_priv.h"
 
 #include "glamor_priv.h"
-
 #include "mipict.h"
 #include "fbpict.h"
 #if 0
@@ -61,7 +65,7 @@ static struct blendinfo composite_op_info[] = {
 
 #define RepeatFix			10
 static GLuint
-glamor_create_composite_fs(struct shader_key *key)
+glamor_create_composite_fs(glamor_screen_private *glamor_priv, struct shader_key *key, Bool enable_rel_sampler)
 {
     const char *repeat_define =
         "#define RepeatNone               	      0\n"
@@ -116,7 +120,7 @@ glamor_create_composite_fs(struct shader_key *key)
         "			tex = (fract(tex) / wh.xy);\n"
         "		}\n"
         "	}\n"
-        "	return texture2D(tex_image, tex);\n"
+        "	return texture(tex_image, tex);\n"
         "}\n"
         " vec4 rel_sampler_rgbx(sampler2D tex_image, vec2 tex, vec4 wh, int repeat)\n"
         "{\n"
@@ -129,7 +133,16 @@ glamor_create_composite_fs(struct shader_key *key)
         "			tex = (fract(tex) / wh.xy);\n"
         "		}\n"
         "	}\n"
-        "	return vec4(texture2D(tex_image, tex).rgb, 1.0);\n"
+        "	return vec4(texture(tex_image, tex).rgb, 1.0);\n"
+        "}\n";
+    const char *stub_rel_sampler =
+        " vec4 rel_sampler_rgba(sampler2D tex_image, vec2 tex, vec4 wh, int repeat)\n"
+        "{\n"
+        "	return texture(tex_image, tex);\n"
+        "}\n"
+        " vec4 rel_sampler_rgbx(sampler2D tex_image, vec2 tex, vec4 wh, int repeat)\n"
+        "{\n"
+        "	return vec4(texture(tex_image, tex).rgb, 1.0);\n"
         "}\n";
 
     const char *source_solid_fetch =
@@ -139,7 +152,7 @@ glamor_create_composite_fs(struct shader_key *key)
         "	return source;\n"
         "}\n";
     const char *source_alpha_pixmap_fetch =
-        "varying vec2 source_texture;\n"
+        "in vec2 source_texture;\n"
         "uniform sampler2D source_sampler;\n"
         "uniform vec4 source_wh;"
         "vec4 get_source()\n"
@@ -148,7 +161,7 @@ glamor_create_composite_fs(struct shader_key *key)
         "			        source_wh, source_repeat_mode);\n"
         "}\n";
     const char *source_pixmap_fetch =
-        "varying vec2 source_texture;\n"
+        "in vec2 source_texture;\n"
         "uniform sampler2D source_sampler;\n"
         "uniform vec4 source_wh;\n"
         "vec4 get_source()\n"
@@ -168,7 +181,7 @@ glamor_create_composite_fs(struct shader_key *key)
         "	return mask;\n"
         "}\n";
     const char *mask_alpha_pixmap_fetch =
-        "varying vec2 mask_texture;\n"
+        "in vec2 mask_texture;\n"
         "uniform sampler2D mask_sampler;\n"
         "uniform vec4 mask_wh;\n"
         "vec4 get_mask()\n"
@@ -177,7 +190,7 @@ glamor_create_composite_fs(struct shader_key *key)
         "			        mask_wh, mask_repeat_mode);\n"
         "}\n";
     const char *mask_pixmap_fetch =
-        "varying vec2 mask_texture;\n"
+        "in vec2 mask_texture;\n"
         "uniform sampler2D mask_sampler;\n"
         "uniform vec4 mask_wh;\n"
         "vec4 get_mask()\n"
@@ -197,21 +210,26 @@ glamor_create_composite_fs(struct shader_key *key)
         "	float undef;\n"
         "	return vec4(color.a, undef, undef, undef);"
         "}";
+    const char *dest_swizzle_ignore_alpha =
+        "vec4 dest_swizzle(vec4 color)\n"
+        "{"
+        "	return vec4(color.xyz, 1.0);"
+        "}";
 
     const char *in_normal =
         "void main()\n"
         "{\n"
-        "	gl_FragColor = dest_swizzle(get_source() * get_mask().a);\n"
+        "	frag_color = dest_swizzle(get_source() * get_mask().a);\n"
         "}\n";
     const char *in_ca_source =
         "void main()\n"
         "{\n"
-        "	gl_FragColor = dest_swizzle(get_source() * get_mask());\n"
+        "	frag_color = dest_swizzle(get_source() * get_mask());\n"
         "}\n";
     const char *in_ca_alpha =
         "void main()\n"
         "{\n"
-        "	gl_FragColor = dest_swizzle(get_source().a * get_mask());\n"
+        "	frag_color = dest_swizzle(get_source().a * get_mask());\n"
         "}\n";
     const char *in_ca_dual_blend =
         "out vec4 color0;\n"
@@ -221,15 +239,28 @@ glamor_create_composite_fs(struct shader_key *key)
         "	color0 = dest_swizzle(get_source() * get_mask());\n"
         "	color1 = dest_swizzle(get_source().a * get_mask());\n"
         "}\n";
-    const char *header_ca_dual_blend =
-        "#version 130\n";
+    const char *in_ca_dual_blend_gles2 =
+        "void main()\n"
+        "{\n"
+        "	gl_FragColor = dest_swizzle(get_source() * get_mask());\n"
+        "	gl_SecondaryFragColorEXT = dest_swizzle(get_source().a * get_mask());\n"
+        "}\n";
+    const char *header_ca_dual_blend_gles2 =
+        "#version 100\n"
+        "#extension GL_EXT_blend_func_extended : require\n"
+        GLAMOR_COMPAT_DEFINES_FS;
 
     char *source;
     const char *source_fetch;
     const char *mask_fetch = "";
     const char *in;
     const char *header;
-    const char *header_norm = "";
+    const char *header_norm = glamor_priv->glsl_version > 120 ?
+        "#version 130\n" :
+        glamor_priv->use_gpu_shader4 ?
+          "#version 120\n#extension GL_EXT_gpu_shader4 : require\n" GLAMOR_COMPAT_DEFINES_FS :
+          "#version 120\n" GLAMOR_COMPAT_DEFINES_FS;
+    const char *header_es = glamor_priv->glsl_version > 100 ? "#version 300 es\n" : "#version 100\n" GLAMOR_COMPAT_DEFINES_FS;
     const char *dest_swizzle;
     GLuint prog;
 
@@ -275,11 +306,14 @@ glamor_create_composite_fs(struct shader_key *key)
     case SHADER_DEST_SWIZZLE_ALPHA_TO_RED:
         dest_swizzle = dest_swizzle_alpha_to_red;
         break;
+    case SHADER_DEST_SWIZZLE_IGNORE_ALPHA:
+        dest_swizzle = dest_swizzle_ignore_alpha;
+        break;
     default:
         FatalError("Bad composite shader dest swizzle");
     }
 
-    header = header_norm;
+    header = glamor_priv->is_gles ? header_es : header_norm;
     switch (key->in) {
     case glamor_program_alpha_normal:
         in = in_normal;
@@ -292,7 +326,10 @@ glamor_create_composite_fs(struct shader_key *key)
         break;
     case glamor_program_alpha_dual_blend:
         in = in_ca_dual_blend;
-        header = header_ca_dual_blend;
+        break;
+    case glamor_program_alpha_dual_blend_gles2:
+        in = in_ca_dual_blend_gles2;
+        header = header_ca_dual_blend_gles2;
         break;
     default:
         FatalError("Bad composite IN type");
@@ -301,8 +338,10 @@ glamor_create_composite_fs(struct shader_key *key)
     XNFasprintf(&source,
                 "%s"
                 GLAMOR_DEFAULT_PRECISION
-                "%s%s%s%s%s%s%s", header, repeat_define, relocate_texture,
-                rel_sampler, source_fetch, mask_fetch, dest_swizzle, in);
+                "%s%s%s%s%s%s%s%s", header, GLAMOR_COMPAT_DEFINES_FS,
+                repeat_define, relocate_texture,
+                enable_rel_sampler ? rel_sampler : stub_rel_sampler,
+                source_fetch, mask_fetch, dest_swizzle, in);
 
     prog = glamor_compile_glsl_prog(GL_FRAGMENT_SHADER, source);
     free(source);
@@ -311,14 +350,14 @@ glamor_create_composite_fs(struct shader_key *key)
 }
 
 static GLuint
-glamor_create_composite_vs(struct shader_key *key)
+glamor_create_composite_vs(glamor_screen_private* priv, struct shader_key *key)
 {
     const char *main_opening =
-        "attribute vec4 v_position;\n"
-        "attribute vec4 v_texcoord0;\n"
-        "attribute vec4 v_texcoord1;\n"
-        "varying vec2 source_texture;\n"
-        "varying vec2 mask_texture;\n"
+        "in vec4 v_position;\n"
+        "in vec4 v_texcoord0;\n"
+        "in vec4 v_texcoord1;\n"
+        "out vec2 source_texture;\n"
+        "out vec2 mask_texture;\n"
         "void main()\n"
         "{\n"
         "	gl_Position = v_position;\n";
@@ -327,6 +366,10 @@ glamor_create_composite_vs(struct shader_key *key)
     const char *main_closing = "}\n";
     const char *source_coords_setup = "";
     const char *mask_coords_setup = "";
+    const char *version_gles2 = "#version 100\n";
+    const char *version_gles3 = "#version 300 es\n";
+    const char *version = priv->glsl_version > 120 ? "#version 130\n" : "#version 120\n";
+    const char *defines = priv->glsl_version > 120 ? "": GLAMOR_COMPAT_DEFINES_VS;
     char *source;
     GLuint prog;
 
@@ -336,10 +379,18 @@ glamor_create_composite_vs(struct shader_key *key)
     if (key->mask != SHADER_MASK_NONE && key->mask != SHADER_MASK_SOLID)
         mask_coords_setup = mask_coords;
 
+    if (priv->is_gles)
+        version = version_gles2;
+
+    if (priv->is_gles && priv->glsl_version > 120)
+        version = version_gles3;
+
     XNFasprintf(&source,
-                "%s%s%s%s",
-                main_opening,
-                source_coords_setup, mask_coords_setup, main_closing);
+                "%s"
+                GLAMOR_DEFAULT_PRECISION
+                "%s%s%s%s%s",
+                version, defines, main_opening, source_coords_setup,
+                mask_coords_setup, main_closing);
 
     prog = glamor_compile_glsl_prog(GL_VERTEX_SHADER, source);
     free(source);
@@ -354,18 +405,21 @@ glamor_create_composite_shader(ScreenPtr screen, struct shader_key *key,
     GLuint vs, fs, prog;
     GLint source_sampler_uniform_location, mask_sampler_uniform_location;
     glamor_screen_private *glamor_priv = glamor_get_screen_private(screen);
+    Bool enable_rel_sampler = TRUE;
 
     glamor_make_current(glamor_priv);
-    vs = glamor_create_composite_vs(key);
+    vs = glamor_create_composite_vs(glamor_priv, key);
     if (vs == 0)
         return;
-    fs = glamor_create_composite_fs(key);
+    fs = glamor_create_composite_fs(glamor_priv, key, enable_rel_sampler);
     if (fs == 0)
         return;
 
     prog = glCreateProgram();
     glAttachShader(prog, vs);
     glAttachShader(prog, fs);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
 
     glBindAttribLocation(prog, GLAMOR_VERTEX_POS, "v_position");
     glBindAttribLocation(prog, GLAMOR_VERTEX_SOURCE, "v_texcoord0");
@@ -375,7 +429,22 @@ glamor_create_composite_shader(ScreenPtr screen, struct shader_key *key,
         glBindFragDataLocationIndexed(prog, 0, 0, "color0");
         glBindFragDataLocationIndexed(prog, 0, 1, "color1");
     }
-    glamor_link_glsl_prog(screen, prog, "composite");
+
+    if (!glamor_link_glsl_prog(screen, prog, "composite")) {
+        /* Failed to link the shader, try again without rel_sampler. */
+        enable_rel_sampler = FALSE;
+        glDetachShader(prog, fs);
+        fs = glamor_create_composite_fs(glamor_priv, key, enable_rel_sampler);
+        if (fs == 0)
+            return;
+        glAttachShader(prog, fs);
+        glDeleteShader(fs);
+
+        if (!glamor_link_glsl_prog(screen, prog, "composite")) {
+            glDeleteProgram(prog);
+            return;
+        }
+    }
 
     shader->prog = prog;
 
@@ -516,6 +585,7 @@ glamor_set_composite_texture(glamor_screen_private *glamor_priv, int unit,
                              glamor_pixmap_private *dest_priv)
 {
     glamor_pixmap_private *pixmap_priv = glamor_get_pixmap_private(pixmap);
+    BUG_RETURN(!pixmap_priv);
     glamor_pixmap_fbo *fbo = pixmap_priv->fbo;
     float wh[4];
     int repeat_type;
@@ -701,6 +771,7 @@ combine_pict_format(PictFormatShort * des, const PictFormatShort src,
         mask_type = PICT_FORMAT_TYPE(mask);
         break;
     case glamor_program_alpha_dual_blend:
+    case glamor_program_alpha_dual_blend_gles2:
         src_type = PICT_FORMAT_TYPE(src);
         mask_type = PICT_FORMAT_TYPE(mask);
         break;
@@ -780,7 +851,7 @@ glamor_render_format_is_supported(PicturePtr picture)
         return TRUE;
 
     glamor_priv = glamor_get_screen_private(picture->pDrawable->pScreen);
-    f = &glamor_priv->formats[picture->pDrawable->depth];
+    f = &glamor_priv->formats[glamor_drawable_effective_depth(picture->pDrawable)];
 
     if (!f->rendering_supported)
         return FALSE;
@@ -798,6 +869,20 @@ glamor_render_format_is_supported(PicturePtr picture)
     default:
         return picture->format == storage_format;
     }
+}
+
+static Bool
+render_op_uses_src_alpha(CARD8 op)
+{
+    struct blendinfo *info = &composite_op_info[op];
+
+    switch (info->dest_blend) {
+    case GL_ONE_MINUS_SRC_ALPHA:
+    case GL_SRC_ALPHA:
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 static Bool
@@ -886,8 +971,11 @@ glamor_composite_choose_shader(CARD8 op,
         else {
             if (op == PictOpClear)
                 key.mask = SHADER_MASK_NONE;
-            else if (glamor_priv->has_dual_blend)
-                key.in = glamor_program_alpha_dual_blend;
+            else if (glamor_priv->has_dual_blend) {
+                key.in = glamor_glsl_has_ints(glamor_priv) ?
+                    glamor_program_alpha_dual_blend :
+                    glamor_program_alpha_dual_blend_gles2;
+            }
             else if (op == PictOpSrc || op == PictOpAdd
                      || op == PictOpIn || op == PictOpOut
                      || op == PictOpOverReverse)
@@ -909,7 +997,12 @@ glamor_composite_choose_shader(CARD8 op,
         glamor_priv->formats[8].format == GL_RED) {
         key.dest_swizzle = SHADER_DEST_SWIZZLE_ALPHA_TO_RED;
     } else {
-        key.dest_swizzle = SHADER_DEST_SWIZZLE_DEFAULT;
+        if (dest_pixmap->drawable.depth == 32 &&
+            glamor_drawable_effective_depth(dest->pDrawable) == 24 &&
+            !render_op_uses_src_alpha(op))
+            key.dest_swizzle = SHADER_DEST_SWIZZLE_IGNORE_ALPHA;
+        else
+            key.dest_swizzle = SHADER_DEST_SWIZZLE_DEFAULT;
     }
 
     if (source && source->alphaMap) {
@@ -1140,6 +1233,7 @@ glamor_composite_with_shader(CARD8 op,
     Bool ret = FALSE;
     glamor_composite_shader *shader = NULL, *shader_ca = NULL;
     struct blendinfo op_info, op_info_ca;
+    Bool restore_colormask = FALSE;
 
     if (!glamor_composite_choose_shader(op, source, mask, dest,
                                         source_pixmap, mask_pixmap, dest_pixmap,
@@ -1164,9 +1258,17 @@ glamor_composite_with_shader(CARD8 op,
 
     glamor_make_current(glamor_priv);
 
+    if (ca_state != CA_TWO_PASS &&
+        key.dest_swizzle == SHADER_DEST_SWIZZLE_DEFAULT &&
+        dest_pixmap->drawable.depth == 32 &&
+        glamor_drawable_effective_depth(dest->pDrawable) == 24) {
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+        restore_colormask = TRUE;
+    }
+
     glamor_set_destination_pixmap_priv_nc(glamor_priv, dest_pixmap, dest_pixmap_priv);
     glamor_composite_set_shader_blend(glamor_priv, dest_pixmap_priv, &key, shader, &op_info);
-    glamor_set_alu(screen, GXcopy);
+    glamor_set_alu(dest->pDrawable, GXcopy);
 
     glamor_priv->has_source_coords = key.source != SHADER_SOURCE_SOLID;
     glamor_priv->has_mask_coords = (key.mask != SHADER_MASK_NONE &&
@@ -1306,6 +1408,8 @@ glamor_composite_with_shader(CARD8 op,
 
     glDisable(GL_SCISSOR_TEST);
 disable_va:
+    if (restore_colormask)
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDisableVertexAttribArray(GLAMOR_VERTEX_POS);
     glDisableVertexAttribArray(GLAMOR_VERTEX_SOURCE);
     glDisableVertexAttribArray(GLAMOR_VERTEX_MASK);
@@ -1336,6 +1440,7 @@ glamor_convert_gradient_picture(ScreenPtr screen,
     int error;
     PictFormatPtr pFormat;
     PictFormatShort format;
+    glamor_screen_private *glamor_priv = glamor_get_screen_private(screen);
 
     if (source->pDrawable) {
         pFormat = source->pFormat;
@@ -1345,7 +1450,7 @@ glamor_convert_gradient_picture(ScreenPtr screen,
         pFormat = PictureMatchFormat(screen, 32, format);
     }
 
-    if (!source->pDrawable) {
+    if (glamor_priv->enable_gradient_shader && !source->pDrawable) {
         if (source->pSourcePict->type == SourcePictTypeLinear) {
             dst = glamor_generate_linear_gradient_picture(screen,
                                                           source, x_source,

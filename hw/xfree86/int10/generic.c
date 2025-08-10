@@ -7,14 +7,16 @@
 #include <xorg-config.h>
 #endif
 
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "xf86.h"
 #include "xf86_OSproc.h"
+#include "xf86Bus.h"
 #include "compiler.h"
 #define _INT10_PRIVATE
-#include "xf86int10.h"
+#include "xf86int10_priv.h"
 #include "int10Defines.h"
 #include "Pci.h"
 
@@ -92,12 +94,11 @@ int10MemRec genericMem = {
 static void MapVRam(xf86Int10InfoPtr pInt);
 static void UnmapVRam(xf86Int10InfoPtr pInt);
 
+static void *sysMem = NULL;
+
 #ifdef _PC
 #define GET_HIGH_BASE(x) (((V_BIOS + (x) + getpagesize() - 1)/getpagesize()) \
                               * getpagesize())
-#endif
-
-static void *sysMem = NULL;
 
 static Bool
 readIntVec(struct pci_device *dev, unsigned char *buf, int len)
@@ -112,6 +113,7 @@ readIntVec(struct pci_device *dev, unsigned char *buf, int len)
 
     return TRUE;
 }
+#endif /* _PC */
 
 xf86Int10InfoPtr
 xf86ExtendedInitInt10(int entityIndex, int Flags)
@@ -132,15 +134,15 @@ xf86ExtendedInitInt10(int entityIndex, int Flags)
         return NULL;
     }
 
-    pInt = (xf86Int10InfoPtr) xnfcalloc(1, sizeof(xf86Int10InfoRec));
+    pInt = (xf86Int10InfoPtr) XNFcallocarray(1, sizeof(xf86Int10InfoRec));
     pInt->entityIndex = entityIndex;
     if (!xf86Int10ExecSetup(pInt))
         goto error0;
     pInt->mem = &genericMem;
-    pInt->private = (void *) xnfcalloc(1, sizeof(genericInt10Priv));
-    INTPriv(pInt)->alloc = (void *) xnfcalloc(1, ALLOC_ENTRIES(getpagesize()));
+    pInt->private = (void *) XNFcallocarray(1, sizeof(genericInt10Priv));
+    INTPriv(pInt)->alloc = (void *) XNFcallocarray(1, ALLOC_ENTRIES(getpagesize()));
     pInt->pScrn = pScrn;
-    base = INTPriv(pInt)->base = xnfalloc(SYS_BIOS);
+    base = INTPriv(pInt)->base = XNFalloc(SYS_BIOS);
 
     /* FIXME: Shouldn't this be a failure case?  Leaving dev as NULL seems like
      * FIXME: an error
@@ -216,7 +218,7 @@ xf86ExtendedInitInt10(int entityIndex, int Flags)
     }
 #else
     if (!sysMem) {
-        sysMem = xnfalloc(BIOS_SIZE);
+        sysMem = XNFalloc(BIOS_SIZE);
         setup_system_bios(sysMem);
     }
     INTPriv(pInt)->sysMem = sysMem;

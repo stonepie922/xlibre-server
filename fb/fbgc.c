@@ -20,15 +20,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
 
-#include "fb.h"
+#include "fb/fb_priv.h"
 
-const GCFuncs fbGCFuncs = {
+static const GCFuncs fbGCFuncs = {
     fbValidateGC,
     miChangeGC,
     miCopyGC,
@@ -38,7 +36,7 @@ const GCFuncs fbGCFuncs = {
     miCopyClip,
 };
 
-const GCOps fbGCOps = {
+static const GCOps fbGCOps = {
     fbFillSpans,
     fbSetSpans,
     fbPutImage,
@@ -47,11 +45,11 @@ const GCOps fbGCOps = {
     fbPolyPoint,
     fbPolyLine,
     fbPolySegment,
-    fbPolyRectangle,
+    miPolyRectangle,
     fbPolyArc,
     miFillPolygon,
     fbPolyFillRect,
-    fbPolyFillArc,
+    miPolyFillArc,
     miPolyText8,
     miPolyText16,
     miImageText8,

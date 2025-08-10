@@ -22,11 +22,10 @@
  * Author:  Keith Packard, SuSE, Inc.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "xsha1.h"
+#include "os/bug_priv.h"
+#include "os/xsha1.h"
 
 #include "misc.h"
 #include "scrnintstr.h"
@@ -36,13 +35,12 @@
 #include "windowstr.h"
 #include "input.h"
 #include "resource.h"
-#include "colormapst.h"
 #include "cursorstr.h"
 #include "dixstruct.h"
 #include "gcstruct.h"
 #include "servermd.h"
 #include "picturestr.h"
-#include "glyphstr.h"
+#include "glyphstr_priv.h"
 #include "mipict.h"
 
 /*
@@ -124,6 +122,10 @@ FindGlyphRef(GlyphHashPtr hash,
     CARD32 elt, step, s;
     GlyphPtr glyph;
     GlyphRefPtr table, gr, del;
+
+    if ((hash == NULL) || (hash->hashSet == NULL))
+        return NULL;
+
     CARD32 tableSize = hash->hashSet->size;
 
     table = hash->table;
@@ -268,7 +270,7 @@ FreeGlyph(GlyphPtr glyph, int format)
         gr = FindGlyphRef(&globalGlyphs[format], signature, TRUE, glyph->sha1);
         if (gr - globalGlyphs[format].table != first)
             DuplicateRef(glyph, "Found wrong one");
-        if (gr->glyph && gr->glyph != DeletedGlyph) {
+        if (gr && gr->glyph && gr->glyph != DeletedGlyph) {
             gr->glyph = DeletedGlyph;
             gr->signature = 0;
             globalGlyphs[format].tableEntries--;
@@ -344,13 +346,12 @@ AllocateGlyph(xGlyphInfo * gi, int fdepth)
 {
     PictureScreenPtr ps;
     int size;
-    GlyphPtr glyph;
     int i;
     int head_size;
 
     head_size = sizeof(GlyphRec) + screenInfo.numScreens * sizeof(PicturePtr);
     size = (head_size + dixPrivatesSize(PRIVATE_GLYPH));
-    glyph = (GlyphPtr) malloc(size);
+    GlyphPtr glyph = calloc(1, size);
     if (!glyph)
         return 0;
     glyph->refcnt = 1;
@@ -385,6 +386,7 @@ AllocateGlyph(xGlyphInfo * gi, int fdepth)
 static Bool
 AllocateGlyphHash(GlyphHashPtr hash, GlyphHashSetPtr hashSet)
 {
+    assert(hashSet);
     hash->table = calloc(hashSet->size, sizeof(GlyphRefRec));
     if (!hash->table)
         return FALSE;
@@ -419,10 +421,10 @@ ResizeGlyphHash(GlyphHashPtr hash, CARD32 change, Bool global)
             glyph = hash->table[i].glyph;
             if (glyph && glyph != DeletedGlyph) {
                 s = hash->table[i].signature;
-                gr = FindGlyphRef(&newHash, s, global, glyph->sha1);
-
-                gr->signature = s;
-                gr->glyph = glyph;
+                if ((gr = FindGlyphRef(&newHash, s, global, glyph->sha1))) {
+                    gr->signature = s;
+                    gr->glyph = glyph;
+                }
                 ++newHash.tableEntries;
             }
         }
@@ -610,7 +612,7 @@ miGlyphs(CARD8 op,
                               maskFormat, CPComponentAlpha, &component_alpha,
                               serverClient, &error);
         if (!pMask) {
-            (*pScreen->DestroyPixmap) (pMaskPixmap);
+            dixDestroyPixmap(pMaskPixmap, 0);
             return;
         }
         pGC = GetScratchGC(pMaskPixmap->drawable.depth, pScreen);
@@ -678,7 +680,7 @@ miGlyphs(CARD8 op,
                          xSrc + x - xDst,
                          ySrc + y - yDst, 0, 0, x, y, width, height);
         FreePicture((void *) pMask, (XID) 0);
-        (*pScreen->DestroyPixmap) (pMaskPixmap);
+        dixDestroyPixmap(pMaskPixmap, 0);
     }
 }
 

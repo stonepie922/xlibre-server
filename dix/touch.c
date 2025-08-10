@@ -24,21 +24,24 @@
  * Author: Daniel Stone <daniel@fooishbar.org>
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "dix/dixgrabs_priv.h"
+#include "dix/eventconvert.h"
+#include "dix/exevents_priv.h"
+#include "dix/input_priv.h"
+#include "dix/resource_priv.h"
+#include "mi/mi_priv.h"
+#include "os/bug_priv.h"
+#include "os/log_priv.h"
 
 #include "inputstr.h"
 #include "scrnintstr.h"
-#include "dixgrabs.h"
-
 #include "eventstr.h"
-#include "exevents.h"
 #include "exglobals.h"
 #include "inpututils.h"
-#include "eventconvert.h"
 #include "windowstr.h"
-#include "mi.h"
 
 #define TOUCH_HISTORY_SIZE 100
 
@@ -710,8 +713,8 @@ TouchAddGrabListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
         type = TOUCH_LISTENER_POINTER_GRAB;
     }
 
-    /* grab listeners are always RT_NONE since we keep the grab pointer */
-    TouchAddListener(ti, grab->resource, RT_NONE, grab->grabtype,
+    /* grab listeners are always X11_RESTYPE_NONE since we keep the grab pointer */
+    TouchAddListener(ti, grab->resource, X11_RESTYPE_NONE, grab->grabtype,
                      type, TOUCH_LISTENER_AWAITING_BEGIN, grab->window, grab);
 }
 
@@ -723,7 +726,7 @@ TouchAddPassiveGrabListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
                             WindowPtr win, InternalEvent *ev)
 {
     GrabPtr grab;
-    Bool check_core = IsMaster(dev) && ti->emulate_pointer;
+    Bool check_core = InputDevIsMaster(dev) && ti->emulate_pointer;
 
     /* FIXME: make CheckPassiveGrabsOnWindow only trigger on TouchBegin */
     grab = CheckPassiveGrabsOnWindow(win, dev, ev, check_core, FALSE);
@@ -759,7 +762,7 @@ TouchAddRegularListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
 
     inputMasks = wOtherInputMasks(win);
 
-    if (mask & EVENT_XI2_MASK) {
+    if ((mask & EVENT_XI2_MASK) && (inputMasks != NULL)) {
         nt_list_for_each_entry(iclients, inputMasks->inputClients, next) {
             if (!xi2mask_isset(iclients->xi2mask, dev, evtype))
                 continue;
@@ -773,7 +776,7 @@ TouchAddRegularListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
         }
     }
 
-    if (mask & EVENT_XI1_MASK) {
+    if ((mask & EVENT_XI1_MASK) && (inputMasks != NULL)) {
         int xitype = GetXIType(TouchGetPointerEventType(ev));
         Mask xi_filter = event_get_filter_from_type(dev, xitype);
 
@@ -796,9 +799,9 @@ TouchAddRegularListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
         OtherClients *oclients;
 
         /* window owner */
-        if (IsMaster(dev) && (win->eventMask & core_filter)) {
+        if (InputDevIsMaster(dev) && (win->eventMask & core_filter)) {
             TouchEventHistoryAllocate(ti);
-            TouchAddListener(ti, win->drawable.id, RT_WINDOW, CORE,
+            TouchAddListener(ti, win->drawable.id, X11_RESTYPE_WINDOW, CORE,
                              TOUCH_LISTENER_POINTER_REGULAR,
                              TOUCH_LISTENER_AWAITING_BEGIN,
                              win, NULL);
@@ -811,7 +814,7 @@ TouchAddRegularListener(DeviceIntPtr dev, TouchPointInfoPtr ti,
                 continue;
 
             TouchEventHistoryAllocate(ti);
-            TouchAddListener(ti, oclients->resource, RT_OTHERCLIENT, CORE,
+            TouchAddListener(ti, oclients->resource, X11_RESTYPE_OTHERCLIENT, CORE,
                              type, TOUCH_LISTENER_AWAITING_BEGIN, win, NULL);
             return TRUE;
         }
@@ -993,7 +996,7 @@ TouchAcceptReject(ClientPtr client, DeviceIntPtr dev, int mode,
     }
 
     for (i = 0; i < ti->num_listeners; i++) {
-        if (CLIENT_ID(ti->listeners[i].listener) == client->index &&
+        if (dixClientIdForXID(ti->listeners[i].listener) == client->index &&
             ti->listeners[i].window->drawable.id == grab_window)
             break;
     }

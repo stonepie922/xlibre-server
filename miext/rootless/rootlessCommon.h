@@ -80,11 +80,7 @@ typedef struct _RootlessScreenRec {
     RootlessFrameProcsPtr imp;
 
     // Wrapped screen functions
-    CreateScreenResourcesProcPtr CreateScreenResources;
-    CloseScreenProcPtr CloseScreen;
-
     CreateWindowProcPtr CreateWindow;
-    DestroyWindowProcPtr DestroyWindow;
     RealizeWindowProcPtr RealizeWindow;
     UnrealizeWindowProcPtr UnrealizeWindow;
     MoveWindowProcPtr MoveWindow;
@@ -92,7 +88,6 @@ typedef struct _RootlessScreenRec {
     RestackWindowProcPtr RestackWindow;
     ReparentWindowProcPtr ReparentWindow;
     ChangeBorderWidthProcPtr ChangeBorderWidth;
-    PositionWindowProcPtr PositionWindow;
     ChangeWindowAttributesProcPtr ChangeWindowAttributes;
     PaintWindowProcPtr PaintWindow;
 
@@ -226,20 +221,10 @@ extern RegionRec rootlessHugeRoot;
  *  Can't access the bits before the first word of the drawable's data in
  *  rootless mode, so make sure our base address is always 32-bit aligned.
  */
-#define SetPixmapBaseToScreen(pix, _x, _y) {                                \
-    PixmapPtr   _pPix = (PixmapPtr) (pix);                                  \
-    _pPix->devPrivate.ptr = (char *) (_pPix->devPrivate.ptr) -              \
-                            ((int)(_x) * _pPix->drawable.bitsPerPixel/8 +   \
-                             (int)(_y) * _pPix->devKind);                   \
-    if (_pPix->drawable.bitsPerPixel != FB_UNIT) {                          \
-        size_t _diff = ((size_t) _pPix->devPrivate.ptr) &               \
-                         (FB_UNIT / CHAR_BIT - 1);                          \
-        _pPix->devPrivate.ptr = (char *) (_pPix->devPrivate.ptr) -          \
-                                _diff;                                      \
-        _pPix->drawable.x = _diff /                                         \
-                            (_pPix->drawable.bitsPerPixel / CHAR_BIT);      \
-    }                                                                       \
-}
+#define SetPixmapBaseToScreen(pix, _x, _y) do { \
+    pix->screen_x = _x; \
+    pix->screen_y = _y; \
+} while(0)
 
 // Returns TRUE if this window is visible inside a frame
 // (e.g. it is visible and has a top-level or root parent)
@@ -282,4 +267,5 @@ void RootlessDisableRoot(ScreenPtr pScreen);
 
 void RootlessSetPixmapOfAncestors(WindowPtr pWin);
 
+unsigned long RootlessWID(WindowPtr pWindow);
 #endif                          /* _ROOTLESSCOMMON_H */

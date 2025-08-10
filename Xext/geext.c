@@ -23,26 +23,37 @@
  * Author: Peter Hutterer, University of South Australia, NICTA
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
-#include "windowstr.h"
-#include <X11/extensions/ge.h>
 
-#include "geint.h"
-#include "geext.h"
+#include <X11/extensions/ge.h>
+#include <X11/extensions/geproto.h>
+
+#include "miext/extinit_priv.h"
+#include "Xext/geext_priv.h"
+
+#include "windowstr.h"
 #include "protocol-versions.h"
-#include "extinit.h"
+
+#define MAXEXTENSIONS   128
 
 DevPrivateKeyRec GEClientPrivateKeyRec;
 
-GEExtension GEExtensions[MAXEXTENSIONS];
+#define GEClientPrivateKey (&GEClientPrivateKeyRec)
 
-/* Major available requests */
-static const int version_requests[] = {
-    X_GEQueryVersion,           /* before client sends QueryVersion */
-    X_GEQueryVersion,           /* must be set to last request in version 1 */
-};
+/** Struct to keep information about registered extensions */
+typedef struct _GEExtension {
+    /** Event swapping routine */
+    void (*evswap) (xGenericEvent *from, xGenericEvent *to);
+} GEExtension, *GEExtensionPtr;
+
+static GEExtension GEExtensions[MAXEXTENSIONS];
+
+typedef struct _GEClientInfo {
+    CARD32 major_version;
+    CARD32 minor_version;
+} GEClientInfoRec, *GEClientInfoPtr;
+
+#define GEGetClient(pClient)    ((GEClientInfoPtr)(dixLookupPrivate(&((pClient)->devPrivates), GEClientPrivateKey)))
 
 /* Forward declarations */
 static void SGEGenericEvent(xEvent *from, xEvent *to);
@@ -89,11 +100,6 @@ ProcGEQueryVersion(ClientPtr client)
     return Success;
 }
 
-static int (*ProcGEVector[GENumberRequests]) (ClientPtr) = {
-    /* Version 1.0 */
-    ProcGEQueryVersion,
-};
-
 /************************************************************/
 /*                swapped request handlers                  */
 /************************************************************/
@@ -101,18 +107,11 @@ static int _X_COLD
 SProcGEQueryVersion(ClientPtr client)
 {
     REQUEST(xGEQueryVersionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xGEQueryVersionReq);
     swaps(&stuff->majorVersion);
     swaps(&stuff->minorVersion);
-    return (*ProcGEVector[stuff->ReqType]) (client);
+    return ProcGEQueryVersion(client);
 }
-
-static int (*SProcGEVector[GENumberRequests]) (ClientPtr) = {
-    /* Version 1.0 */
-    SProcGEQueryVersion
-};
 
 /************************************************************/
 /*                callbacks                                 */
@@ -122,32 +121,29 @@ static int (*SProcGEVector[GENumberRequests]) (ClientPtr) = {
 static int
 ProcGEDispatch(ClientPtr client)
 {
-    GEClientInfoPtr pGEClient = GEGetClient(client);
+    REQUEST(xReq);
 
-    REQUEST(xGEReq);
-
-    if (pGEClient->major_version >= ARRAY_SIZE(version_requests))
+    switch (stuff->data) {
+    case X_GEQueryVersion:
+        return ProcGEQueryVersion(client);
+    default:
         return BadRequest;
-    if (stuff->ReqType > version_requests[pGEClient->major_version])
-        return BadRequest;
-
-    return (ProcGEVector[stuff->ReqType]) (client);
+    }
 }
 
 /* dispatch swapped requests */
 static int _X_COLD
 SProcGEDispatch(ClientPtr client)
 {
-    GEClientInfoPtr pGEClient = GEGetClient(client);
+    REQUEST(xReq);
+    swaps(&stuff->length);
 
-    REQUEST(xGEReq);
-
-    if (pGEClient->major_version >= ARRAY_SIZE(version_requests))
+    switch (stuff->data) {
+    case X_GEQueryVersion:
+        return SProcGEQueryVersion(client);
+    default:
         return BadRequest;
-    if (stuff->ReqType > version_requests[pGEClient->major_version])
-        return BadRequest;
-
-    return (*SProcGEVector[stuff->ReqType]) (client);
+    }
 }
 
 /* Reset extension. Called on server shutdown. */
@@ -186,24 +182,16 @@ SGEGenericEvent(xEvent *from, xEvent *to)
 void
 GEExtensionInit(void)
 {
-    ExtensionEntry *extEntry;
-
     if (!dixRegisterPrivateKey
         (&GEClientPrivateKeyRec, PRIVATE_CLIENT, sizeof(GEClientInfoRec)))
         FatalError("GEExtensionInit: GE private request failed.\n");
 
-    if ((extEntry = AddExtension(GE_NAME,
-                                 0, GENumberErrors,
-                                 ProcGEDispatch, SProcGEDispatch,
-                                 GEResetProc, StandardMinorOpcode)) != 0) {
-        memset(GEExtensions, 0, sizeof(GEExtensions));
-
-        EventSwapVector[GenericEvent] = (EventSwapPtr) SGEGenericEvent;
-    }
-    else {
+    if (!AddExtension(GE_NAME, 0, GENumberErrors, ProcGEDispatch, SProcGEDispatch,
+                      GEResetProc, StandardMinorOpcode))
         FatalError("GEInit: AddExtensions failed.\n");
-    }
 
+    memset(GEExtensions, 0, sizeof(GEExtensions));
+    EventSwapVector[GenericEvent] = (EventSwapPtr) SGEGenericEvent;
 }
 
 /************************************************************/
@@ -226,15 +214,4 @@ GERegisterExtension(int extension,
 
     /* extension opcodes are > 128, might as well save some space here */
     GEExtensions[EXT_MASK(extension)].evswap = ev_swap;
-}
-
-/* Sets type and extension field for a generic event. This is just an
- * auxiliary function, extensions could do it manually too.
- */
-void
-GEInitEvent(xGenericEvent *ev, int extension)
-{
-    ev->type = GenericEvent;
-    ev->extension = extension;
-    ev->length = 0;
 }
