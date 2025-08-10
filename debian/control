@@ -1,7 +1,7 @@
-Source: xorg-server
+Source: xlibre-server
 Section: x11
 Priority: optional
-Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Maintainer: apebl <a@pebl.cc>
 Build-Depends:
  debhelper-compat (= 12),
  po-debconf,
@@ -43,11 +43,9 @@ Build-Depends:
  libxv-dev,
  libxinerama-dev,
  libxshmfence-dev (>= 1.1) [!hurd-any],
-# glamor
  libepoxy-dev [linux-any kfreebsd-any],
  libegl1-mesa-dev [linux-any kfreebsd-any],
  libgbm-dev (>= 10.2) [linux-any kfreebsd-any],
-# XCB bits for Xephyr
  libx11-xcb-dev,
  libxcb1-dev,
  libxcb-xkb-dev,
@@ -63,33 +61,28 @@ Build-Depends:
  libxcb-xv0-dev,
  libxcb-glx0-dev,
  libxcb-xf86dri0-dev (>= 1.6),
-# unit tests
  xauth <!nocheck>,
  xkb-data,
  x11-utils <!nocheck>,
  x11-xkb-utils,
-# arc4random_buf(), getpeereid()
  libbsd-dev,
-#logind
   libdbus-1-dev (>= 1.0) [linux-any],
-# systemd-daemon
   libsystemd-dev [linux-any],
   systemd-dev [linux-any],
 Build-Depends-Indep: xz-utils
 Standards-Version: 3.9.8
 Rules-Requires-Root: binary-targets
-Vcs-Git: https://salsa.debian.org/xorg-team/xserver/xorg-server.git
-Vcs-Browser: https://salsa.debian.org/xorg-team/xserver/xorg-server
-Homepage: https://www.x.org/
+Vcs-Git: https://github.com/xlibre-deb/xlibre-server.git
+Vcs-Browser: https://github.com/xlibre-deb/xlibre-server
+Homepage: https://github.com/X11Libre
 
-Package: xserver-xorg-core
+Package: xserver-xlibre-core
 Architecture: any
 Depends:
- xserver-common (>= ${source:Version}),
+ xserver-xlibre-common (>= ${source:Version}),
  keyboard-configuration [linux-any kfreebsd-any],
  udev (>= 149) [linux-any],
  devd [kfreebsd-any],
-# for glamor; not a shlibdep because we use epoxy
  libegl1 [linux-any kfreebsd-any],
  ${shlibs:Depends},
  ${misc:Depends},
@@ -106,12 +99,14 @@ Replaces:
  xserver-xorg-video-modesetting,
  xserver-xorg (<< 1:7.7+10~),
 Conflicts:
- xserver-xorg-input-evtouch,
- xserver-xorg-video-modesetting,
+ xserver-xorg-core,
+ xserver-xlibre-input-evtouch,
+ xserver-xlibre-video-modesetting,
 Provides:
+ xserver-xorg-core,
  ${videoabi},
  ${inputabi},
- xserver-xorg-video-modesetting,
+ xserver-xlibre-video-modesetting,
 Description: Xorg X server - core server
  The Xorg X server is an X server for several architectures and operating
  systems, which is derived from the XFree86 4.x series of X servers.
@@ -124,27 +119,27 @@ Description: Xorg X server - core server
  .
  This package is built from the X.org xserver module.
 
-Package: xserver-xorg-core-udeb
+Package: xserver-xlibre-core-udeb
 Package-Type: udeb
 Section: debian-installer
-# exclude sparc because of linker errors
 Architecture: any
 Depends:
-# merged: xserver-common (>= ${source:Version}),
  xkb-data-udeb,
  x11-xkb-utils-udeb,
-# disabled: keyboard-configuration [linux-any kfreebsd-any],
  udev-udeb (>= 149) [linux-any],
  devd-udeb [kfreebsd-any],
  ${shlibs:Depends},
  ${misc:Depends},
 Provides:
+ xserver-xorg-core-udeb,
  ${videoabi},
  ${inputabi},
 Description: Xorg X server - core server
  This is a udeb, or a microdeb, for the debian-installer.
+Conflicts:
+ xserver-xorg-core-udeb,
 
-Package: xserver-xorg-dev
+Package: xserver-xlibre-dev
 Architecture: any
 Depends:
  libpixman-1-dev (>= 0.27.2),
@@ -169,15 +164,21 @@ Description: Xorg X server - development files
  <URL:https://www.x.org>
  .
  This package is built from the X.org xserver module.
+Provides:
+ xserver-xorg-dev,
+Conflicts:
+ xserver-xorg-dev,
 
-Package: xnest
+Package: xserver-xlibre-xnest
 Architecture: any
 Depends:
- xserver-common (>= ${source:Version}),
+ xserver-xlibre-common (>= ${source:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Recommends: libgl1-mesa-dri (>= 7.1~rc1)
-Provides: xserver
+Provides:
+ xnest,
+ xserver
 Description: Nested X server
  Xnest is a nested X server that simply relays all its requests to another
  X server, where it runs as a client.  This means that it appears as another
@@ -190,15 +191,19 @@ Description: Nested X server
  <URL:https://www.x.org>
  .
  This package is built from the X.org xserver module.
+Conflicts:
+ xnest,
 
-Package: xvfb
+Package: xserver-xlibre-xvfb
 Architecture: any
 Depends:
- xserver-common (>= ${source:Version}),
+ xserver-xlibre-common (>= ${source:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Recommends: xauth
-Provides: xserver
+Provides:
+ xvfb,
+ xserver
 Multi-Arch: foreign
 Description: Virtual Framebuffer 'fake' X server
  Xvfb provides an X server that can run on machines with no display hardware
@@ -220,15 +225,19 @@ Description: Virtual Framebuffer 'fake' X server
  <URL:https://www.x.org>
  .
  This package is built from the X.org xserver module.
+Conflicts:
+ xvfb,
 
-Package: xserver-xephyr
+Package: xserver-xlibre-xephyr
 Architecture: any
 Depends:
- xserver-common (>= ${source:Version}),
+ xserver-xlibre-common (>= ${source:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Recommends: libgl1-mesa-dri (>= 7.1~rc1)
-Provides: xserver
+Provides:
+ xserver-xephyr,
+ xserver
 Description: nested X server
  Xephyr is an X server that can be run inside another X server,
  much like Xnest. It is based on the kdrive X server, and as a
@@ -239,8 +248,10 @@ Description: nested X server
  <URL:https://www.x.org>
  .
  This package is built from the X.org xserver module.
+Conflicts:
+ xserver-xephyr,
 
-Package: xserver-common
+Package: xserver-xlibre-common
 Architecture: all
 Multi-Arch: foreign
 Depends:
@@ -254,8 +265,12 @@ Recommends:
 Replaces: xserver-xorg-core (<< 2:1.5.2)
 Description: common files used by various X servers
  This package provides files necessary for all X.Org based X servers.
+Provides:
+ xserver-common,
+Conflicts:
+ xserver-common,
 
-Package: xorg-server-source
+Package: xlibre-server-source
 Architecture: all
 Depends:
  ${misc:Depends},
@@ -268,11 +283,15 @@ Description: Xorg X server - source files
  .
  Unless you are building a software product using X server sources,
  you probably want xserver-xorg and/or xserver-xorg-core instead.
+Provides:
+ xorg-server-source,
+Conflicts:
+ xorg-server-source,
 
-Package: xserver-xorg-legacy
+Package: xserver-xlibre-legacy
 Architecture: any
 Depends:
- xserver-common (>= ${source:Version}),
+ xserver-xlibre-common (>= ${source:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Breaks:
@@ -284,3 +303,7 @@ Replaces:
 Description: setuid root Xorg server wrapper
  This package provides a wrapper for the Xorg X server, which is
  necessary for legacy drivers and non-Linux kernels.
+Provides:
+ xserver-xorg-legacy,
+Conflicts:
+ xserver-xorg-legacy,
