@@ -22,9 +22,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
 
@@ -1084,7 +1082,7 @@ exaCreateAlphaPicture(ScreenPtr pScreen,
         return 0;
     pGC = GetScratchGC(pPixmap->drawable.depth, pScreen);
     if (!pGC) {
-        (*pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
         return 0;
     }
     ValidateGC(&pPixmap->drawable, pGC);
@@ -1097,7 +1095,7 @@ exaCreateAlphaPicture(ScreenPtr pScreen,
     FreeScratchGC(pGC);
     pPicture = CreatePicture(0, &pPixmap->drawable, pPictFormat,
                              0, 0, serverClient, &error);
-    (*pScreen->DestroyPixmap) (pPixmap);
+    dixDestroyPixmap(pPixmap, 0);
     return pPicture;
 }
 

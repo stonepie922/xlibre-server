@@ -20,15 +20,14 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "fb/fbpict_priv.h"
 
 #include "fb.h"
 
 #include "picturestr.h"
 #include "mipict.h"
-#include "fbpict.h"
 #include "damage.h"
 
 void

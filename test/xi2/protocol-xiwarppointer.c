@@ -24,9 +24,7 @@
 /* Test relies on assert() */
 #undef NDEBUG
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 /*
  * Protocol testing for XIWarpPointer request.
@@ -66,6 +64,7 @@ request_XIWarpPointer(ClientPtr client, xXIWarpPointerReq * req, int error)
 {
     int rc;
 
+    client->swapped = FALSE;
     rc = ProcXIWarpPointer(client);
     assert(rc == error);
 
@@ -95,8 +94,6 @@ request_XIWarpPointer(ClientPtr client, xXIWarpPointerReq * req, int error)
     else if (rc == BadWindow)
         assert(client->errorValue == req->dst_win ||
                client->errorValue == req->src_win);
-
-    client->swapped = FALSE;
 }
 
 static void
@@ -105,6 +102,9 @@ test_XIWarpPointer(void)
     int i;
     ClientRec client_request;
     xXIWarpPointerReq request;
+
+    init_simple();
+    screen.SetCursorPosition = ScreenSetCursorPosition;
 
     memset(&request, 0, sizeof(request));
 
@@ -188,13 +188,12 @@ test_XIWarpPointer(void)
     request_XIWarpPointer(&client_request, &request, BadLength);
 }
 
-int
+const testfunc_t*
 protocol_xiwarppointer_test(void)
 {
-    init_simple();
-    screen.SetCursorPosition = ScreenSetCursorPosition;
-
-    test_XIWarpPointer();
-
-    return 0;
+    static const testfunc_t testfuncs[] = {
+        test_XIWarpPointer,
+        NULL,
+    };
+    return testfuncs;
 }

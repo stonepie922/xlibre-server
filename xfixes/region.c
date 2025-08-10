@@ -20,13 +20,16 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "dix/window_priv.h"
+#include "render/picturestr_priv.h"
+#include "Xext/panoramiX.h"
+#include "Xext/panoramiXsrv.h"
 
 #include "xfixesint.h"
 #include "scrnintstr.h"
-#include <picturestr.h>
 
 #include <regionstr.h>
 #include <gcstruct.h>
@@ -95,12 +98,10 @@ int _X_COLD
 SProcXFixesCreateRegion(ClientPtr client)
 {
     REQUEST(xXFixesCreateRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xXFixesCreateRegionReq);
     swapl(&stuff->region);
     SwapRestS(stuff);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCreateRegion(client);
 }
 
 int
@@ -115,7 +116,7 @@ ProcXFixesCreateRegionFromBitmap(ClientPtr client)
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromBitmapReq);
     LEGAL_NEW_RESOURCE(stuff->region, client);
 
-    rc = dixLookupResourceByType((void **) &pPixmap, stuff->bitmap, RT_PIXMAP,
+    rc = dixLookupResourceByType((void **) &pPixmap, stuff->bitmap, X11_RESTYPE_PIXMAP,
                                  client, DixReadAccess);
     if (rc != Success) {
         client->errorValue = stuff->bitmap;
@@ -139,12 +140,10 @@ int _X_COLD
 SProcXFixesCreateRegionFromBitmap(ClientPtr client)
 {
     REQUEST(xXFixesCreateRegionFromBitmapReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromBitmapReq);
     swapl(&stuff->region);
     swapl(&stuff->bitmap);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCreateRegionFromBitmap(client);
 }
 
 int
@@ -159,7 +158,7 @@ ProcXFixesCreateRegionFromWindow(ClientPtr client)
 
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromWindowReq);
     LEGAL_NEW_RESOURCE(stuff->region, client);
-    rc = dixLookupResourceByType((void **) &pWin, stuff->window, RT_WINDOW,
+    rc = dixLookupResourceByType((void **) &pWin, stuff->window, X11_RESTYPE_WINDOW,
                                  client, DixGetAttrAccess);
     if (rc != Success) {
         client->errorValue = stuff->window;
@@ -198,12 +197,10 @@ int _X_COLD
 SProcXFixesCreateRegionFromWindow(ClientPtr client)
 {
     REQUEST(xXFixesCreateRegionFromWindowReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromWindowReq);
     swapl(&stuff->region);
     swapl(&stuff->window);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCreateRegionFromWindow(client);
 }
 
 int
@@ -241,12 +238,10 @@ int _X_COLD
 SProcXFixesCreateRegionFromGC(ClientPtr client)
 {
     REQUEST(xXFixesCreateRegionFromGCReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromGCReq);
     swapl(&stuff->region);
     swapl(&stuff->gc);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCreateRegionFromGC(client);
 }
 
 int
@@ -283,12 +278,10 @@ int _X_COLD
 SProcXFixesCreateRegionFromPicture(ClientPtr client)
 {
     REQUEST(xXFixesCreateRegionFromPictureReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCreateRegionFromPictureReq);
     swapl(&stuff->region);
     swapl(&stuff->picture);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCreateRegionFromPicture(client);
 }
 
 int
@@ -299,7 +292,7 @@ ProcXFixesDestroyRegion(ClientPtr client)
 
     REQUEST_SIZE_MATCH(xXFixesDestroyRegionReq);
     VERIFY_REGION(pRegion, stuff->region, client, DixWriteAccess);
-    FreeResource(stuff->region, RT_NONE);
+    FreeResource(stuff->region, X11_RESTYPE_NONE);
     return Success;
 }
 
@@ -307,11 +300,9 @@ int _X_COLD
 SProcXFixesDestroyRegion(ClientPtr client)
 {
     REQUEST(xXFixesDestroyRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesDestroyRegionReq);
     swapl(&stuff->region);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesDestroyRegion(client);
 }
 
 int
@@ -345,12 +336,10 @@ int _X_COLD
 SProcXFixesSetRegion(ClientPtr client)
 {
     REQUEST(xXFixesSetRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xXFixesSetRegionReq);
     swapl(&stuff->region);
     SwapRestS(stuff);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesSetRegion(client);
 }
 
 int
@@ -374,12 +363,10 @@ int _X_COLD
 SProcXFixesCopyRegion(ClientPtr client)
 {
     REQUEST(xXFixesCopyRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCopyRegionReq);
     swapl(&stuff->source);
     swapl(&stuff->destination);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCopyRegion(client);
 }
 
 int
@@ -416,13 +403,11 @@ int _X_COLD
 SProcXFixesCombineRegion(ClientPtr client)
 {
     REQUEST(xXFixesCombineRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesCombineRegionReq);
     swapl(&stuff->source1);
     swapl(&stuff->source2);
     swapl(&stuff->destination);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesCombineRegion(client);
 }
 
 int
@@ -460,8 +445,6 @@ int _X_COLD
 SProcXFixesInvertRegion(ClientPtr client)
 {
     REQUEST(xXFixesInvertRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesInvertRegionReq);
     swapl(&stuff->source);
     swaps(&stuff->x);
@@ -469,7 +452,7 @@ SProcXFixesInvertRegion(ClientPtr client)
     swaps(&stuff->width);
     swaps(&stuff->height);
     swapl(&stuff->destination);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesInvertRegion(client);
 }
 
 int
@@ -490,13 +473,11 @@ int _X_COLD
 SProcXFixesTranslateRegion(ClientPtr client)
 {
     REQUEST(xXFixesTranslateRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesTranslateRegionReq);
     swapl(&stuff->region);
     swaps(&stuff->dx);
     swaps(&stuff->dy);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesTranslateRegion(client);
 }
 
 int
@@ -519,20 +500,16 @@ int _X_COLD
 SProcXFixesRegionExtents(ClientPtr client)
 {
     REQUEST(xXFixesRegionExtentsReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesRegionExtentsReq);
     swapl(&stuff->source);
     swapl(&stuff->destination);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesRegionExtents(client);
 }
 
 int
 ProcXFixesFetchRegion(ClientPtr client)
 {
     RegionPtr pRegion;
-    xXFixesFetchRegionReply *reply;
-    xRectangle *pRect;
     BoxPtr pExtent;
     BoxPtr pBox;
     int i, nBox;
@@ -546,37 +523,39 @@ ProcXFixesFetchRegion(ClientPtr client)
     pBox = RegionRects(pRegion);
     nBox = RegionNumRects(pRegion);
 
-    reply = calloc(sizeof(xXFixesFetchRegionReply) + nBox * sizeof(xRectangle),
-                   1);
-    if (!reply)
+    xRectangle *pRect = calloc(nBox, sizeof(xRectangle));
+    if (!pRect)
         return BadAlloc;
-    reply->type = X_Reply;
-    reply->sequenceNumber = client->sequence;
-    reply->length = nBox << 1;
-    reply->x = pExtent->x1;
-    reply->y = pExtent->y1;
-    reply->width = pExtent->x2 - pExtent->x1;
-    reply->height = pExtent->y2 - pExtent->y1;
 
-    pRect = (xRectangle *) (reply + 1);
     for (i = 0; i < nBox; i++) {
         pRect[i].x = pBox[i].x1;
         pRect[i].y = pBox[i].y1;
         pRect[i].width = pBox[i].x2 - pBox[i].x1;
         pRect[i].height = pBox[i].y2 - pBox[i].y1;
     }
+
+    xXFixesFetchRegionReply rep = {
+        .type = X_Reply,
+        .sequenceNumber = client->sequence,
+        .length = nBox << 1,
+        .x = pExtent->x1,
+        .y = pExtent->y1,
+        .width = pExtent->x2 - pExtent->x1,
+        .height = pExtent->y2 - pExtent->y1,
+    };
+
     if (client->swapped) {
-        swaps(&reply->sequenceNumber);
-        swapl(&reply->length);
-        swaps(&reply->x);
-        swaps(&reply->y);
-        swaps(&reply->width);
-        swaps(&reply->height);
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+        swaps(&rep.x);
+        swaps(&rep.y);
+        swaps(&rep.width);
+        swaps(&rep.height);
         SwapShorts((INT16 *) pRect, nBox * 4);
     }
-    WriteToClient(client, sizeof(xXFixesFetchRegionReply) +
-                         nBox * sizeof(xRectangle), (char *) reply);
-    free(reply);
+    WriteToClient(client, sizeof(rep), &rep);
+    WriteToClient(client, nBox * sizeof(xRectangle), pRect);
+    free(pRect);
     return Success;
 }
 
@@ -584,23 +563,37 @@ int _X_COLD
 SProcXFixesFetchRegion(ClientPtr client)
 {
     REQUEST(xXFixesFetchRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesFetchRegionReq);
     swapl(&stuff->region);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesFetchRegion(client);
 }
+
+static int
+PanoramiXFixesSetGCClipRegion(ClientPtr client, xXFixesSetGCClipRegionReq *stuff);
+
+static int
+SingleXFixesSetGCClipRegion(ClientPtr client, xXFixesSetGCClipRegionReq *stuff);
 
 int
 ProcXFixesSetGCClipRegion(ClientPtr client)
+{
+    REQUEST(xXFixesSetGCClipRegionReq);
+    REQUEST_SIZE_MATCH(xXFixesSetGCClipRegionReq);
+
+#ifdef XINERAMA
+    if (XFixesUseXinerama)
+        return PanoramiXFixesSetGCClipRegion(client, stuff);
+#endif
+    return SingleXFixesSetGCClipRegion(client, stuff);
+}
+
+static int
+SingleXFixesSetGCClipRegion(ClientPtr client, xXFixesSetGCClipRegionReq *stuff)
 {
     GCPtr pGC;
     RegionPtr pRegion;
     ChangeGCVal vals[2];
     int rc;
-
-    REQUEST(xXFixesSetGCClipRegionReq);
-    REQUEST_SIZE_MATCH(xXFixesSetGCClipRegionReq);
 
     rc = dixLookupGC(&pGC, stuff->gc, client, DixSetAttrAccess);
     if (rc != Success)
@@ -627,30 +620,25 @@ int _X_COLD
 SProcXFixesSetGCClipRegion(ClientPtr client)
 {
     REQUEST(xXFixesSetGCClipRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesSetGCClipRegionReq);
     swapl(&stuff->gc);
     swapl(&stuff->region);
     swaps(&stuff->xOrigin);
     swaps(&stuff->yOrigin);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesSetGCClipRegion(client);
 }
 
 typedef RegionPtr (*CreateDftPtr) (WindowPtr pWin);
 
-int
-ProcXFixesSetWindowShapeRegion(ClientPtr client)
+static int
+SingleXFixesSetWindowShapeRegion(ClientPtr client, xXFixesSetWindowShapeRegionReq *stuff)
 {
     WindowPtr pWin;
     RegionPtr pRegion;
     RegionPtr *pDestRegion;
     int rc;
 
-    REQUEST(xXFixesSetWindowShapeRegionReq);
-
-    REQUEST_SIZE_MATCH(xXFixesSetWindowShapeRegionReq);
-    rc = dixLookupResourceByType((void **) &pWin, stuff->dest, RT_WINDOW,
+    rc = dixLookupResourceByType((void **) &pWin, stuff->dest, X11_RESTYPE_WINDOW,
                                  client, DixSetAttrAccess);
     if (rc != Success) {
         client->errorValue = stuff->dest;
@@ -670,8 +658,8 @@ ProcXFixesSetWindowShapeRegion(ClientPtr client)
         pRegion = XFixesRegionCopy(pRegion);
         if (!pRegion)
             return BadAlloc;
-        if (!pWin->optional)
-            MakeWindowOptional(pWin);
+        if (!MakeWindowOptional(pWin))
+            return BadAlloc;
         switch (stuff->destKind) {
         default:
         case ShapeBounding:
@@ -713,29 +701,59 @@ ProcXFixesSetWindowShapeRegion(ClientPtr client)
     return Success;
 }
 
+static int
+PanoramiXFixesSetWindowShapeRegion(ClientPtr client, xXFixesSetWindowShapeRegionReq *stuff);
+
+int
+ProcXFixesSetWindowShapeRegion(ClientPtr client)
+{
+    REQUEST(xXFixesSetWindowShapeRegionReq);
+    REQUEST_SIZE_MATCH(xXFixesSetWindowShapeRegionReq);
+
+#ifdef XINERAMA
+    if (XFixesUseXinerama)
+        return PanoramiXFixesSetWindowShapeRegion(client, stuff);
+#endif
+    return SingleXFixesSetWindowShapeRegion(client, stuff);
+}
+
 int _X_COLD
 SProcXFixesSetWindowShapeRegion(ClientPtr client)
 {
     REQUEST(xXFixesSetWindowShapeRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesSetWindowShapeRegionReq);
     swapl(&stuff->dest);
     swaps(&stuff->xOff);
     swaps(&stuff->yOff);
     swapl(&stuff->region);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesSetWindowShapeRegion(client);
 }
+
+static int
+SingleXFixesSetPictureClipRegion(ClientPtr client, xXFixesSetPictureClipRegionReq *stuff);
+
+static int
+PanoramiXFixesSetPictureClipRegion(ClientPtr client, xXFixesSetPictureClipRegionReq *stuff);
 
 int
 ProcXFixesSetPictureClipRegion(ClientPtr client)
 {
+    REQUEST(xXFixesSetPictureClipRegionReq);
+    REQUEST_SIZE_MATCH(xXFixesSetPictureClipRegionReq);
+
+#ifdef XINERAMA
+    if (XFixesUseXinerama)
+        return PanoramiXFixesSetPictureClipRegion(client, stuff);
+#endif
+    return SingleXFixesSetPictureClipRegion(client, stuff);
+}
+
+static int
+SingleXFixesSetPictureClipRegion(ClientPtr client, xXFixesSetPictureClipRegionReq *stuff)
+{
     PicturePtr pPicture;
     RegionPtr pRegion;
 
-    REQUEST(xXFixesSetPictureClipRegionReq);
-
-    REQUEST_SIZE_MATCH(xXFixesSetPictureClipRegionReq);
     VERIFY_PICTURE(pPicture, stuff->picture, client, DixSetAttrAccess);
     VERIFY_REGION_OR_NONE(pRegion, stuff->region, client, DixReadAccess);
 
@@ -750,14 +768,12 @@ int _X_COLD
 SProcXFixesSetPictureClipRegion(ClientPtr client)
 {
     REQUEST(xXFixesSetPictureClipRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesSetPictureClipRegionReq);
     swapl(&stuff->picture);
     swapl(&stuff->region);
     swaps(&stuff->xOrigin);
     swaps(&stuff->yOrigin);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesSetPictureClipRegion(client);
 }
 
 int
@@ -778,7 +794,7 @@ ProcXFixesExpandRegion(ClientPtr client)
     nBoxes = RegionNumRects(pSource);
     pSrc = RegionRects(pSource);
     if (nBoxes) {
-        pTmp = xallocarray(nBoxes, sizeof(BoxRec));
+        pTmp = calloc(nBoxes, sizeof(BoxRec));
         if (!pTmp)
             return BadAlloc;
         for (i = 0; i < nBoxes; i++) {
@@ -803,8 +819,6 @@ int _X_COLD
 SProcXFixesExpandRegion(ClientPtr client)
 {
     REQUEST(xXFixesExpandRegionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xXFixesExpandRegionReq);
     swapl(&stuff->source);
     swapl(&stuff->destination);
@@ -812,21 +826,16 @@ SProcXFixesExpandRegion(ClientPtr client)
     swaps(&stuff->right);
     swaps(&stuff->top);
     swaps(&stuff->bottom);
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesExpandRegion(client);
 }
 
-#ifdef PANORAMIX
-#include "panoramiX.h"
-#include "panoramiXsrv.h"
+#ifdef XINERAMA
 
-int
-PanoramiXFixesSetGCClipRegion(ClientPtr client)
+static int
+PanoramiXFixesSetGCClipRegion(ClientPtr client, xXFixesSetGCClipRegionReq *stuff)
 {
-    REQUEST(xXFixesSetGCClipRegionReq);
     int result = Success, j;
     PanoramiXRes *gc;
-
-    REQUEST_SIZE_MATCH(xXFixesSetGCClipRegionReq);
 
     if ((result = dixLookupResourceByType((void **) &gc, stuff->gc, XRT_GC,
                                           client, DixWriteAccess))) {
@@ -836,7 +845,7 @@ PanoramiXFixesSetGCClipRegion(ClientPtr client)
 
     FOR_NSCREENS_BACKWARD(j) {
         stuff->gc = gc->info[j].id;
-        result = (*PanoramiXSaveXFixesVector[X_XFixesSetGCClipRegion]) (client);
+        result = SingleXFixesSetGCClipRegion(client, stuff);
         if (result != Success)
             break;
     }
@@ -844,16 +853,12 @@ PanoramiXFixesSetGCClipRegion(ClientPtr client)
     return result;
 }
 
-int
-PanoramiXFixesSetWindowShapeRegion(ClientPtr client)
+static int
+PanoramiXFixesSetWindowShapeRegion(ClientPtr client, xXFixesSetWindowShapeRegionReq *stuff)
 {
     int result = Success, j;
     PanoramiXRes *win;
     RegionPtr reg = NULL;
-
-    REQUEST(xXFixesSetWindowShapeRegionReq);
-
-    REQUEST_SIZE_MATCH(xXFixesSetWindowShapeRegionReq);
 
     if ((result = dixLookupResourceByType((void **) &win, stuff->dest,
                                           XRT_WINDOW, client,
@@ -872,8 +877,7 @@ PanoramiXFixesSetWindowShapeRegion(ClientPtr client)
         if (reg)
             RegionTranslate(reg, -screen->x, -screen->y);
 
-        result =
-            (*PanoramiXSaveXFixesVector[X_XFixesSetWindowShapeRegion]) (client);
+        result = SingleXFixesSetWindowShapeRegion(client, stuff);
 
         if (reg)
             RegionTranslate(reg, screen->x, screen->y);
@@ -885,15 +889,12 @@ PanoramiXFixesSetWindowShapeRegion(ClientPtr client)
     return result;
 }
 
-int
-PanoramiXFixesSetPictureClipRegion(ClientPtr client)
+static int
+PanoramiXFixesSetPictureClipRegion(ClientPtr client, xXFixesSetPictureClipRegionReq *stuff)
 {
-    REQUEST(xXFixesSetPictureClipRegionReq);
     int result = Success, j;
     PanoramiXRes *pict;
     RegionPtr reg = NULL;
-
-    REQUEST_SIZE_MATCH(xXFixesSetPictureClipRegionReq);
 
     if ((result = dixLookupResourceByType((void **) &pict, stuff->picture,
                                           XRT_PICTURE, client,
@@ -912,8 +913,7 @@ PanoramiXFixesSetPictureClipRegion(ClientPtr client)
         if (reg)
             RegionTranslate(reg, -screen->x, -screen->y);
 
-        result =
-            (*PanoramiXSaveXFixesVector[X_XFixesSetPictureClipRegion]) (client);
+        result = SingleXFixesSetPictureClipRegion(client, stuff);
 
         if (reg)
             RegionTranslate(reg, screen->x, screen->y);
@@ -925,4 +925,4 @@ PanoramiXFixesSetPictureClipRegion(ClientPtr client)
     return result;
 }
 
-#endif
+#endif /* XINERAMA */

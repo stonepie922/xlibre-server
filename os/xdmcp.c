@@ -13,9 +13,7 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #ifdef WIN32
 #include <X11/Xwinsock.h>
@@ -34,15 +32,21 @@
 #include <netdb.h>
 #endif
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <X11/X.h>
 #include <X11/Xmd.h>
+
+#include "dix/dix_priv.h"
+#include "os/auth.h"
+
 #include "misc.h"
 #include "osdep.h"
+#include "xdmcp.h"
+#include "xdmauth.h"
 #include "input.h"
 #include "dixstruct.h"
-#include "opaque.h"
 
 #define XSERV_t
 #define TRANS_SERVER
@@ -66,7 +70,7 @@ static const char *defaultDisplayClass = "MIT-unspecified";
 static int xdmcpSocket, sessionSocket;
 static xdmcp_states state;
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
 static int xdmcpSocket6;
 static struct sockaddr_storage req_sockaddr;
 #else
@@ -85,10 +89,12 @@ static char *xdmAuthCookie;
 
 static XdmcpBuffer buffer;
 
-#if defined(IPv6) && defined(AF_INET6)
-
+#if defined(HAVE_GETADDRINFO)
 static struct addrinfo *mgrAddr;
 static struct addrinfo *mgrAddrFirst;
+#endif
+
+#if defined(IPv6)
 
 #define SOCKADDR_TYPE		struct sockaddr_storage
 #define SOCKADDR_FAMILY(s)	((struct sockaddr *)&(s))->sa_family
@@ -124,7 +130,7 @@ static SOCKADDR_TYPE FromAddress;
 static SOCKLEN_TYPE ManagerAddressLen, FromAddressLen;
 #endif
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
 static struct multicastinfo {
     struct multicastinfo *next;
     struct addrinfo *ai;
@@ -177,7 +183,7 @@ static void get_fromaddr_by_name(int    argc,
                                  char   **argv,
                                  int    i);
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
 static int get_mcast_options(int        argc,
                              char       **argv,
                              int        i);
@@ -220,7 +226,7 @@ XdmcpUseMsg(void)
 {
     ErrorF("-query host-name       contact named host for XDMCP\n");
     ErrorF("-broadcast             broadcast for XDMCP\n");
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     ErrorF("-multicast [addr [hops]] IPv6 multicast for XDMCP\n");
 #endif
     ErrorF("-indirect host-name    contact named host for indirect XDMCP\n");
@@ -259,7 +265,7 @@ XdmcpOptions(int argc, char **argv, int i)
         XdmcpDefaultListen();
         return i + 1;
     }
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if (strcmp(argv[i], "-multicast") == 0) {
         i = get_mcast_options(argc, argv, ++i);
         XDM_INIT_STATE = XDM_MULTICAST;
@@ -392,7 +398,7 @@ XdmcpRegisterAuthentication(const char *name,
           XdmcpReallocARRAYofARRAY8(&AuthenticationDatas,
                                     AuthenticationDatas.length + 1) &&
           (newFuncs =
-           malloc((AuthenticationNames.length +
+           calloc(1, (AuthenticationNames.length +
                    1) * sizeof(AuthenticationFuncsRec))))) {
         XdmcpDisposeARRAY8(&AuthenticationName);
         XdmcpDisposeARRAY8(&AuthenticationData);
@@ -465,7 +471,7 @@ XdmcpRegisterConnection(int type, const char *address, int addrlen)
             if (SOCKADDR_FAMILY(FromAddress) == AF_INET) {
                 fromAddr = &((struct sockaddr_in *) &FromAddress)->sin_addr;
             }
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
             else if ((SOCKADDR_FAMILY(FromAddress) == AF_INET6) &&
                      IN6_IS_ADDR_V4MAPPED(&
                                           ((struct sockaddr_in6 *)
@@ -476,7 +482,7 @@ XdmcpRegisterConnection(int type, const char *address, int addrlen)
             }
 #endif
         }
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
         else if (addrlen == sizeof(struct in6_addr)) {
             if (SOCKADDR_FAMILY(FromAddress) == AF_INET6) {
                 fromAddr = &((struct sockaddr_in6 *) &FromAddress)->sin6_addr;
@@ -496,7 +502,7 @@ XdmcpRegisterConnection(int type, const char *address, int addrlen)
     }
     if (ConnectionAddresses.length + 1 == 256)
         return;
-    newAddress = malloc(addrlen * sizeof(CARD8));
+    newAddress = calloc(addrlen, sizeof(CARD8));
     if (!newAddress)
         return;
     if (!XdmcpReallocARRAY16(&ConnectionTypes, ConnectionTypes.length + 1)) {
@@ -530,12 +536,13 @@ XdmcpRegisterAuthorizations(void)
 }
 
 void
-XdmcpRegisterAuthorization(const char *name, int namelen)
+XdmcpRegisterAuthorization(const char *name)
 {
     ARRAY8 authName;
     int i;
 
-    authName.data = malloc(namelen * sizeof(CARD8));
+    size_t namelen = strlen(name);
+    authName.data = calloc(namelen, sizeof(CARD8));
     if (!authName.data)
         return;
     if (!XdmcpReallocARRAYofARRAY8
@@ -573,7 +580,7 @@ xdmcp_reset(void)
     timeOutRtx = 0;
     if (xdmcpSocket >= 0)
         SetNotifyFd(xdmcpSocket, XdmcpSocketNotify, X_NOTIFY_READ, NULL);
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if (xdmcpSocket6 >= 0)
         SetNotifyFd(xdmcpSocket6, XdmcpSocketNotify, X_NOTIFY_READ, NULL);
 #endif
@@ -709,7 +716,7 @@ static ARRAY8 UnwillingMessage = { (CARD8) 14, (CARD8 *) "Host unwilling" };
 static void
 receive_packet(int socketfd)
 {
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     struct sockaddr_storage from;
 #else
     struct sockaddr_in from;
@@ -768,7 +775,7 @@ send_packet(void)
     case XDM_QUERY:
     case XDM_BROADCAST:
     case XDM_INDIRECT:
-#if defined(IPv6)  && defined(AF_INET6)
+#if defined(IPv6)
     case XDM_MULTICAST:
 #endif
         send_query_msg();
@@ -832,15 +839,19 @@ timeout(void)
         return;
     }
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
     if (state == XDM_COLLECT_QUERY || state == XDM_COLLECT_INDIRECT_QUERY) {
         /* Try next address */
         for (mgrAddr = mgrAddr->ai_next;; mgrAddr = mgrAddr->ai_next) {
             if (mgrAddr == NULL) {
                 mgrAddr = mgrAddrFirst;
             }
-            if (mgrAddr->ai_family == AF_INET || mgrAddr->ai_family == AF_INET6)
+            if (mgrAddr->ai_family == AF_INET)
                 break;
+#if defined(IPv6)
+            if (mgrAddr->ai_family == AF_INET6)
+                break;
+#endif
         }
 #ifndef SIN6_LEN
         ManagerAddressLen = mgrAddr->ai_addrlen;
@@ -856,7 +867,7 @@ timeout(void)
     case XDM_COLLECT_BROADCAST_QUERY:
         state = XDM_BROADCAST;
         break;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     case XDM_COLLECT_MULTICAST_QUERY:
         state = XDM_MULTICAST;
         break;
@@ -891,13 +902,14 @@ XdmcpCheckAuthentication(ARRAY8Ptr Name, ARRAY8Ptr Data, int packet_type)
 static int
 XdmcpAddAuthorization(ARRAY8Ptr name, ARRAY8Ptr data)
 {
-    AddAuthorFunc AddAuth;
-
     if (AuthenticationFuncs && AuthenticationFuncs->AddAuth)
-        AddAuth = AuthenticationFuncs->AddAuth;
+        return AuthenticationFuncs->AddAuth(
+                       (unsigned short) name->length,
+                       (char *) name->data,
+                       (unsigned short) data->length, (char *) data->data);
     else
-        AddAuth = AddAuthorization;
-    return (*AddAuth) ((unsigned short) name->length,
+        return AddAuthorization(
+                       (unsigned short) name->length,
                        (char *) name->data,
                        (unsigned short) data->length, (char *) data->data);
 }
@@ -913,7 +925,7 @@ get_xdmcp_sock(void)
     int soopts = 1;
     int socketfd = -1;
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if ((xdmcpSocket6 = socket(AF_INET6, SOCK_DGRAM, 0)) < 0)
         XdmcpWarning("INET6 UDP socket creation failed");
 #endif
@@ -930,7 +942,7 @@ get_xdmcp_sock(void)
 
     if (SOCKADDR_FAMILY(FromAddress) == AF_INET)
         socketfd = xdmcpSocket;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     else if (SOCKADDR_FAMILY(FromAddress) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
@@ -949,7 +961,7 @@ send_query_msg(void)
     XdmcpHeader header;
     Bool broadcast = FALSE;
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     Bool multicast = FALSE;
 #endif
     int i;
@@ -966,7 +978,7 @@ send_query_msg(void)
         state = XDM_COLLECT_BROADCAST_QUERY;
         broadcast = TRUE;
         break;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     case XDM_MULTICAST:
         header.opcode = (CARD16) BROADCAST_QUERY;
         state = XDM_COLLECT_MULTICAST_QUERY;
@@ -992,7 +1004,7 @@ send_query_msg(void)
                        (XdmcpNetaddr) &BroadcastAddresses[i],
                        sizeof(struct sockaddr_in));
     }
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     else if (multicast) {
         struct multicastinfo *mcl;
         struct addrinfo *ai;
@@ -1024,7 +1036,7 @@ send_query_msg(void)
     }
 #endif
     else {
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
         if (SOCKADDR_FAMILY(ManagerAddress) == AF_INET6)
             socketfd = xdmcpSocket6;
 #endif
@@ -1053,7 +1065,7 @@ recv_willing_msg(struct sockaddr *from, int fromlen, unsigned length)
                 XdmcpSelectHost(from, fromlen, &authenticationName);
                 break;
             case XDM_COLLECT_BROADCAST_QUERY:
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
             case XDM_COLLECT_MULTICAST_QUERY:
 #endif
             case XDM_COLLECT_INDIRECT_QUERY:
@@ -1084,7 +1096,7 @@ send_request_msg(void)
     case AF_INET:
         XdmcpConnectionType = FamilyInternet;
         break;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     case AF_INET6:
         XdmcpConnectionType = FamilyInternet6;
         break;
@@ -1148,7 +1160,7 @@ send_request_msg(void)
     XdmcpDisposeARRAY8(&authenticationData);
     XdmcpWriteARRAYofARRAY8(&buffer, &AuthorizationNames);
     XdmcpWriteARRAY8(&buffer, &ManufacturerDisplayID);
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if (SOCKADDR_FAMILY(req_sockaddr) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
@@ -1242,7 +1254,7 @@ send_manage_msg(void)
     XdmcpWriteCARD16(&buffer, DisplayNumber);
     XdmcpWriteARRAY8(&buffer, &DisplayClass);
     state = XDM_AWAIT_MANAGE_RESPONSE;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if (SOCKADDR_FAMILY(req_sockaddr) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
@@ -1299,7 +1311,7 @@ send_keepalive_msg(void)
     XdmcpWriteCARD32(&buffer, SessionID);
 
     state = XDM_AWAIT_ALIVE_RESPONSE;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
     if (SOCKADDR_FAMILY(req_sockaddr) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
@@ -1347,12 +1359,12 @@ get_addr_by_name(const char *argtype,
                  const char *namestr,
                  int port,
                  int socktype, SOCKADDR_TYPE * addr, SOCKLEN_TYPE * addrlen
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
                  , struct addrinfo **aip, struct addrinfo **aifirstp
 #endif
     )
 {
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
     struct addrinfo *ai;
     struct addrinfo hints;
     char portstr[6];
@@ -1379,8 +1391,12 @@ get_addr_by_name(const char *argtype,
 
     if ((gaierr = getaddrinfo(namestr, pport, &hints, aifirstp)) == 0) {
         for (ai = *aifirstp; ai != NULL; ai = ai->ai_next) {
-            if (ai->ai_family == AF_INET || ai->ai_family == AF_INET6)
+            if (ai->ai_family == AF_INET)
                 break;
+#if defined(IPv6)
+            if (ai->ai_family == AF_INET6)
+                break;
+#endif
         }
         if ((ai == NULL) || (ai->ai_addrlen > sizeof(SOCKADDR_TYPE))) {
             FatalError("Xserver: %s host %s not on supported network type\n",
@@ -1396,7 +1412,7 @@ get_addr_by_name(const char *argtype,
         FatalError("Xserver: %s: %s %s\n", gai_strerror(gaierr), argtype,
                    namestr);
     }
-#else
+#else /* HAVE_GETADDRINFO */
     struct hostent *hep;
 
 #ifdef XTHREADS_NEEDS_BYNAMEPARAMS
@@ -1409,7 +1425,7 @@ get_addr_by_name(const char *argtype,
         FatalError("Xserver: %s unknown host: %s\n", argtype, namestr);
     }
     if (hep->h_length == sizeof(struct in_addr)) {
-        memmove(&addr->sin_addr, hep->h_addr, hep->h_length);
+        memcpy(&addr->sin_addr, hep->h_addr, hep->h_length);
         *addrlen = sizeof(struct sockaddr_in);
         addr->sin_family = AF_INET;
         addr->sin_port = htons(port);
@@ -1418,7 +1434,7 @@ get_addr_by_name(const char *argtype,
         FatalError("Xserver: %s host on strange network %s\n", argtype,
                    namestr);
     }
-#endif
+#endif /* HAVE_GETADDRINFO */
 }
 
 static void
@@ -1431,7 +1447,7 @@ get_manager_by_name(int argc, char **argv, int i)
 
     get_addr_by_name(argv[i], argv[i + 1], xdm_udp_port, SOCK_DGRAM,
                      &ManagerAddress, &ManagerAddressLen
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
                      , &mgrAddr, &mgrAddrFirst
 #endif
         );
@@ -1440,7 +1456,7 @@ get_manager_by_name(int argc, char **argv, int i)
 static void
 get_fromaddr_by_name(int argc, char **argv, int i)
 {
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
     struct addrinfo *ai = NULL;
     struct addrinfo *aifirst = NULL;
 #endif
@@ -1448,18 +1464,18 @@ get_fromaddr_by_name(int argc, char **argv, int i)
         FatalError("Xserver: missing -from host name in command line\n");
     }
     get_addr_by_name("-from", argv[i], 0, 0, &FromAddress, &FromAddressLen
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
                      , &ai, &aifirst
 #endif
         );
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(HAVE_GETADDRINFO)
     if (aifirst != NULL)
         freeaddrinfo(aifirst);
 #endif
     xdm_from = argv[i];
 }
 
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
 static int
 get_mcast_options(int argc, char **argv, int i)
 {
@@ -1507,8 +1523,10 @@ get_mcast_options(int argc, char **argv, int i)
         else {
             struct multicastinfo *mcastinfo, *mcl;
 
-            mcastinfo = malloc(sizeof(struct multicastinfo));
-            mcastinfo->next = NULL;
+            mcastinfo = calloc(1, sizeof(struct multicastinfo));
+            if (!mcastinfo)
+                FatalError("Xserver: failed to allocate mcastinfo\n");
+
             mcastinfo->ai = firstai;
             mcastinfo->hops = hopcount;
 

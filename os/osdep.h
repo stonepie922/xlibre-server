@@ -51,13 +51,17 @@ SOFTWARE.
 #ifndef _OSDEP_H_
 #define _OSDEP_H_ 1
 
-#if defined(XDMCP) || defined(HASXDMAUTH)
-#include <X11/Xdmcp.h>
-#endif
+#include <X11/Xdefs.h>
 
 #include <limits.h>
 #include <stddef.h>
 #include <X11/Xos.h>
+#include <X11/Xmd.h>
+#include <X11/Xdefs.h>
+
+#ifndef __has_builtin
+# define __has_builtin(x) 0     /* Compatibility with older compilers */
+#endif
 
 /* If EAGAIN and EWOULDBLOCK are distinct errno values, then we check errno
  * for both EAGAIN and EWOULDBLOCK, because some supposedly POSIX
@@ -73,40 +77,10 @@ SOFTWARE.
 #define ETEST(err) (err == EAGAIN || err == WSAEWOULDBLOCK)
 #endif
 
-#if defined(XDMCP) || defined(HASXDMAUTH)
-typedef Bool (*ValidatorFunc) (ARRAY8Ptr Auth, ARRAY8Ptr Data, int packet_type);
-typedef Bool (*GeneratorFunc) (ARRAY8Ptr Auth, ARRAY8Ptr Data, int packet_type);
-typedef Bool (*AddAuthorFunc) (unsigned name_length, const char *name,
-                               unsigned data_length, char *data);
-#endif
-
 typedef struct _connectionInput *ConnectionInputPtr;
 typedef struct _connectionOutput *ConnectionOutputPtr;
 
 struct _osComm;
-
-#define AuthInitArgs void
-typedef void (*AuthInitFunc) (AuthInitArgs);
-
-#define AuthAddCArgs unsigned short data_length, const char *data, XID id
-typedef int (*AuthAddCFunc) (AuthAddCArgs);
-
-#define AuthCheckArgs unsigned short data_length, const char *data, ClientPtr client, const char **reason
-typedef XID (*AuthCheckFunc) (AuthCheckArgs);
-
-#define AuthFromIDArgs XID id, unsigned short *data_lenp, char **datap
-typedef int (*AuthFromIDFunc) (AuthFromIDArgs);
-
-#define AuthGenCArgs unsigned data_length, const char *data, XID id, unsigned *data_length_return, char **data_return
-typedef XID (*AuthGenCFunc) (AuthGenCArgs);
-
-#define AuthRemCArgs unsigned short data_length, const char *data
-typedef int (*AuthRemCFunc) (AuthRemCArgs);
-
-#define AuthRstCArgs void
-typedef int (*AuthRstCFunc) (AuthRstCArgs);
-
-typedef void (*OsCloseFunc) (ClientPtr);
 
 typedef int (*OsFlushFunc) (ClientPtr who, struct _osComm * oc, char *extraBuf,
                             int extraCount);
@@ -146,66 +120,103 @@ listen_to_client(ClientPtr client);
 
 extern Bool NewOutputPending;
 
-extern WorkQueuePtr workQueue;
-
 /* in access.c */
 extern Bool ComputeLocalClient(ClientPtr client);
 
-/* in auth.c */
-extern void GenerateRandomData(int len, char *buf);
+/* OsTimer functions */
+void TimerInit(void);
+Bool TimerForce(OsTimerPtr timer);
 
-/* in mitauth.c */
-extern XID MitCheckCookie(AuthCheckArgs);
-extern XID MitGenerateCookie(AuthGenCArgs);
-extern int MitAddCookie(AuthAddCArgs);
-extern int MitFromID(AuthFromIDArgs);
-extern int MitRemoveCookie(AuthRemCArgs);
-extern int MitResetCookie(AuthRstCArgs);
+#ifdef WIN32
+#include <X11/Xwinsock.h>
+struct utsname {
+    char nodename[512];
+};
 
-/* in xdmauth.c */
-#ifdef HASXDMAUTH
-extern XID XdmCheckCookie(AuthCheckArgs);
-extern int XdmAddCookie(AuthAddCArgs);
-extern int XdmFromID(AuthFromIDArgs);
-extern int XdmRemoveCookie(AuthRemCArgs);
-extern int XdmResetCookie(AuthRstCArgs);
-#endif
+static inline void uname(struct utsname *uts) {
+    gethostname(uts->nodename, sizeof(uts->nodename));
+}
 
-/* in rpcauth.c */
-#ifdef SECURE_RPC
-extern void SecureRPCInit(AuthInitArgs);
-extern XID SecureRPCCheck(AuthCheckArgs);
-extern int SecureRPCAdd(AuthAddCArgs);
-extern int SecureRPCFromID(AuthFromIDArgs);
-extern int SecureRPCRemove(AuthRemCArgs);
-extern int SecureRPCReset(AuthRstCArgs);
-#endif
+const char *Win32TempDir(void);
 
-#ifdef XDMCP
-/* in xdmcp.c */
-extern void XdmcpUseMsg(void);
-extern int XdmcpOptions(int argc, char **argv, int i);
-extern void XdmcpRegisterConnection(int type, const char *address, int addrlen);
-extern void XdmcpRegisterAuthorizations(void);
-extern void XdmcpRegisterAuthorization(const char *name, int namelen);
-extern void XdmcpInit(void);
-extern void XdmcpReset(void);
-extern void XdmcpOpenDisplay(int sock);
-extern void XdmcpCloseDisplay(int sock);
-extern void XdmcpRegisterAuthentication(const char *name,
-                                        int namelen,
-                                        const char *data,
-                                        int datalen,
-                                        ValidatorFunc Validator,
-                                        GeneratorFunc Generator,
-                                        AddAuthorFunc AddAuth);
+static inline void Fclose(void *f) { fclose(f); }
+static inline void *Fopen(const char *a, const char *b) { return fopen(a,b); }
 
-struct sockaddr_in;
-extern void XdmcpRegisterBroadcastAddress(const struct sockaddr_in *addr);
-#endif
+#else /* WIN32 */
 
-#ifdef HASXDMAUTH
-extern void XdmAuthenticationInit(const char *cookie, int cookie_length);
+void *Popen(const char *, const char *);
+void *Fopen(const char *, const char *);
+int Fclose(void *f);
+int Pclose(void *f);
+
+#endif /* WIN32 */
+
+void AutoResetServer(int sig);
+
+/* clone fd so it gets out of our select mask */
+int os_move_fd(int fd);
+
+/* set signal mask - either on current thread or whole process,
+   depending on whether multithreading is used */
+int xthread_sigmask(int how, const sigset_t *set, sigset_t *oldest);
+
+typedef void (*OsSigHandlerPtr) (int sig);
+
+/* install signal handler */
+OsSigHandlerPtr OsSignal(int sig, OsSigHandlerPtr handler);
+
+void OsInit(void);
+void OsCleanup(Bool);
+void OsVendorFatalError(const char *f, va_list args) _X_ATTRIBUTE_PRINTF(1, 0);
+void OsVendorInit(void);
+
+_X_EXPORT /* needed by the int10 module, but should not be used by OOT drivers */
+void OsBlockSignals(void);
+
+_X_EXPORT /* needed by the int10 module, but should not be used by OOT drivers */
+void OsReleaseSignals(void);
+
+void OsResetSignals(void);
+void OsAbort(void) _X_NORETURN;
+void AbortServer(void) _X_NORETURN;
+
+void MakeClientGrabPervious(ClientPtr client);
+void MakeClientGrabImpervious(ClientPtr client);
+
+int OnlyListenToOneClient(ClientPtr client);
+
+void ListenToAllClients(void);
+
+/* allow DDX to force using another clock */
+void ForceClockId(clockid_t forced_clockid);
+
+Bool WaitForSomething(Bool clients_are_ready);
+void CloseDownConnection(ClientPtr client);
+
+extern int LimitClients;
+extern Bool PartialNetwork;
+
+extern Bool CoreDump;
+extern Bool NoListenAll;
+extern Bool AllowByteSwappedClients;
+
+#if __has_builtin(__builtin_popcountl)
+# define Ones __builtin_popcountl
+#else
+/*
+ * Count the number of bits set to 1 in a 32-bit word.
+ * Algorithm from MIT AI Lab Memo 239: "HAKMEM", ITEM 169.
+ * https://dspace.mit.edu/handle/1721.1/6086
+ */
+static inline int
+Ones(unsigned long mask)
+{
+    unsigned long y;
+
+    y = (mask >> 1) & 033333333333;
+    y = mask - y - ((y >> 1) & 033333333333);
+    return (((y + (y >> 3)) & 030707070707) % 077);
+}
 #endif
 
 #endif                          /* _OSDEP_H_ */

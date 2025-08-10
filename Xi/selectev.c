@@ -50,18 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
-#include "windowstr.h"          /* window structure  */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XI2.h>
 #include <X11/extensions/XIproto.h>
-#include "exevents.h"
-#include "exglobals.h"
 
+#include "dix/dix_priv.h"
+#include "dix/exevents_priv.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
+#include "windowstr.h"          /* window structure  */
+#include "exglobals.h"
 #include "grabdev.h"
 #include "selectev.h"
 
@@ -121,7 +121,6 @@ int _X_COLD
 SProcXSelectExtensionEvent(ClientPtr client)
 {
     REQUEST(xSelectExtensionEventReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xSelectExtensionEventReq);
     swapl(&stuff->window);
     swaps(&stuff->count);
@@ -148,7 +147,7 @@ ProcXSelectExtensionEvent(ClientPtr client)
     REQUEST(xSelectExtensionEventReq);
     REQUEST_AT_LEAST_SIZE(xSelectExtensionEventReq);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xSelectExtensionEventReq)) + stuff->count)
         return BadLength;
 

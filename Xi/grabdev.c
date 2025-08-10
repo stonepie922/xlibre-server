@@ -50,17 +50,16 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/dix_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "exglobals.h"
-#include "dixevents.h"          /* GrabDevice */
-
 #include "grabdev.h"
 
 extern XExtEventInfo EventInfo[];
@@ -76,13 +75,13 @@ int _X_COLD
 SProcXGrabDevice(ClientPtr client)
 {
     REQUEST(xGrabDeviceReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xGrabDeviceReq);
+
     swapl(&stuff->grabWindow);
     swapl(&stuff->time);
     swaps(&stuff->event_count);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xGrabDeviceReq)) + stuff->event_count)
         return BadLength;
 
@@ -101,7 +100,6 @@ int
 ProcXGrabDevice(ClientPtr client)
 {
     int rc;
-    xGrabDeviceReply rep;
     DeviceIntPtr dev;
     GrabMask mask;
     struct tmask tmp[EMASKSIZE];
@@ -109,15 +107,14 @@ ProcXGrabDevice(ClientPtr client)
     REQUEST(xGrabDeviceReq);
     REQUEST_AT_LEAST_SIZE(xGrabDeviceReq);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xGrabDeviceReq)) + stuff->event_count)
         return BadLength;
 
-    rep = (xGrabDeviceReply) {
+    xGrabDeviceReply rep = {
         .repType = X_Reply,
         .RepType = X_GrabDevice,
         .sequenceNumber = client->sequence,
-        .length = 0,
     };
 
     rc = dixLookupDevice(&dev, stuff->deviceid, client, DixGrabAccess);
@@ -139,7 +136,11 @@ ProcXGrabDevice(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    WriteReplyToClient(client, sizeof(xGrabDeviceReply), &rep);
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+    }
+    WriteToClient(client, sizeof(xGrabDeviceReply), &rep);
     return Success;
 }
 
@@ -196,19 +197,4 @@ CreateMaskFromList(ClientPtr client, XEventClass * list, int count,
             }
     }
     return Success;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the XGrabDevice function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGrabDevice(ClientPtr client, int size, xGrabDeviceReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
 }

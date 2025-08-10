@@ -21,9 +21,9 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "os/osdep.h"
 
 #include "scrnintstr.h"
 #include "gcstruct.h"
@@ -67,7 +67,7 @@ miChangePictureClip(PicturePtr pPicture, int type, void *value, int n)
         clientClip = BitmapToRegion(pScreen, (PixmapPtr) value);
         if (!clientClip)
             return BadAlloc;
-        (*pScreen->DestroyPixmap) ((PixmapPtr) value);
+        dixDestroyPixmap((PixmapPtr) value, 0);
         break;
     case CT_REGION:
         clientClip = value;
@@ -508,7 +508,7 @@ miTriStrip(CARD8 op,
     int ntri;
 
     ntri = npoints - 2;
-    tris = xallocarray(ntri, sizeof(xTriangle));
+    tris = calloc(ntri, sizeof(xTriangle));
     if (!tris)
         return;
 
@@ -533,7 +533,7 @@ miTriFan(CARD8 op,
     int ntri;
 
     ntri = npoints - 2;
-    tris = xallocarray(ntri, sizeof(xTriangle));
+    tris = calloc(ntri, sizeof(xTriangle));
     if (!tris)
         return;
 

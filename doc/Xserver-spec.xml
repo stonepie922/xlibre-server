@@ -440,7 +440,7 @@ To free a resource, use one of the following.
 FreeResource frees all resources matching the given id, regardless of
 type; the type's deleteFunc will be called on each matching resource,
 except that skipDeleteFuncType can be set to a single type for which
-the deleteFunc should not be called (otherwise pass RT_NONE).
+the deleteFunc should not be called (otherwise pass RT_NONE / X11_RESTYPE_NONE).
 FreeResourceByType frees a specific resource matching a given id
 and type; if skipFree is true, then the deleteFunc is not called.
 </para>
@@ -600,7 +600,7 @@ are: REQUEST, REQUEST_SIZE_MATCH, REQUEST_AT_LEAST_SIZE,
 REQUEST_FIXED_SIZE, LEGAL_NEW_RESOURCE, and
 VALIDATE_DRAWABLE_AND_GC. Useful byte swapping macros can be found
 in Xserver/include/dix.h: WriteReplyToClient and WriteSwappedDataToClient; and
-in Xserver/include/misc.h: bswap_64, bswap_32, bswap_16, LengthRestB, LengthRestS,
+in Xserver/include/misc.h: bswap_64, bswap_32, bswap_16, LengthRestS,
 LengthRestL, SwapRestS, SwapRestL, swapl, swaps, cpswapl, and cpswaps.</para>
 </section>
 </section>
@@ -657,14 +657,11 @@ make the server suspend until one or more of the following occurs:
 <para>
 Before WaitForSomething() computes the masks to pass to select, poll or
 similar operating system interface, it needs to
-see if there is anything to do on the work queue; if so, it must call a DIX
-routine called ProcessWorkQueue.
+see if there is anything to do on the work queue; it must call a DIX
+routine called ProcessWorkQueue().
 <blockquote>
 <programlisting>
-	extern WorkQueuePtr	workQueue;
-
-	if (workQueue)
-		ProcessWorkQueue ();
+	ProcessWorkQueue ();
 </programlisting>
 </blockquote>
 </para>
@@ -862,7 +859,7 @@ Similarly, the X server or an extension may need to wait for some timeout.
 Early X releases implemented this functionality using block and wakeup handlers,
 but this has been rewritten to use a general timer facilty, and the
 internal screen saver facilities reimplemented to use Timers.
-These functions are TimerInit, TimerForce, TimerSet, TimerCheck, TimerCancel,
+These functions are TimerInit, TimerForce, TimerSet, TimerCancel,
 and TimerFree, as defined in Xserver/include/os.h. A callback function will be called
 when the timer fires, along with the current time, and a user provided argument.
 <blockquote><programlisting>
@@ -895,8 +892,6 @@ for the timer entry.
 
 	Bool TimerForce(OsTimerPtr /* pTimer */)
 
-	void TimerCheck(void);
-
 	void TimerCancel(OsTimerPtr /* pTimer */)
 
 	void TimerFree(OsTimerPtr /* pTimer */)
@@ -907,7 +902,6 @@ TimerInit frees any existing timer entries. TimerForce forces a call to the time
 callback function and returns true if the timer entry existed, else it returns false and
 does not call the callback function. TimerCancel will cancel the specified timer.
 TimerFree calls TimerCancel and frees the specified timer.
-Calling TimerCheck will force the server to see if any timer callbacks should be called.
 </para>
 </section>
 </section>
@@ -1280,7 +1274,7 @@ making its way back to Dispatch()).  No more X requests will be processed
 for this client until ClientWakeup is called.
 <blockquote><programlisting>
 
-	Bool ClientSignal (client)
+	Bool dixClientSignal (client)
 		ClientPtr	client;
 
 </programlisting></blockquote>
@@ -2739,7 +2733,7 @@ If the colormap is static, which you can tell by looking at the class field,
 you will want to fill in each color cell to match the hardwares notion of the
 color for that pixel.
 If the colormap is the default for the screen, which you can tell by looking
-at the IsDefault bit in the flags field, you should allocate BlackPixel
+at the CM_IsDefault bit in the flags field, you should allocate BlackPixel
 and WhitePixel to match the values you set in the pScreen structure.
 (Of course, you picked those values to begin with.)</para>
 <para>
@@ -3060,6 +3054,14 @@ must deallocate the PixmapRec and all attached devPrivate blocks.
 If successful, it returns TRUE.
 See Xserver/fb/fbpixmap.c for the sample server implementation.</para>
 <para>
+Consumers should never ever call that proc directly, but call dixDestroyPixmap() instead.
+</para>
+<para>
+If it's ever wrapped (by an extension), the wrapping handler must be written
+in a way that it can always be called, even when the private structures are in
+an half-initialized state (error pathes), so no extra unwrapping magic necessary.
+</para>
+<para>
 <blockquote><programlisting>
 
 	Bool
@@ -3280,9 +3282,8 @@ need to be done when these happen, such as allocating or deallocating
 structures that are only needed for visible windows.  RealizeWindow
 does NOT draw the window border, background or contents;
 UnrealizeWindow does NOT erase the window or generate exposure events
-for underlying windows; this is taken care of by DIX.  DIX does,
-however, call PaintWindowBackground() and PaintWindowBorder() to
-perform some of these.</para>
+for underlying windows; this is taken care of by DIX.
+</para>
 <para>
 <blockquote><programlisting>
 
@@ -3386,7 +3387,7 @@ and all of its child windows.</para>
 If generateExposures is false, the client is trying to simply erase part
 of the window to the background fill style.
 ClearToBackground should write the background color or tile to the
-rectangle in question (probably using PaintWindowBackground).
+rectangle in question.
 If w or h is zero, it clears all the way to the right or lower edge of the window.</para>
 <para>
 The sample server implementation is in Xserver/mi/miwindow.c.</para>
@@ -4047,7 +4048,7 @@ returned instead).  Furthermore, the invalid bits of the source are
 not copied to the destination and (when the destination is a window)
 are filled with the background tile.  The sample routine
 miHandleExposures generates the appropriate return value and fills the
-invalid area using pScreen->PaintWindowBackground.</para>
+invalid area.</para>
 <para>
 For instance, imagine a window that is partially obscured by other
 windows in front of it.  As text is scrolled on your window, the pixels
@@ -4260,7 +4261,6 @@ bit in that plane equal to 0.  If format is XYPixmap, planemask is
 guaranteed to have a single bit set; the bits should be written in
 Bitmap format, which is the format for a single plane of an XYPixmap.</para>
 <para>
-An example implementation is miGetImage() in Xserver/mi/mibitblt.c.
 <blockquote><programlisting>
 
 	void pGC->ops->ImageText8(pDraw, pGC, x, y, count, chars)
@@ -4921,16 +4921,14 @@ mi and fb implementations.</para>
 <row><entry><function>ChangeWindowAttributes</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>ClearToBackground</function></entry><entry><literal>ddx</literal></entry><entry><para>Window</para></entry></row>
 <row><entry><function>ClientAuthorized</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
-<row><entry><function>ClientSignal</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
+<row><entry><function>dixClientSignal</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
 <row><entry><function>ClientSleep</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
 <row><entry><function>ClientWakeup</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
 <row><entry><function>ClipNotify</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>CloseScreen</function></entry><entry><literal>hd</literal></entry><entry><para></para></entry></row>
 <row><entry><function>ConstrainCursor</function></entry><entry><literal>hd</literal></entry><entry><para>Screen</para></entry></row>
-<row><entry><function>CopyArea</function></entry><entry><literal>mi</literal></entry><entry><para>GC op</para></entry></row>
 <row><entry><function>CopyGCDest</function></entry><entry><literal>ddx</literal></entry><entry><para>GC func</para></entry></row>
 <row><entry><function>CopyGCSource</function></entry><entry><literal>none</literal></entry><entry><para>GC func</para></entry></row>
-<row><entry><function>CopyPlane</function></entry><entry><literal>mi</literal></entry><entry><para>GC op</para></entry></row>
 <row><entry><function>CopyWindow</function></entry><entry><literal>ddx</literal></entry><entry><para>Window</para></entry></row>
 <row><entry><function>CreateGC</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>CreateCallbackList</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
@@ -4955,7 +4953,6 @@ mi and fb implementations.</para>
 <row><entry><function>FlushAllOutput</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>FlushIfCriticalOutputPending</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>FreeScratchPixmapHeader</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
-<row><entry><function>GetImage</function></entry><entry><literal>mi</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>GetMotionEvents</function></entry><entry><literal>hd</literal></entry><entry><para>Device</para></entry></row>
 <row><entry><function>GetScratchPixmapHeader</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
 <row><entry><function>GetSpans</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
@@ -4993,8 +4990,6 @@ mi and fb implementations.</para>
 <row><entry><function>ModifyPixmapHeader</function></entry><entry><literal>mi</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>NextAvailableClient</function></entry><entry><literal>dix</literal></entry><entry><para></para></entry></row>
 <row><entry><function>OsInit</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
-<row><entry><function>PaintWindowBackground</function></entry><entry><literal>mi</literal></entry><entry><para>Window</para></entry></row>
-<row><entry><function>PaintWindowBorder</function></entry><entry><literal>mi</literal></entry><entry><para>Window</para></entry></row>
 <row><entry><function>PointerNonInterestBox</function></entry><entry><literal>hd</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>PointInRegion</function></entry><entry><literal>mi</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>PolyArc</function></entry><entry><literal>mi</literal></entry><entry><para>GC op</para></entry></row>
@@ -5010,7 +5005,6 @@ mi and fb implementations.</para>
 <row><entry><function>PositionWindow</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>ProcessInputEvents</function></entry><entry><literal>hd</literal></entry><entry><para></para></entry></row>
 <row><entry><function>PushPixels</function></entry><entry><literal>mi</literal></entry><entry><para>GC op</para></entry></row>
-<row><entry><function>PutImage</function></entry><entry><literal>mi</literal></entry><entry><para>GC op</para></entry></row>
 <row><entry><function>QueryBestSize</function></entry><entry><literal>hd</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>ReadRequestFromClient</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>RealizeCursor</function></entry><entry><literal>hd</literal></entry><entry><para>Screen</para></entry></row>
@@ -5051,7 +5045,6 @@ mi and fb implementations.</para>
 <row><entry><function>StoreColors</function></entry><entry><literal>ddx</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>Subtract</function></entry><entry><literal>mi</literal></entry><entry><para>Screen</para></entry></row>
 <row><entry><function>TimerCancel</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
-<row><entry><function>TimerCheck</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>TimerForce</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>TimerFree</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>
 <row><entry><function>TimerInit</function></entry><entry><literal>os</literal></entry><entry><para></para></entry></row>

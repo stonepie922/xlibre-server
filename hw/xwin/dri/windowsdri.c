@@ -21,9 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/Xproto.h>
@@ -38,7 +36,6 @@
 #include "glx/dri_helpers.h"
 
 static int WindowsDRIErrorBase = 0;
-static unsigned char WindowsDRIReqCode = 0;
 static int WindowsDRIEventBase = 0;
 
 static void
@@ -191,7 +188,6 @@ static int
 SProcWindowsDRIQueryVersion(ClientPtr client)
 {
     REQUEST(xWindowsDRIQueryVersionReq);
-    swaps(&stuff->length);
     return ProcWindowsDRIQueryVersion(client);
 }
 
@@ -199,7 +195,6 @@ static int
 SProcWindowsDRIQueryDirectRenderingCapable(ClientPtr client)
 {
     REQUEST(xWindowsDRIQueryDirectRenderingCapableReq);
-    swaps(&stuff->length);
     swapl(&stuff->screen);
     return ProcWindowsDRIQueryDirectRenderingCapable(client);
 }
@@ -208,7 +203,6 @@ static int
 SProcWindowsDRIQueryDrawable(ClientPtr client)
 {
     REQUEST(xWindowsDRIQueryDrawableReq);
-    swaps(&stuff->length);
     swapl(&stuff->screen);
     swapl(&stuff->drawable);
     return ProcWindowsDRIQueryDrawable(client);
@@ -218,7 +212,6 @@ static int
 SProcWindowsDRIFBConfigToPixelFormat(ClientPtr client)
 {
     REQUEST(xWindowsDRIFBConfigToPixelFormatReq);
-    swaps(&stuff->length);
     swapl(&stuff->screen);
     swapl(&stuff->fbConfigID);
     return ProcWindowsDRIFBConfigToPixelFormat(client);
@@ -265,7 +258,6 @@ WindowsDRIExtensionInit(void)
                                  WindowsDRIResetProc,
                                  StandardMinorOpcode))) {
         size_t i;
-        WindowsDRIReqCode = (unsigned char)extEntry->base;
         WindowsDRIErrorBase = extEntry->errorBase;
         WindowsDRIEventBase = extEntry->eventBase;
         for (i = 0; i < WindowsDRINumberEvents; i++)

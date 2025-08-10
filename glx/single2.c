@@ -28,9 +28,7 @@
  * Silicon Graphics, Inc.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <string.h>
 #include <stdio.h>
@@ -108,7 +106,6 @@ int
 __glXDisp_RenderMode(__GLXclientState * cl, GLbyte * pc)
 {
     ClientPtr client = cl->client;
-    xGLXRenderModeReply reply;
     __GLXcontext *cx;
     GLint nitems = 0, retBytes = 0, retval, newModeCheck;
     GLubyte *retBuffer = NULL;
@@ -193,7 +190,7 @@ __glXDisp_RenderMode(__GLXclientState * cl, GLbyte * pc)
      ** selection array, as per the API for glRenderMode itself.
      */
  noChangeAllowed:;
-    reply = (xGLXRenderModeReply) {
+    xGLXRenderModeReply reply = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
         .length = nitems,
@@ -201,7 +198,7 @@ __glXDisp_RenderMode(__GLXclientState * cl, GLbyte * pc)
         .size = nitems,
         .newMode = newMode
     };
-    WriteToClient(client, sz_xGLXRenderModeReply, &reply);
+    WriteToClient(client, sizeof(xGLXRenderModeReply), &reply);
     if (retBytes) {
         WriteToClient(client, retBytes, retBuffer);
     }
@@ -232,7 +229,6 @@ __glXDisp_Finish(__GLXclientState * cl, GLbyte * pc)
     ClientPtr client = cl->client;
     __GLXcontext *cx;
     int error;
-    xGLXSingleReply reply = { 0, };
 
     REQUEST_SIZE_MATCH(xGLXSingleReq);
 
@@ -246,6 +242,8 @@ __glXDisp_Finish(__GLXclientState * cl, GLbyte * pc)
 
     /* Send empty reply packet to indicate finish is finished */
     client = cl->client;
+
+    xGLXSingleReply reply = { 0 };
     __GLX_BEGIN_REPLY(0);
     __GLX_SEND_HEADER();
     return Success;
@@ -274,15 +272,15 @@ __glXcombine_strings(const char *cext_string, const char *sext_string)
     clen = strlen(cext_string);
     slen = strlen(sext_string);
     if (clen > slen) {
-        combo_string = (char *) malloc(slen + 2);
-        s1 = (char *) malloc(slen + 2);
+        combo_string = (char *) calloc(1, slen + 2);
+        s1 = (char *) calloc(1, slen + 2);
         if (s1)
             strcpy(s1, sext_string);
         s2 = cext_string;
     }
     else {
-        combo_string = (char *) malloc(clen + 2);
-        s1 = (char *) malloc(clen + 2);
+        combo_string = (char *) calloc(1, clen + 2);
+        s1 = (char *) calloc(1, clen + 2);
         if (s1)
             strcpy(s1, cext_string);
         s2 = sext_string;
@@ -329,7 +327,6 @@ DoGetString(__GLXclientState * cl, GLbyte * pc, GLboolean need_swap)
     __GLXcontext *cx;
     GLenum name;
     const char *string;
-    xGLXSingleReply reply = { 0, };
 
     __GLX_DECLARE_SWAP_VARIABLES;
     int error;
@@ -383,6 +380,7 @@ DoGetString(__GLXclientState * cl, GLbyte * pc, GLboolean need_swap)
         length = strlen((const char *) string) + 1;
     }
 
+    xGLXSingleReply reply = { 0 };
     __GLX_BEGIN_REPLY(length);
     __GLX_PUT_SIZE(length);
 

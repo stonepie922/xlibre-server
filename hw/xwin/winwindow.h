@@ -52,17 +52,8 @@
 #define WINDOW_CLASS_X_MSG      "cygwin/x X msg"
 #define WINDOW_TITLE_X		PROJECT_NAME " X"
 #define WIN_WINDOW_PROP		"cyg_window_prop_rl"
-#ifdef HAS_DEVWINDOWS
-#define WIN_MSG_QUEUE_FNAME	"/dev/windows"
-#endif
 #define WIN_WID_PROP		"cyg_wid_prop_rl"
 #define WIN_NEEDMANAGE_PROP	"cyg_override_redirect_prop_rl"
-#ifndef CYGMULTIWINDOW_DEBUG
-#define CYGMULTIWINDOW_DEBUG    NO
-#endif
-#ifndef CYGWINDOWING_DEBUG
-#define CYGWINDOWING_DEBUG	NO
-#endif
 
 #define XMING_SIGNATURE		0x12345678L
 

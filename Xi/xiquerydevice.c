@@ -28,24 +28,24 @@
  * @file Protocol handling for the XIQueryDevice request/reply.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/XI2proto.h>
+
+#include "dix/exevents_priv.h"
+#include "dix/input_priv.h"
+#include "os/fmt.h"
+
+#include "inputstr.h"
 #include "xkbstr.h"
 #include "xkbsrv.h"
 #include "xserver-properties.h"
-#include "exevents.h"
 #include "xace.h"
 #include "inpututils.h"
-
 #include "exglobals.h"
 #include "privates.h"
-
 #include "xiquerydevice.h"
 
 static Bool ShouldSkipDevice(ClientPtr client, int deviceid, DeviceIntPtr d);
@@ -59,7 +59,6 @@ SProcXIQueryDevice(ClientPtr client)
     REQUEST(xXIQueryDeviceReq);
     REQUEST_SIZE_MATCH(xXIQueryDeviceReq);
 
-    swaps(&stuff->length);
     swaps(&stuff->deviceid);
 
     return ProcXIQueryDevice(client);
@@ -68,7 +67,6 @@ SProcXIQueryDevice(ClientPtr client)
 int
 ProcXIQueryDevice(ClientPtr client)
 {
-    xXIQueryDeviceReply rep;
     DeviceIntPtr dev = NULL;
     int rc = Success;
     int i = 0, len = 0;
@@ -88,7 +86,7 @@ ProcXIQueryDevice(ClientPtr client)
         len += SizeDeviceInfo(dev);
     }
     else {
-        skip = calloc(sizeof(Bool), inputInfo.numDevices);
+        skip = calloc(inputInfo.numDevices, sizeof(Bool));
         if (!skip)
             return BadAlloc;
 
@@ -111,12 +109,11 @@ ProcXIQueryDevice(ClientPtr client)
         return BadAlloc;
     }
 
-    rep = (xXIQueryDeviceReply) {
+    xXIQueryDeviceReply rep = {
         .repType = X_Reply,
         .RepType = X_XIQueryDevice,
         .sequenceNumber = client->sequence,
         .length = len / 4,
-        .num_devices = 0
     };
 
     ptr = info;
@@ -151,23 +148,17 @@ ProcXIQueryDevice(ClientPtr client)
     }
 
     len = rep.length * 4;
-    WriteReplyToClient(client, sizeof(xXIQueryDeviceReply), &rep);
+
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+        swaps(&rep.num_devices);
+    }
+    WriteToClient(client, sizeof(xXIQueryDeviceReply), &rep);
     WriteToClient(client, len, ptr);
     free(ptr);
     free(skip);
     return rc;
-}
-
-void
-SRepXIQueryDevice(ClientPtr client, int size, xXIQueryDeviceReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    swaps(&rep->num_devices);
-
-    /* Device info is already swapped, see ProcXIQueryDevice */
-
-    WriteToClient(client, size, rep);
 }
 
 /**
@@ -177,8 +168,8 @@ static Bool
 ShouldSkipDevice(ClientPtr client, int deviceid, DeviceIntPtr dev)
 {
     /* if all devices are not being queried, only master devices are */
-    if (deviceid == XIAllDevices || IsMaster(dev)) {
-        int rc = XaceHook(XACE_DEVICE_ACCESS, client, dev, DixGetAttrAccess);
+    if (deviceid == XIAllDevices || InputDevIsMaster(dev)) {
+        int rc = XaceHookDeviceAccess(client, dev, DixGetAttrAccess);
 
         if (rc == Success)
             return FALSE;
@@ -516,13 +507,13 @@ GetDeviceUse(DeviceIntPtr dev, uint16_t * attachment)
     DeviceIntPtr master = GetMaster(dev, MASTER_ATTACHED);
     int use;
 
-    if (IsMaster(dev)) {
+    if (InputDevIsMaster(dev)) {
         DeviceIntPtr paired = GetPairedDevice(dev);
 
         use = IsPointerDevice(dev) ? XIMasterPointer : XIMasterKeyboard;
         *attachment = (paired ? paired->id : 0);
     }
-    else if (!IsFloating(dev)) {
+    else if (!InputDevIsFloating(dev)) {
         use = IsPointerDevice(master) ? XISlavePointer : XISlaveKeyboard;
         *attachment = master->id;
     }
@@ -575,7 +566,7 @@ ListDeviceClasses(ClientPtr client, DeviceIntPtr dev,
     int rc;
 
     /* Check if the current device state should be suppressed */
-    rc = XaceHook(XACE_DEVICE_ACCESS, client, dev, DixReadAccess);
+    rc = XaceHookDeviceAccess(client, dev, DixReadAccess);
 
     if (dev->button) {
         (*nclasses)++;

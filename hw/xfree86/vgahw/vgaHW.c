@@ -1,4 +1,3 @@
-
 /*
  *
  * Copyright 1991-1999 by The XFree86 Project, Inc.
@@ -8,9 +7,6 @@
  *   Copyright 1990,91 by Thomas Roell, Dinkelscherben, Germany.
  *
  */
-
-#define _NEED_SYSI86
-
 #ifdef HAVE_XORG_CONFIG_H
 #include <xorg-config.h>
 #endif
@@ -20,10 +16,15 @@
 #include <unistd.h>
 
 #include <X11/X.h>
+
+#include "os/log_priv.h"
+
 #include "misc.h"
 
-#include "xf86.h"
+#include "xf86_priv.h"
 #include "xf86_OSproc.h"
+#include "xf86Opt_priv.h"
+#include "xf86Priv.h"
 #include "vgaHW.h"
 
 #include "compiler.h"
@@ -604,12 +605,6 @@ vgaHWProtect(ScrnInfoPtr pScrn, Bool on)
     }
 }
 
-vgaHWProtectProc *
-vgaHWProtectWeak(void)
-{
-    return vgaHWProtect;
-}
-
 /*
  * vgaHWBlankScreen -- blank the screen.
  */
@@ -632,12 +627,6 @@ vgaHWBlankScreen(ScrnInfoPtr pScrn, Bool on)
     vgaHWSeqReset(hwp, TRUE);
     hwp->writeSeq(hwp, 0x01, scrn);     /* change mode */
     vgaHWSeqReset(hwp, FALSE);
-}
-
-vgaHWBlankScreenProc *
-vgaHWBlankScreenWeak(void)
-{
-    return vgaHWBlankScreen;
 }
 
 /*
@@ -841,7 +830,7 @@ vgaHWRestoreFonts(ScrnInfoPtr scrninfp, vgaRegPtr restore)
 #endif                          /* SAVE_TEXT || SAVE_FONT1 || SAVE_FONT2 */
 }
 
-void
+static void
 vgaHWRestoreMode(ScrnInfoPtr scrninfp, vgaRegPtr restore)
 {
     vgaHWPtr hwp = VGAHWPTR(scrninfp);
@@ -872,7 +861,7 @@ vgaHWRestoreMode(ScrnInfoPtr scrninfp, vgaRegPtr restore)
     hwp->disablePalette(hwp);
 }
 
-void
+static void
 vgaHWRestoreColormap(ScrnInfoPtr scrninfp, vgaRegPtr restore)
 {
     vgaHWPtr hwp = VGAHWPTR(scrninfp);
@@ -968,21 +957,21 @@ vgaHWSaveFonts(ScrnInfoPtr scrninfp, vgaRegPtr save)
     hwp->writeGr(hwp, 0x06, 0x05);      /* set graphics */
 
 #if SAVE_FONT1
-    if (hwp->FontInfo1 || (hwp->FontInfo1 = malloc(FONT_AMOUNT))) {
+    if (hwp->FontInfo1 || (hwp->FontInfo1 = calloc(1, FONT_AMOUNT))) {
         hwp->writeSeq(hwp, 0x02, 0x04); /* write to plane 2 */
         hwp->writeGr(hwp, 0x04, 0x02);  /* read plane 2 */
         slowbcopy_frombus(hwp->Base, hwp->FontInfo1, FONT_AMOUNT);
     }
 #endif                          /* SAVE_FONT1 */
 #if SAVE_FONT2
-    if (hwp->FontInfo2 || (hwp->FontInfo2 = malloc(FONT_AMOUNT))) {
+    if (hwp->FontInfo2 || (hwp->FontInfo2 = calloc(1, FONT_AMOUNT))) {
         hwp->writeSeq(hwp, 0x02, 0x08); /* write to plane 3 */
         hwp->writeGr(hwp, 0x04, 0x03);  /* read plane 3 */
         slowbcopy_frombus(hwp->Base, hwp->FontInfo2, FONT_AMOUNT);
     }
 #endif                          /* SAVE_FONT2 */
 #if SAVE_TEXT
-    if (hwp->TextInfo || (hwp->TextInfo = malloc(2 * TEXT_AMOUNT))) {
+    if (hwp->TextInfo || (hwp->TextInfo = calloc(2, TEXT_AMOUNT))) {
         hwp->writeSeq(hwp, 0x02, 0x01); /* write to plane 0 */
         hwp->writeGr(hwp, 0x04, 0x00);  /* read plane 0 */
         slowbcopy_frombus(hwp->Base, hwp->TextInfo, TEXT_AMOUNT);
@@ -1012,7 +1001,7 @@ vgaHWSaveFonts(ScrnInfoPtr scrninfp, vgaRegPtr save)
 #endif                          /* SAVE_TEXT || SAVE_FONT1 || SAVE_FONT2 */
 }
 
-void
+static void
 vgaHWSaveMode(ScrnInfoPtr scrninfp, vgaRegPtr save)
 {
     vgaHWPtr hwp = VGAHWPTR(scrninfp);
@@ -1047,7 +1036,7 @@ vgaHWSaveMode(ScrnInfoPtr scrninfp, vgaRegPtr save)
     }
 }
 
-void
+static void
 vgaHWSaveColormap(ScrnInfoPtr scrninfp, vgaRegPtr save)
 {
     vgaHWPtr hwp = VGAHWPTR(scrninfp);
@@ -1315,7 +1304,7 @@ vgaHWInit(ScrnInfoPtr scrninfp, DisplayModePtr mode)
         /* Initialise the Mono map according to which bit-plane gets used */
 
         for (i = 0; i < 16; i++)
-            if ((i & (1 << BIT_PLANE)) != 0)
+            if (((i & (1 << BIT_PLANE)) != 0) != xf86FlipPixels)
                 regp->Attribute[i] = WHITE_VALUE;
             else
                 regp->Attribute[i] = BLACK_VALUE;
@@ -1526,75 +1515,6 @@ vgaHWAllocDefaultRegs(vgaRegPtr regp)
 }
 
 Bool
-vgaHWSetRegCounts(ScrnInfoPtr scrp, int numCRTC, int numSequencer,
-                  int numGraphics, int numAttribute)
-{
-#define VGAHWMINNUM(regtype) \
-	((newMode.num##regtype < regp->num##regtype) ? \
-	 (newMode.num##regtype) : (regp->num##regtype))
-#define VGAHWCOPYREGSET(regtype) \
-	memcpy (newMode.regtype, regp->regtype, VGAHWMINNUM(regtype))
-
-    vgaRegRec newMode, newSaved;
-    vgaRegPtr regp;
-
-    regp = &VGAHWPTR(scrp)->ModeReg;
-    memcpy(&newMode, regp, sizeof(vgaRegRec));
-
-    /* allocate space for new registers */
-
-    regp = &newMode;
-    regp->numCRTC = numCRTC;
-    regp->numSequencer = numSequencer;
-    regp->numGraphics = numGraphics;
-    regp->numAttribute = numAttribute;
-    if (!vgaHWAllocRegs(regp))
-        return FALSE;
-
-    regp = &VGAHWPTR(scrp)->SavedReg;
-    memcpy(&newSaved, regp, sizeof(vgaRegRec));
-
-    regp = &newSaved;
-    regp->numCRTC = numCRTC;
-    regp->numSequencer = numSequencer;
-    regp->numGraphics = numGraphics;
-    regp->numAttribute = numAttribute;
-    if (!vgaHWAllocRegs(regp)) {
-        vgaHWFreeRegs(&newMode);
-        return FALSE;
-    }
-
-    /* allocations succeeded, copy register data into new space */
-
-    regp = &VGAHWPTR(scrp)->ModeReg;
-    VGAHWCOPYREGSET(CRTC);
-    VGAHWCOPYREGSET(Sequencer);
-    VGAHWCOPYREGSET(Graphics);
-    VGAHWCOPYREGSET(Attribute);
-
-    regp = &VGAHWPTR(scrp)->SavedReg;
-    VGAHWCOPYREGSET(CRTC);
-    VGAHWCOPYREGSET(Sequencer);
-    VGAHWCOPYREGSET(Graphics);
-    VGAHWCOPYREGSET(Attribute);
-
-    /* free old register arrays */
-
-    regp = &VGAHWPTR(scrp)->ModeReg;
-    vgaHWFreeRegs(regp);
-    memcpy(regp, &newMode, sizeof(vgaRegRec));
-
-    regp = &VGAHWPTR(scrp)->SavedReg;
-    vgaHWFreeRegs(regp);
-    memcpy(regp, &newSaved, sizeof(vgaRegRec));
-
-    return TRUE;
-
-#undef VGAHWMINNUM
-#undef VGAHWCOPYREGSET
-}
-
-Bool
 vgaHWCopyReg(vgaRegPtr dst, vgaRegPtr src)
 {
     vgaHWFreeRegs(dst);
@@ -1629,7 +1549,7 @@ vgaHWGetHWRec(ScrnInfoPtr scrp)
      */
     if (VGAHWPTR(scrp))
         return TRUE;
-    hwp = VGAHWPTRLVAL(scrp) = xnfcalloc(sizeof(vgaHWRec), 1);
+    hwp = VGAHWPTRLVAL(scrp) = XNFcallocarray(1, sizeof(vgaHWRec));
     regp = &VGAHWPTR(scrp)->ModeReg;
 
     if ((!vgaHWAllocDefaultRegs(&VGAHWPTR(scrp)->SavedReg)) ||
@@ -1811,12 +1731,6 @@ vgaHWEnable(vgaHWPtr hwp)
     hwp->writeEnable(hwp, hwp->readEnable(hwp) | 0x01);
 }
 
-void
-vgaHWDisable(vgaHWPtr hwp)
-{
-    hwp->writeEnable(hwp, hwp->readEnable(hwp) & ~0x01);
-}
-
 static void
 vgaHWLoadPalette(ScrnInfoPtr pScrn, int numColors, int *indices, LOCO * colors,
                  VisualPtr pVisual)
@@ -1923,7 +1837,7 @@ vgaHWddc1SetSpeed(ScrnInfoPtr pScrn, xf86ddcSpeed speed)
 
         if (hwp->ddc != NULL)
             break;
-        hwp->ddc = xnfcalloc(sizeof(struct _vgaDdcSave), 1);
+        hwp->ddc = XNFcallocarray(1, sizeof(struct _vgaDdcSave));
         save = (struct _vgaDdcSave *) hwp->ddc;
         /* Lightpen register disable - allow access to cr10 & 11; just in case */
         save->cr03 = hwp->readCrtc(hwp, 0x03);
@@ -1977,12 +1891,6 @@ DDC1SetSpeedProc
 vgaHWddc1SetSpeedWeak(void)
 {
     return vgaHWddc1SetSpeed;
-}
-
-SaveScreenProcPtr
-vgaHWSaveScreenWeak(void)
-{
-    return vgaHWSaveScreen;
 }
 
 /*

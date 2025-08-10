@@ -15,10 +15,15 @@ is" without express or implied warranty.
 #ifndef XNESTSCREEN_H
 #define XNESTSCREEN_H
 
-extern Window xnestDefaultWindows[MAXSCREENS];
-extern Window xnestScreenSaverWindows[MAXSCREENS];
+#include <X11/X.h>
+#include <X11/Xdefs.h>
 
-ScreenPtr xnestScreen(Window window);
+#include <xcb/xcb.h>
+
+extern xcb_window_t xnestDefaultWindows[MAXSCREENS];
+extern xcb_window_t xnestScreenSaverWindows[MAXSCREENS];
+
+ScreenPtr xnestScreen(xcb_window_t window);
 Bool xnestOpenScreen(ScreenPtr pScreen, int argc, char *argv[]);
 Bool xnestCloseScreen(ScreenPtr pScreen);
 

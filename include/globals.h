@@ -25,21 +25,12 @@ extern _X_EXPORT int monitorResolution;
 extern _X_EXPORT int defaultColorVisualClass;
 
 extern _X_EXPORT int GrabInProgress;
-extern _X_EXPORT Bool noTestExtensions;
 extern _X_EXPORT char *SeatId;
 extern _X_EXPORT char *ConnectionInfo;
 extern _X_EXPORT sig_atomic_t inSignalContext;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
 extern _X_EXPORT Bool PanoramiXExtensionDisabledHack;
-#endif
-
-#ifdef XSELINUX
-#define SELINUX_MODE_DEFAULT    0
-#define SELINUX_MODE_DISABLED   1
-#define SELINUX_MODE_PERMISSIVE 2
-#define SELINUX_MODE_ENFORCING  3
-extern _X_EXPORT int selinuxEnforcingState;
-#endif
+#endif /* XINERAMA */
 
 #endif                          /* !_XSERV_GLOBAL_H_ */

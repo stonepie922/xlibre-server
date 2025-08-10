@@ -33,9 +33,7 @@ from The Open Group.
  * Author:  Keith Packard, MIT X Consortium
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <X11/X.h>
@@ -43,8 +41,13 @@ from The Open Group.
 #define TRANS_SERVER
 #define TRANS_REOPEN
 #include <X11/Xtrans/Xtrans.h>
+
+#include "os/auth.h"
+
 #include "os.h"
 #include "osdep.h"
+#include "xdmcp.h"
+#include "xdmauth.h"
 #include "dixstruct.h"
 
 #ifdef HASXDMAUTH
@@ -253,7 +256,7 @@ XdmAuthorizationValidate(unsigned char *plain, int length,
             *reason = "Bad XDM authorization key length";
         return NULL;
     }
-    client = malloc(sizeof(XdmClientAuthRec));
+    client = calloc(1, sizeof(XdmClientAuthRec));
     if (!client)
         return NULL;
     XdmClientAuthDecode(plain, client);
@@ -316,10 +319,9 @@ XdmAuthorizationValidate(unsigned char *plain, int length,
     return client;
 }
 
-int
-XdmAddCookie(unsigned short data_length, const char *data, XID id)
+XID
+XdmAddCookie(unsigned short data_length, const char *data)
 {
-    XdmAuthorizationPtr new;
     unsigned char *rho_bits, *key_bits;
 
     switch (data_length) {
@@ -351,15 +353,23 @@ XdmAddCookie(unsigned short data_length, const char *data, XID id)
     /* the first octet of the key must be zero */
     if (key_bits[0] != '\0')
         return 0;
-    new = malloc(sizeof(XdmAuthorizationRec));
+
+    /* check for possible duplicate and return it */
+    for (XdmAuthorizationRec *walk = xdmAuth; walk; walk=walk->next) {
+        if ((memcmp(walk->key.data, key_bits, 8)==0) &&
+            (memcmp(walk->rho.data, rho_bits, 8)==0))
+            return walk->id;
+    }
+
+    XdmAuthorizationPtr new = calloc(1, sizeof(XdmAuthorizationRec));
     if (!new)
         return 0;
     new->next = xdmAuth;
     xdmAuth = new;
-    memmove(new->key.data, key_bits, (int) 8);
-    memmove(new->rho.data, rho_bits, (int) 8);
-    new->id = id;
-    return 1;
+    memcpy(new->key.data, key_bits, 8);
+    memcpy(new->rho.data, rho_bits, 8);
+    new->id = dixAllocServerXID();
+    return new->id;
 }
 
 XID
@@ -368,12 +378,11 @@ XdmCheckCookie(unsigned short cookie_length, const char *cookie,
 {
     XdmAuthorizationPtr auth;
     XdmClientAuthPtr client;
-    unsigned char *plain;
 
     /* Auth packets must be a multiple of 8 bytes long */
     if (cookie_length & 7)
         return (XID) -1;
-    plain = malloc(cookie_length);
+    unsigned char *plain = calloc(1, cookie_length);
     if (!plain)
         return (XID) -1;
     for (auth = xdmAuth; auth; auth = auth->next) {

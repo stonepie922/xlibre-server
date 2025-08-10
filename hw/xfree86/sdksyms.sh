@@ -53,15 +53,10 @@ cat > sdksyms.c << EOF
 #include "xvdix.h"
 #include "xvmcext.h"
 #endif
-#include "geext.h"
 #ifdef MITSHM
 #include "shmint.h"
 #endif
 #include "syncsdk.h"
-#ifdef XINERAMA
-# include "panoramiXsrv.h"
-# include "panoramiX.h"
-#endif
 
 /* glx/Makefile.am */
 #ifdef GLX
@@ -126,9 +121,6 @@ cat > sdksyms.c << EOF
 #include "xf86.h"
 #include "xf86Module.h"
 #include "xf86Opt.h"
-#ifdef XSERVER_LIBPCIACCESS
- #include "xf86VGAarbiter.h"
-#endif
 #include "xf86Priv.h"
 #include "xf86Privstr.h"
 #include "xf86cmap.h"
@@ -139,13 +131,15 @@ cat > sdksyms.c << EOF
 #ifdef XV
 # include "xf86xv.h"
 # include "xf86xvmc.h"
-# include "xf86xvpriv.h"
 #endif
 #include "xorgVersion.h"
 #if defined(__sparc__) || defined(__sparc)
 # include "xf86sbusBus.h"
 #endif
 
+// needed for various graphics drivers
+#include "dgaproc.h"
+#include "xf86MatchDrivers.h"
 
 /* hw/xfree86/ramdac/Makefile.am */
 #include "xf86Cursor.h"
@@ -199,7 +193,6 @@ cat > sdksyms.c << EOF
 #include "mipointrst.h"
 #include "mizerarc.h"
 #include "micoord.h"
-#include "mifillarc.h"
 #include "mistruct.h"
 #include "mioverlay.h"
 
@@ -209,29 +202,19 @@ cat > sdksyms.c << EOF
 #include "rrtransform.h"
 
 
-/* dbe/Makefile.am -- module */
-#ifdef DBE
-#include "dbestruct.h"
-#endif
-
-
 /* exa/Makefile.am -- module */
 /*
 #include "exa.h"
  */
 
-#ifdef COMPOSITE
 #include "compositeext.h"
-#endif
 
 /* xfixes/Makefile.am */
 #include "xfixes.h"
 
 
 /* include/Makefile.am */
-#include "XIstubs.h"
 #include "Xprintf.h"
-#include "closestr.h"
 #include "closure.h"
 #include "colormap.h"
 #include "colormapst.h"
@@ -241,11 +224,9 @@ cat > sdksyms.c << EOF
 #include "cursorstr.h"
 #include "dix.h"
 #include "dixaccess.h"
-#include "dixevents.h"
 #define _FONTPROTO_H
 #include "dixfont.h"
 #include "dixfontstr.h"
-#include "dixgrabs.h"
 #include "dixstruct.h"
 #include "exevents.h"
 #include "extension.h"
@@ -267,22 +248,18 @@ cat > sdksyms.c << EOF
 #include "pixmapstr.h"
 #include "privates.h"
 #include "property.h"
-#include "propertyst.h"
 #include "ptrveloc.h"
 #include "region.h"
 #include "regionstr.h"
-#include "registry.h"
 #include "resource.h"
 #include "rgb.h"
 #include "screenint.h"
 #include "scrnintstr.h"
-#include "selection.h"
 #include "servermd.h"
 #include "validate.h"
 #include "window.h"
 #include "windowstr.h"
 #include "xace.h"
-#include "xkbfile.h"
 #include "xkbsrv.h"
 #include "xkbstr.h"
 #include "xkbrules.h"

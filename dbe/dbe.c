@@ -32,25 +32,27 @@
 
 /* INCLUDES */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <string.h>
 #include <stdint.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "miext/extinit_priv.h"
+
 #include "scrnintstr.h"
 #include "extnsionst.h"
-#include "extinit.h"
 #include "gcstruct.h"
 #include "dixstruct.h"
-#define NEED_DBE_PROTOCOL
 #include "dbestruct.h"
 #include "midbe.h"
 #include "xace.h"
 
 /* GLOBALS */
+Bool noDbeExtension = FALSE;
 
 /* These are globals for use by DDX */
 DevPrivateKeyRec dbeScreenPrivKeyRec;
@@ -79,12 +81,6 @@ DbeStubScreen(DbeScreenPrivPtr pDbeScreenPriv, int *nStubbedScreens)
 {
     /* Stub DIX. */
     pDbeScreenPriv->SetupBackgroundPainter = NULL;
-
-    /* Do not unwrap PositionWindow nor DestroyWindow.  If the DDX
-     * initialization function failed, we assume that it did not wrap
-     * PositionWindow.  Also, DestroyWindow is only wrapped if the DDX
-     * initialization function succeeded.
-     */
 
     /* Stub DDX. */
     pDbeScreenPriv->GetVisualInfo = NULL;
@@ -411,7 +407,7 @@ ProcDbeDeallocateBackBufferName(ClientPtr client)
         return dbeErrorBase + DbeBadBuffer;
     }
 
-    FreeResource(stuff->buffer, RT_NONE);
+    FreeResource(stuff->buffer, X11_RESTYPE_NONE);
 
     return Success;
 
@@ -469,7 +465,7 @@ ProcDbeSwapBuffers(ClientPtr client)
     dbeSwapInfo = (xDbeSwapInfo *) &stuff[1];
 
     /* Allocate array to record swap information. */
-    swapInfo = xallocarray(nStuff, sizeof(DbeSwapInfoRec));
+    swapInfo = calloc(nStuff, sizeof(DbeSwapInfoRec));
     if (swapInfo == NULL) {
         return BadAlloc;
     }
@@ -582,7 +578,7 @@ ProcDbeGetVisualInfo(ClientPtr client)
         return BadAlloc;
     /* Make sure any specified drawables are valid. */
     if (stuff->n != 0) {
-        if (!(pDrawables = xallocarray(stuff->n, sizeof(DrawablePtr)))) {
+        if (!(pDrawables = calloc(stuff->n, sizeof(DrawablePtr)))) {
             return BadAlloc;
         }
 
@@ -612,7 +608,7 @@ ProcDbeGetVisualInfo(ClientPtr client)
             pDrawables[i]->pScreen;
         pDbeScreenPriv = DBE_SCREEN_PRIV(pScreen);
 
-        rc = XaceHook(XACE_SCREEN_ACCESS, client, pScreen, DixGetAttrAccess);
+        rc = XaceHookScreenAccess(client, pScreen, DixGetAttrAccess);
         if (rc != Success)
             goto freeScrVisInfo;
 
@@ -797,33 +793,7 @@ ProcDbeDispatch(ClientPtr client)
     }
 
 }                               /* ProcDbeDispatch() */
-
-/******************************************************************************
- *
- * DBE DIX Procedure: SProcDbeGetVersion
- *
- * Description:
- *
- *     This function is for processing a DbeGetVersion request on a swapped
- *     server.  This request returns the major and minor version numbers of
- *     this extension.
- *
- * Return Values:
- *
- *     Success
- *
- *****************************************************************************/
 
-static int _X_COLD
-SProcDbeGetVersion(ClientPtr client)
-{
-    REQUEST(xDbeGetVersionReq);
-
-    swaps(&stuff->length);
-    return (ProcDbeGetVersion(client));
-
-}                               /* SProcDbeGetVersion() */
-
 /******************************************************************************
  *
  * DBE DIX Procedure: SProcDbeAllocateBackBufferName
@@ -851,8 +821,6 @@ static int _X_COLD
 SProcDbeAllocateBackBufferName(ClientPtr client)
 {
     REQUEST(xDbeAllocateBackBufferNameReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDbeAllocateBackBufferNameReq);
 
     swapl(&stuff->window);
@@ -884,8 +852,6 @@ static int _X_COLD
 SProcDbeDeallocateBackBufferName(ClientPtr client)
 {
     REQUEST(xDbeDeallocateBackBufferNameReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDbeDeallocateBackBufferNameReq);
 
     swapl(&stuff->buffer);
@@ -922,7 +888,6 @@ SProcDbeSwapBuffers(ClientPtr client)
     unsigned int i;
     xDbeSwapInfo *pSwapInfo;
 
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xDbeSwapBuffersReq);
 
     swapl(&stuff->n);
@@ -937,7 +902,7 @@ SProcDbeSwapBuffers(ClientPtr client)
          * followed by a 1 byte swap action and then 3 pad bytes.  We only need
          * to swap the window information.
          */
-        for (i = 0; i < stuff->n; i++) {
+        for (i = 0; i < stuff->n; i++, pSwapInfo++) {
             swapl(&pSwapInfo->window);
         }
     }
@@ -967,8 +932,6 @@ static int _X_COLD
 SProcDbeGetVisualInfo(ClientPtr client)
 {
     REQUEST(xDbeGetVisualInfoReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xDbeGetVisualInfoReq);
 
     swapl(&stuff->n);
@@ -998,8 +961,6 @@ static int _X_COLD
 SProcDbeGetBackBufferAttributes(ClientPtr client)
 {
     REQUEST(xDbeGetBackBufferAttributesReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDbeGetBackBufferAttributesReq);
 
     swapl(&stuff->buffer);
@@ -1025,7 +986,7 @@ SProcDbeDispatch(ClientPtr client)
 
     switch (stuff->data) {
     case X_DbeGetVersion:
-        return (SProcDbeGetVersion(client));
+        return ProcDbeGetVersion(client);
 
     case X_DbeAllocateBackBufferName:
         return (SProcDbeAllocateBackBufferName(client));
@@ -1235,7 +1196,9 @@ DbeWindowPrivDelete(void *pDbeWinPriv, XID id)
     return Success;
 
 }                               /* DbeWindowPrivDelete() */
-
+
+static void miDbeWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWin);
+
 /******************************************************************************
  *
  * DBE DIX Procedure: DbeResetProc
@@ -1259,94 +1222,39 @@ DbeResetProc(ExtensionEntry * extEntry)
         pDbeScreenPriv = DBE_SCREEN_PRIV(pScreen);
 
         if (pDbeScreenPriv) {
-            /* Unwrap DestroyWindow, which was wrapped in DbeExtensionInit(). */
-            pScreen->DestroyWindow = pDbeScreenPriv->DestroyWindow;
-            pScreen->PositionWindow = pDbeScreenPriv->PositionWindow;
+            dixScreenUnhookWindowDestroy(pScreen, miDbeWindowDestroy);
+            dixScreenUnhookWindowPosition(pScreen, miDbeWindowPosition);
             free(pDbeScreenPriv);
         }
     }
-}                               /* DbeResetProc() */
-
-/******************************************************************************
- *
- * DBE DIX Procedure: DbeDestroyWindow
- *
- * Description:
- *
- *     This is the wrapper for pScreen->DestroyWindow.
- *     This function frees buffer resources for a window before it is
- *     destroyed.
- *
- *****************************************************************************/
+}
 
-static Bool
-DbeDestroyWindow(WindowPtr pWin)
+/**
+ * @brief window destroy callback
+ *
+ * Called by DIX when window is being destroyed.
+ *
+ */
+static void miDbeWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWin)
 {
-    DbeScreenPrivPtr pDbeScreenPriv;
-    DbeWindowPrivPtr pDbeWindowPriv;
-    ScreenPtr pScreen;
-    Bool ret;
-
     /*
      **************************************************************************
-     ** 1. Unwrap the member routine.
-     **************************************************************************
-     */
-
-    pScreen = pWin->drawable.pScreen;
-    pDbeScreenPriv = DBE_SCREEN_PRIV(pScreen);
-    pScreen->DestroyWindow = pDbeScreenPriv->DestroyWindow;
-
-    /*
-     **************************************************************************
-     ** 2. Do any work necessary before the member routine is called.
-     **
      **    Call the window priv delete function for all buffer IDs associated
      **    with this window.
      **************************************************************************
      */
 
-    if ((pDbeWindowPriv = DBE_WINDOW_PRIV(pWin))) {
-        while (pDbeWindowPriv) {
+    DbeWindowPrivPtr pDbeWindowPriv;
+    while ((pDbeWindowPriv = DBE_WINDOW_PRIV(pWin))) {
             /* *DbeWinPrivDelete() will free the window private and set it to
              * NULL if there are no more buffer IDs associated with this
              * window.
              */
-            FreeResource(pDbeWindowPriv->IDs[0], RT_NONE);
+            FreeResource(pDbeWindowPriv->IDs[0], X11_RESTYPE_NONE);
             pDbeWindowPriv = DBE_WINDOW_PRIV(pWin);
-        }
     }
+}
 
-    /*
-     **************************************************************************
-     ** 3. Call the member routine, saving its result if necessary.
-     **************************************************************************
-     */
-
-    ret = (*pScreen->DestroyWindow) (pWin);
-
-    /*
-     **************************************************************************
-     ** 4. Rewrap the member routine, restoring the wrapper value first in case
-     **    the wrapper (or something that it wrapped) change this value.
-     **************************************************************************
-     */
-
-    pDbeScreenPriv->DestroyWindow = pScreen->DestroyWindow;
-    pScreen->DestroyWindow = DbeDestroyWindow;
-
-    /*
-     **************************************************************************
-     ** 5. Do any work necessary after the member routine has been called.
-     **
-     **    In this case we do not need to do anything.
-     **************************************************************************
-     */
-
-    return ret;
-
-}                               /* DbeDestroyWindow() */
-
 /******************************************************************************
  *
  * DBE DIX Procedure: DbeExtensionInit
@@ -1367,10 +1275,10 @@ DbeExtensionInit(void)
     int nStubbedScreens = 0;
     Bool ddxInitSuccess;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension)
         return;
-#endif
+#endif /* XINERAMA */
 
     /* Create the resource types. */
     dbeDrawableResType =
@@ -1397,7 +1305,7 @@ DbeExtensionInit(void)
 
         pScreen = screenInfo.screens[i];
 
-        if (!(pDbeScreenPriv = malloc(sizeof(DbeScreenPrivRec)))) {
+        if (!(pDbeScreenPriv = calloc(1, sizeof(DbeScreenPrivRec)))) {
             /* If we can not alloc a window or screen private,
              * then free any privates that we already alloc'ed and return
              */
@@ -1429,12 +1337,10 @@ DbeExtensionInit(void)
             pDbeScreenPriv = DBE_SCREEN_PRIV(pScreen);
 
             if (ddxInitSuccess) {
-                /* Wrap DestroyWindow.  The DDX initialization function
-                 * already wrapped PositionWindow for us.
+                /* Hook in our window destructor. The DDX initialization function
+                 * already added WindowPosition hook for us.
                  */
-
-                pDbeScreenPriv->DestroyWindow = pScreen->DestroyWindow;
-                pScreen->DestroyWindow = DbeDestroyWindow;
+                dixScreenHookWindowDestroy(pScreen, miDbeWindowDestroy);
             }
             else {
                 /* DDX initialization failed.  Stub the screen. */

@@ -50,19 +50,17 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "windowstr.h"          /* focus struct      */
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
 
-#include "dixevents.h"
+#include "windowstr.h"          /* focus struct      */
+#include "inputstr.h"           /* DeviceIntPtr      */
+
+#include "dix/dix_priv.h"
 
 #include "exglobals.h"
-
 #include "setfocus.h"
 
 /***********************************************************************
@@ -75,7 +73,6 @@ int _X_COLD
 SProcXSetDeviceFocus(ClientPtr client)
 {
     REQUEST(xSetDeviceFocusReq);
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xSetDeviceFocusReq);
     swapl(&stuff->focus);
     swapl(&stuff->time);

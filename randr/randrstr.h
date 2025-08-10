@@ -65,11 +65,6 @@ typedef XID RRCrtc;
 typedef XID RRProvider;
 typedef XID RRLease;
 
-extern int RREventBase, RRErrorBase;
-
-extern int (*ProcRandrVector[RRNumberRequests]) (ClientPtr);
-extern int (*SProcRandrVector[RRNumberRequests]) (ClientPtr);
-
 /*
  * Modeline for a monitor. Name follows directly after this struct
  */
@@ -128,8 +123,8 @@ struct _rrCrtc {
     RRTransformRec client_pending_transform;
     RRTransformRec client_current_transform;
     PictTransform transform;
-    struct pict_f_transform f_transform;
-    struct pict_f_transform f_inverse;
+    struct pixman_f_transform f_transform;
+    struct pixman_f_transform f_inverse;
 
     PixmapPtr scanout_pixmap;
     PixmapPtr scanout_pixmap_back;
@@ -218,6 +213,10 @@ typedef Bool (*RRCrtcSetProcPtr) (ScreenPtr pScreen,
                                   Rotation rotation,
                                   int numOutputs, RROutputPtr * outputs);
 
+typedef void (*RRCrtcGetProcPtr) (ScreenPtr pScreen,
+                                  RRCrtcPtr crtc,
+                                  xRRGetCrtcInfoReply *rep);
+
 typedef Bool (*RRCrtcSetGammaProcPtr) (ScreenPtr pScreen, RRCrtcPtr crtc);
 
 typedef Bool (*RRCrtcGetGammaProcPtr) (ScreenPtr pScreen, RRCrtcPtr crtc);
@@ -279,6 +278,15 @@ typedef int (*RRCreateLeaseProcPtr)(ScreenPtr screen,
 
 typedef void (*RRTerminateLeaseProcPtr)(ScreenPtr screen,
                                         RRLeasePtr lease);
+
+typedef int (*RRRequestLeaseProcPtr)(ClientPtr client,
+                                     ScreenPtr screen,
+                                     RRLeasePtr lease);
+
+typedef void (*RRGetLeaseProcPtr)(ClientPtr client,
+                                 ScreenPtr screen,
+                                 RRLeasePtr *lease,
+                                 int *fd);
 
 /* These are for 1.0 compatibility */
 
@@ -408,6 +416,13 @@ typedef struct _rrScrPriv {
     RRMonitorPtr *monitors;
 
     struct xorg_list leases;
+
+    RRRequestLeaseProcPtr rrRequestLease;
+    RRGetLeaseProcPtr rrGetLease;
+
+#if RANDR_12_INTERFACE
+    RRCrtcGetProcPtr rrCrtcGet;
+#endif
 } rrScrPrivRec, *rrScrPrivPtr;
 
 extern _X_EXPORT DevPrivateKeyRec rrPrivKeyRec;
@@ -447,65 +462,6 @@ typedef struct _RRClient {
 /*  RRTimesRec	times[0]; */
 } RRClientRec, *RRClientPtr;
 
-extern RESTYPE RRClientType, RREventType;     /* resource types for event masks */
-extern DevPrivateKeyRec RRClientPrivateKeyRec;
-
-#define RRClientPrivateKey (&RRClientPrivateKeyRec)
-extern _X_EXPORT RESTYPE RRCrtcType, RRModeType, RROutputType, RRProviderType, RRLeaseType;
-
-#define VERIFY_RR_OUTPUT(id, ptr, a)\
-    {\
-	int rc = dixLookupResourceByType((void **)&(ptr), id,\
-	                                 RROutputType, client, a);\
-	if (rc != Success) {\
-	    client->errorValue = id;\
-	    return rc;\
-	}\
-    }
-
-#define VERIFY_RR_CRTC(id, ptr, a)\
-    {\
-	int rc = dixLookupResourceByType((void **)&(ptr), id,\
-	                                 RRCrtcType, client, a);\
-	if (rc != Success) {\
-	    client->errorValue = id;\
-	    return rc;\
-	}\
-    }
-
-#define VERIFY_RR_MODE(id, ptr, a)\
-    {\
-	int rc = dixLookupResourceByType((void **)&(ptr), id,\
-	                                 RRModeType, client, a);\
-	if (rc != Success) {\
-	    client->errorValue = id;\
-	    return rc;\
-	}\
-    }
-
-#define VERIFY_RR_PROVIDER(id, ptr, a)\
-    {\
-        int rc = dixLookupResourceByType((void **)&(ptr), id,\
-                                         RRProviderType, client, a);\
-        if (rc != Success) {\
-            client->errorValue = id;\
-            return rc;\
-        }\
-    }
-
-#define VERIFY_RR_LEASE(id, ptr, a)\
-    {\
-        int rc = dixLookupResourceByType((void **)&(ptr), id,\
-                                         RRLeaseType, client, a);\
-        if (rc != Success) {\
-            client->errorValue = id;\
-            return rc;\
-        }\
-    }
-
-#define GetRRClient(pClient)    ((RRClientPtr)dixLookupPrivate(&(pClient)->devPrivates, RRClientPrivateKey))
-#define rrClientPriv(pClient)	RRClientPtr pRRClient = GetRRClient(pClient)
-
 #ifdef RANDR_12_INTERFACE
 /*
  * Set the range of sizes for the screen
@@ -540,36 +496,6 @@ RRScreenSizeSet(ScreenPtr pScreen,
 extern _X_EXPORT void
  RRSendConfigNotify(ScreenPtr pScreen);
 
-/*
- * screen dispatch
- */
-extern _X_EXPORT int
- ProcRRGetScreenSizeRange(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetScreenSize(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetScreenResources(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetScreenResourcesCurrent(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetScreenConfig(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetScreenInfo(ClientPtr client);
-
-/*
- * Deliver a ScreenNotify event
- */
-extern _X_EXPORT void
- RRDeliverScreenEvent(ClientPtr client, WindowPtr pWin, ScreenPtr pScreen);
-
-extern _X_EXPORT void
- RRResourcesChanged(ScreenPtr pScreen);
-
 /* randr.c */
 /* set a screen change on the primary screen */
 extern _X_EXPORT void
@@ -587,18 +513,9 @@ extern _X_EXPORT void
 extern _X_EXPORT Bool
  RRGetInfo(ScreenPtr pScreen, Bool force_query);
 
-extern _X_EXPORT Bool RRInit(void);
-
 extern _X_EXPORT Bool RRScreenInit(ScreenPtr pScreen);
 
 extern _X_EXPORT RROutputPtr RRFirstOutput(ScreenPtr pScreen);
-
-extern _X_EXPORT RRCrtcPtr RRFirstEnabledCrtc(ScreenPtr pScreen);
-
-extern _X_EXPORT Bool RROutputSetNonDesktop(RROutputPtr output, Bool non_desktop);
-
-extern _X_EXPORT CARD16
- RRVerticalRefresh(xRRModeInfo * mode);
 
 #ifdef RANDR_10_INTERFACE
 /*
@@ -626,28 +543,14 @@ extern _X_EXPORT void
 RRSetCurrentConfig(ScreenPtr pScreen,
                    Rotation rotation, int rate, RRScreenSizePtr pSize);
 
-extern _X_EXPORT Rotation RRGetRotation(ScreenPtr pScreen);
-
 #endif
 
 /* rrcrtc.c */
 
 /*
- * Notify the CRTC of some change; layoutChanged indicates that
- * some position or size element changed
- */
-extern _X_EXPORT void
- RRCrtcChanged(RRCrtcPtr crtc, Bool layoutChanged);
-
-/*
  * Create a CRTC
  */
 extern _X_EXPORT RRCrtcPtr RRCrtcCreate(ScreenPtr pScreen, void *devPrivate);
-
-/*
- * Tests if findCrtc belongs to pScreen or secondary screens
- */
-extern _X_EXPORT Bool RRCrtcExists(ScreenPtr pScreen, RRCrtcPtr findCrtc);
 
 /*
  * Set the allowed rotations on a CRTC
@@ -656,17 +559,10 @@ extern _X_EXPORT void
  RRCrtcSetRotations(RRCrtcPtr crtc, Rotation rotations);
 
 /*
- * Set whether transforms are allowed on a CRTC
- */
-extern _X_EXPORT void
- RRCrtcSetTransformSupport(RRCrtcPtr crtc, Bool transforms);
-
-/*
  * Notify the extension that the Crtc has been reconfigured,
  * the driver calls this whenever it has updated the mode
  */
 extern _X_EXPORT Bool
-
 RRCrtcNotify(RRCrtcPtr crtc,
              RRModePtr mode,
              int x,
@@ -674,14 +570,10 @@ RRCrtcNotify(RRCrtcPtr crtc,
              Rotation rotation,
              RRTransformPtr transform, int numOutputs, RROutputPtr * outputs);
 
-extern _X_EXPORT void
- RRDeliverCrtcEvent(ClientPtr client, WindowPtr pWin, RRCrtcPtr crtc);
-
 /*
  * Request that the Crtc be reconfigured
  */
 extern _X_EXPORT Bool
-
 RRCrtcSet(RRCrtcPtr crtc,
           RRModePtr mode,
           int x,
@@ -695,152 +587,11 @@ extern _X_EXPORT Bool
  RRCrtcGammaSet(RRCrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue);
 
 /*
- * Request current gamma back from the DDX (if possible).
- * This includes gamma size.
- */
-
-extern _X_EXPORT Bool
- RRCrtcGammaGet(RRCrtcPtr crtc);
-
-/*
- * Notify the extension that the Crtc gamma has been changed
- * The driver calls this whenever it has changed the gamma values
- * in the RRCrtcRec
- */
-
-extern _X_EXPORT Bool
- RRCrtcGammaNotify(RRCrtcPtr crtc);
-
-/*
  * Set the size of the gamma table at server startup time
  */
 
 extern _X_EXPORT Bool
  RRCrtcGammaSetSize(RRCrtcPtr crtc, int size);
-
-/*
- * Return the area of the frame buffer scanned out by the crtc,
- * taking into account the current mode and rotation
- */
-
-extern _X_EXPORT void
- RRCrtcGetScanoutSize(RRCrtcPtr crtc, int *width, int *height);
-
-/*
- * Return crtc transform
- */
-extern _X_EXPORT RRTransformPtr RRCrtcGetTransform(RRCrtcPtr crtc);
-
-/*
- * Check whether the pending and current transforms are the same
- */
-extern _X_EXPORT Bool
- RRCrtcPendingTransform(RRCrtcPtr crtc);
-
-/*
- * Destroy a Crtc at shutdown
- */
-extern _X_EXPORT void
- RRCrtcDestroy(RRCrtcPtr crtc);
-
-/*
- * Set the pending CRTC transformation
- */
-
-extern _X_EXPORT int
-
-RRCrtcTransformSet(RRCrtcPtr crtc,
-                   PictTransformPtr transform,
-                   struct pict_f_transform *f_transform,
-                   struct pict_f_transform *f_inverse,
-                   char *filter, int filter_len, xFixed * params, int nparams);
-
-/*
- * Initialize crtc type
- */
-extern _X_EXPORT Bool
- RRCrtcInit(void);
-
-/*
- * Initialize crtc type error value
- */
-extern _X_EXPORT void
- RRCrtcInitErrorValue(void);
-
-/*
- * Detach and free a scanout pixmap
- */
-extern _X_EXPORT void
- RRCrtcDetachScanoutPixmap(RRCrtcPtr crtc);
-
-extern _X_EXPORT Bool
- RRReplaceScanoutPixmap(DrawablePtr pDrawable, PixmapPtr pPixmap, Bool enable);
-
-/*
- * Return if the screen has any scanout_pixmap's attached
- */
-extern _X_EXPORT Bool
- RRHasScanoutPixmap(ScreenPtr pScreen);
-
-/*
- * Crtc dispatch
- */
-
-extern _X_EXPORT int
- ProcRRGetCrtcInfo(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetCrtcConfig(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetCrtcGammaSize(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetCrtcGamma(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetCrtcGamma(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetCrtcTransform(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetCrtcTransform(ClientPtr client);
-
-int
- ProcRRGetPanning(ClientPtr client);
-
-int
- ProcRRSetPanning(ClientPtr client);
-
-void
- RRConstrainCursorHarder(DeviceIntPtr, ScreenPtr, int, int *, int *);
-
-/* rrdispatch.c */
-extern _X_EXPORT Bool
- RRClientKnowsRates(ClientPtr pClient);
-
-/* rrlease.c */
-void
-RRDeliverLeaseEvent(ClientPtr client, WindowPtr window);
-
-extern _X_EXPORT void
-RRLeaseTerminated(RRLeasePtr lease);
-
-extern _X_EXPORT void
-RRLeaseFree(RRLeasePtr lease);
-
-extern _X_EXPORT Bool
-RRCrtcIsLeased(RRCrtcPtr crtc);
-
-extern _X_EXPORT Bool
-RROutputIsLeased(RROutputPtr output);
-
-void
-RRTerminateLease(RRLeasePtr lease);
-
-Bool
-RRLeaseInit(void);
 
 /* rrmode.c */
 /*
@@ -855,35 +606,6 @@ extern _X_EXPORT RRModePtr RRModeGet(xRRModeInfo * modeInfo, const char *name);
 
 extern _X_EXPORT void
  RRModeDestroy(RRModePtr mode);
-
-/*
- * Return a list of modes that are valid for some output in pScreen
- */
-extern _X_EXPORT RRModePtr *RRModesForScreen(ScreenPtr pScreen, int *num_ret);
-
-/*
- * Initialize mode type
- */
-extern _X_EXPORT Bool
- RRModeInit(void);
-
-/*
- * Initialize mode type error value
- */
-extern _X_EXPORT void
- RRModeInitErrorValue(void);
-
-extern _X_EXPORT int
- ProcRRCreateMode(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRDestroyMode(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRAddOutputMode(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRDeleteOutputMode(ClientPtr client);
 
 /* rroutput.c */
 
@@ -911,15 +633,8 @@ extern _X_EXPORT Bool
  RROutputSetClones(RROutputPtr output, RROutputPtr * clones, int numClones);
 
 extern _X_EXPORT Bool
-
 RROutputSetModes(RROutputPtr output,
                  RRModePtr * modes, int numModes, int numPreferred);
-
-extern _X_EXPORT int
- RROutputAddUserMode(RROutputPtr output, RRModePtr mode);
-
-extern _X_EXPORT int
- RROutputDeleteUserMode(RROutputPtr output, RRModePtr mode);
 
 extern _X_EXPORT Bool
  RROutputSetCrtcs(RROutputPtr output, RRCrtcPtr * crtcs, int numCrtcs);
@@ -928,55 +643,10 @@ extern _X_EXPORT Bool
  RROutputSetConnection(RROutputPtr output, CARD8 connection);
 
 extern _X_EXPORT Bool
- RROutputSetSubpixelOrder(RROutputPtr output, int subpixelOrder);
-
-extern _X_EXPORT Bool
  RROutputSetPhysicalSize(RROutputPtr output, int mmWidth, int mmHeight);
 
 extern _X_EXPORT void
- RRDeliverOutputEvent(ClientPtr client, WindowPtr pWin, RROutputPtr output);
-
-extern _X_EXPORT void
  RROutputDestroy(RROutputPtr output);
-
-extern _X_EXPORT int
- ProcRRGetOutputInfo(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRSetOutputPrimary(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetOutputPrimary(ClientPtr client);
-
-/*
- * Initialize output type
- */
-extern _X_EXPORT Bool
- RROutputInit(void);
-
-/*
- * Initialize output type error value
- */
-extern _X_EXPORT void
- RROutputInitErrorValue(void);
-
-/* rrpointer.c */
-extern _X_EXPORT void
- RRPointerMoved(ScreenPtr pScreen, int x, int y);
-
-extern _X_EXPORT void
- RRPointerScreenConfigured(ScreenPtr pScreen);
-
-/* rrproperty.c */
-
-extern _X_EXPORT void
- RRDeleteAllOutputProperties(RROutputPtr output);
-
-extern _X_EXPORT RRPropertyValuePtr
-RRGetOutputProperty(RROutputPtr output, Atom property, Bool pending);
-
-extern _X_EXPORT RRPropertyPtr
-RRQueryOutputProperty(RROutputPtr output, Atom property);
 
 extern _X_EXPORT void
  RRDeleteOutputProperty(RROutputPtr output, Atom property);
@@ -985,161 +655,127 @@ extern _X_EXPORT Bool
  RRPostPendingProperties(RROutputPtr output);
 
 extern _X_EXPORT int
-
 RRChangeOutputProperty(RROutputPtr output, Atom property, Atom type,
                        int format, int mode, unsigned long len,
                        const void *value, Bool sendevent, Bool pending);
 
 extern _X_EXPORT int
-
 RRConfigureOutputProperty(RROutputPtr output, Atom property,
                           Bool pending, Bool range, Bool immutable,
                           int num_values, const INT32 *values);
-extern _X_EXPORT int
- ProcRRChangeOutputProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRGetOutputProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRListOutputProperties(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRQueryOutputProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRConfigureOutputProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRDeleteOutputProperty(ClientPtr client);
 
 /* rrprovider.c */
 #define PRIME_SYNC_PROP         "PRIME Synchronization"
-extern _X_EXPORT void
-RRProviderInitErrorValue(void);
 
-extern _X_EXPORT int
-ProcRRGetProviders(ClientPtr client);
 
-extern _X_EXPORT int
-ProcRRGetProviderInfo(ClientPtr client);
+/* *just* for backwards compat with legacy proprietary NVidia driver */
 
-extern _X_EXPORT int
-ProcRRSetProviderOutputSource(ClientPtr client);
+extern _X_EXPORT RESTYPE RRCrtcType;      /* X resource type: Randr CRTC */
+extern _X_EXPORT RESTYPE RRModeType;      /* X resource type: Randr MODE */
+extern _X_EXPORT RESTYPE RROutputType;    /* X resource type: Randr OUTPUT */
 
-extern _X_EXPORT int
-ProcRRSetProviderOffloadSink(ClientPtr client);
+/*
+ * Set non-desktop property on given output. This flag should be TRUE on
+ * outputs where usual desktops shouldn't expand onto (eg. head displays,
+ * additional display bars in various handhelds, etc)
+ */
+_X_EXPORT /* just for Nvidia legacy */
+Bool RROutputSetNonDesktop(RROutputPtr output, Bool non_desktop);
 
-extern _X_EXPORT Bool
-RRProviderInit(void);
+/*
+ * Return the area of the frame buffer scanned out by the crtc,
+ * taking into account the current mode and rotation
+ *
+ * @param crtc    the CRTC to query
+ * @param width   return buffer for width value
+ * @param height  return buffer for height value
+ */
+_X_EXPORT /* just for Nvidia legacy */
+void RRCrtcGetScanoutSize(RRCrtcPtr crtc, int *width, int *height);
 
-extern _X_EXPORT RRProviderPtr
-RRProviderCreate(ScreenPtr pScreen, const char *name,
-                 int nameLength);
+/*
+ * Retrieve CRTCs current transform
+ *
+ * @param crtc    the CRTC to query
+ * @return        pointer to CRTCs current transform
+ */
+_X_EXPORT /* just for Nvidia legacy */
+RRTransformPtr RRCrtcGetTransform(RRCrtcPtr crtc);
 
-extern _X_EXPORT void
-RRProviderDestroy (RRProviderPtr provider);
+/*
+ * Detach and free a scanout pixmap
+ *
+ * @param crtc    the CRTC to act on
+ */
+_X_EXPORT /* just for Nvidia legacy */
+void RRCrtcDetachScanoutPixmap(RRCrtcPtr crtc);
 
-extern _X_EXPORT void
-RRProviderSetCapabilities(RRProviderPtr provider, uint32_t capabilities);
+/*
+ * Create / allocate new provider structure
+ *
+ * @param pScreen the screen the provider belongs to
+ * @param name    name of the provider (counted string)
+ * @param nameLen size of the provider name
+ * @return new provider structure, or NULL on failure
+ */
+_X_EXPORT /* just for Nvidia legacy */
+RRProviderPtr RRProviderCreate(ScreenPtr pScreen, const char *name,
+                               int nameLen);
 
-extern _X_EXPORT Bool
-RRProviderLookup(XID id, RRProviderPtr *provider_p);
+/*
+ * Set provider capabilities field
+ *
+ * @param provider      the provider whose capabilities are to be set
+ * @param capabilities  the new capabilities
+ */
+_X_EXPORT /* just for Nvidia legacy */
+void RRProviderSetCapabilities(RRProviderPtr provider, uint32_t capabilities);
 
-extern _X_EXPORT void
-RRDeliverProviderEvent(ClientPtr client, WindowPtr pWin, RRProviderPtr provider);
+/*
+ * Check whether client is operating on recent enough protocol version
+ * to know about refresh rates. This has influence on reply packet formats
+ *
+ * @param pClient the client to check
+ * @return TRUE if client using recent enough protocol version
+ */
+_X_EXPORT /* just for Nvidia legacy */
+Bool RRClientKnowsRates(ClientPtr pClient);
 
-extern _X_EXPORT void
-RRProviderAutoConfigGpuScreen(ScreenPtr pScreen, ScreenPtr primaryScreen);
+/*
+ * Set filter on transform structure
+ */
+_X_EXPORT /* just for Nvidia legacy */
+Bool RRTransformSetFilter(RRTransformPtr dst, PictFilterPtr filter,
+                          xFixed *params, int nparams, int width, int height);
 
-/* rrproviderproperty.c */
+/*
+ * Set whether transforms are allowed on a CRTC
+ *
+ * @param crtc the CRTC to set the flag on
+ * @param transforms TRUE if transforms are allowed
+ */
+_X_EXPORT /* just for Nvidia legacy */
+void RRCrtcSetTransformSupport(RRCrtcPtr crtc, Bool transforms);
 
-extern _X_EXPORT void
- RRDeleteAllProviderProperties(RRProviderPtr provider);
+/*
+ * Set subpixel order on given output
+ *
+ * @param output  the output to set subpixel order on
+ * @param order   subpixel order value to set
+ */
+_X_EXPORT /* just for Nvidia legacy */
+void RROutputSetSubpixelOrder(RROutputPtr output, int order);
 
-extern _X_EXPORT RRPropertyValuePtr
- RRGetProviderProperty(RRProviderPtr provider, Atom property, Bool pending);
-
-extern _X_EXPORT RRPropertyPtr
- RRQueryProviderProperty(RRProviderPtr provider, Atom property);
-
-extern _X_EXPORT void
- RRDeleteProviderProperty(RRProviderPtr provider, Atom property);
-
-extern _X_EXPORT int
-RRChangeProviderProperty(RRProviderPtr provider, Atom property, Atom type,
-                       int format, int mode, unsigned long len,
-                       void *value, Bool sendevent, Bool pending);
-
-extern _X_EXPORT int
- RRConfigureProviderProperty(RRProviderPtr provider, Atom property,
-                             Bool pending, Bool range, Bool immutable,
-                             int num_values, INT32 *values);
-
-extern _X_EXPORT Bool
- RRPostProviderPendingProperties(RRProviderPtr provider);
-
-extern _X_EXPORT int
- ProcRRGetProviderProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRListProviderProperties(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRQueryProviderProperty(ClientPtr client);
-
-extern _X_EXPORT int
-ProcRRConfigureProviderProperty(ClientPtr client);
-
-extern _X_EXPORT int
-ProcRRChangeProviderProperty(ClientPtr client);
-
-extern _X_EXPORT int
- ProcRRDeleteProviderProperty(ClientPtr client);
-/* rrxinerama.c */
-#ifdef XINERAMA
-extern _X_EXPORT void
- RRXineramaExtensionInit(void);
-#endif
-
-void
-RRMonitorInit(ScreenPtr screen);
-
-Bool
-RRMonitorMakeList(ScreenPtr screen, Bool get_active, RRMonitorPtr *monitors_ret, int *nmon_ret);
-
-int
-RRMonitorCountList(ScreenPtr screen);
-
-void
-RRMonitorFreeList(RRMonitorPtr monitors, int nmon);
-
-void
-RRMonitorClose(ScreenPtr screen);
-
-RRMonitorPtr
-RRMonitorAlloc(int noutput);
-
-int
-RRMonitorAdd(ClientPtr client, ScreenPtr screen, RRMonitorPtr monitor);
-
-void
-RRMonitorFree(RRMonitorPtr monitor);
-
-int
-ProcRRGetMonitors(ClientPtr client);
-
-int
-ProcRRSetMonitor(ClientPtr client);
-
-int
-ProcRRDeleteMonitor(ClientPtr client);
-
-int
-ProcRRCreateLease(ClientPtr client);
-
-int
-ProcRRFreeLease(ClientPtr client);
+/*
+ * Retrieve output property value
+ *
+ * @param output  the output to query
+ * @param property Atom ID of the property to retrieve
+ * @param pending  retrieve pending instead of current value
+ * @return pointer to property value or NULL (if not found)
+ */
+_X_EXPORT /* just for Nvidia legacy */
+RRPropertyValuePtr RRGetOutputProperty(RROutputPtr output, Atom property, Bool pending);
 
 #endif                          /* _RANDRSTR_H_ */
 

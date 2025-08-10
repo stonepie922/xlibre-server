@@ -19,6 +19,10 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
+
+#include "dix/dix_priv.h"
+#include "Xext/geext_priv.h"
 
 #include "present_priv.h"
 
@@ -52,7 +56,7 @@ present_free_events(WindowPtr window)
         return;
 
     while ((event = window_priv->events))
-        FreeResource(event->id, RT_NONE);
+        FreeResource(event->id, X11_RESTYPE_NONE);
 }
 
 static void
@@ -224,7 +228,7 @@ present_select_input(ClientPtr client, XID eid, WindowPtr window, CARD32 mask)
         if (mask)
             event->mask = mask;
         else
-            FreeResource(eid, RT_NONE);
+            FreeResource(eid, X11_RESTYPE_NONE);
         return Success;
     }
     if (ret != BadValue)

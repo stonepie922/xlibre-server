@@ -29,11 +29,14 @@ used in advertising or otherwise to promote the sale, use or other dealings
 in this Software without prior written authorization from The Open Group.
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include   <X11/X.h>
+
+#include   "dix/dix_priv.h"
+#include   "dix/gc_priv.h"
+#include   "dix/screen_hooks_priv.h"
+
 #include   "misc.h"
 #include   "input.h"
 #include   "cursorstr.h"
@@ -45,9 +48,7 @@ in this Software without prior written authorization from The Open Group.
 #include   "mipointer.h"
 #include   "misprite.h"
 #include   "gcstruct.h"
-
 #include   "picturestr.h"
-
 #include "inputstr.h"
 
 /* per-screen private data */
@@ -59,7 +60,7 @@ static DevScreenPrivateKeyRec miDCDeviceKeyRec;
 
 #define miDCDeviceKey (&miDCDeviceKeyRec)
 
-static Bool miDCCloseScreen(ScreenPtr pScreen);
+static void miDCCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused);
 
 /* per device private data */
 typedef struct {
@@ -79,7 +80,6 @@ typedef struct {
  * in the pCursorBuffers array.
  */
 typedef struct {
-    CloseScreenProcPtr CloseScreen;
     PixmapPtr sourceBits;       /* source bits */
     PixmapPtr maskBits;         /* mask bits */
     PicturePtr pPicture;
@@ -102,9 +102,7 @@ miDCInitialize(ScreenPtr pScreen, miPointerScreenFuncPtr screenFuncs)
     if (!pScreenPriv)
         return FALSE;
 
-    pScreenPriv->CloseScreen = pScreen->CloseScreen;
-    pScreen->CloseScreen = miDCCloseScreen;
-
+    dixScreenHookPostClose(pScreen, miDCCloseScreen);
     dixSetPrivate(&pScreen->devPrivates, miDCScreenKey, pScreenPriv);
 
     if (!miSpriteInitialize(pScreen, screenFuncs)) {
@@ -118,13 +116,14 @@ static void
 miDCSwitchScreenCursor(ScreenPtr pScreen, CursorPtr pCursor, PixmapPtr sourceBits, PixmapPtr maskBits, PicturePtr pPicture)
 {
     miDCScreenPtr pScreenPriv = dixLookupPrivate(&pScreen->devPrivates, miDCScreenKey);
+    if (!pScreenPriv)
+        return;
 
-    if (pScreenPriv->sourceBits)
-        (*pScreen->DestroyPixmap)(pScreenPriv->sourceBits);
+    dixDestroyPixmap(pScreenPriv->sourceBits, 0);
     pScreenPriv->sourceBits = sourceBits;
 
     if (pScreenPriv->maskBits)
-        (*pScreen->DestroyPixmap)(pScreenPriv->maskBits);
+    dixDestroyPixmap(pScreenPriv->maskBits, 0);
     pScreenPriv->maskBits = maskBits;
 
     if (pScreenPriv->pPicture)
@@ -134,18 +133,16 @@ miDCSwitchScreenCursor(ScreenPtr pScreen, CursorPtr pCursor, PixmapPtr sourceBit
     pScreenPriv->pCursor = pCursor;
 }
 
-static Bool
-miDCCloseScreen(ScreenPtr pScreen)
+static void miDCCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
-    miDCScreenPtr pScreenPriv;
+    dixScreenUnhookPostClose(pScreen, miDCCloseScreen);
 
+    miDCScreenPtr pScreenPriv;
     pScreenPriv = (miDCScreenPtr) dixLookupPrivate(&pScreen->devPrivates,
                                                    miDCScreenKey);
-    pScreen->CloseScreen = pScreenPriv->CloseScreen;
-
     miDCSwitchScreenCursor(pScreen, NULL, NULL, NULL, NULL);
     free((void *) pScreenPriv);
-    return (*pScreen->CloseScreen) (pScreen);
+    dixSetPrivate(&pScreen->devPrivates, miDCScreenKey, NULL); /* clear it, just for sure */
 }
 
 Bool
@@ -203,7 +200,7 @@ miDCRealize(ScreenPtr pScreen, CursorPtr pCursor)
 
         pGC = GetScratchGC(32, pScreen);
         if (!pGC) {
-            (*pScreen->DestroyPixmap) (pPixmap);
+            dixDestroyPixmap(pPixmap, 0);
             return FALSE;
         }
         ValidateGC(&pPixmap->drawable, pGC);
@@ -214,7 +211,7 @@ miDCRealize(ScreenPtr pScreen, CursorPtr pCursor)
         FreeScratchGC(pGC);
         pPicture = CreatePicture(0, &pPixmap->drawable,
                                  pFormat, 0, 0, serverClient, &error);
-        (*pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
         if (!pPicture)
             return FALSE;
 
@@ -230,7 +227,7 @@ miDCRealize(ScreenPtr pScreen, CursorPtr pCursor)
     maskBits = (*pScreen->CreatePixmap) (pScreen, pCursor->bits->width,
                                          pCursor->bits->height, 1, 0);
     if (!maskBits) {
-        (*pScreen->DestroyPixmap) (sourceBits);
+        dixDestroyPixmap(sourceBits, 0);
         return FALSE;
     }
 
@@ -238,8 +235,8 @@ miDCRealize(ScreenPtr pScreen, CursorPtr pCursor)
 
     pGC = GetScratchGC(1, pScreen);
     if (!pGC) {
-        (*pScreen->DestroyPixmap) (sourceBits);
-        (*pScreen->DestroyPixmap) (maskBits);
+        dixDestroyPixmap(sourceBits, 0);
+        dixDestroyPixmap(maskBits, 0);
         return FALSE;
     }
 
@@ -395,8 +392,7 @@ miDCSaveUnderCursor(DeviceIntPtr pDev, ScreenPtr pScreen,
     pSave = pBuffer->pSave;
     pWin = pScreen->root;
     if (!pSave || pSave->drawable.width < w || pSave->drawable.height < h) {
-        if (pSave)
-            (*pScreen->DestroyPixmap) (pSave);
+        dixDestroyPixmap(pSave, 0);
         pBuffer->pSave = pSave =
             (*pScreen->CreatePixmap) (pScreen, w, h, pScreen->rootDepth, 0);
         if (!pSave)
@@ -406,7 +402,7 @@ miDCSaveUnderCursor(DeviceIntPtr pDev, ScreenPtr pScreen,
     pGC = pBuffer->pSaveGC;
     if (pSave->drawable.serialNumber != pGC->serialNumber)
         ValidateGC((DrawablePtr) pSave, pGC);
-    (*pGC->ops->CopyArea) ((DrawablePtr) pWin, (DrawablePtr) pSave, pGC,
+    (void) (*pGC->ops->CopyArea) ((DrawablePtr) pWin, (DrawablePtr) pSave, pGC,
                            x, y, w, h, 0, 0);
     return TRUE;
 }
@@ -430,7 +426,7 @@ miDCRestoreUnderCursor(DeviceIntPtr pDev, ScreenPtr pScreen,
     pGC = pBuffer->pRestoreGC;
     if (pWin->drawable.serialNumber != pGC->serialNumber)
         ValidateGC((DrawablePtr) pWin, pGC);
-    (*pGC->ops->CopyArea) ((DrawablePtr) pSave, (DrawablePtr) pWin, pGC,
+    (void) (*pGC->ops->CopyArea) ((DrawablePtr) pSave, (DrawablePtr) pWin, pGC,
                            0, 0, w, h, x, y);
     return TRUE;
 }
@@ -513,8 +509,7 @@ miDCDeviceCleanup(DeviceIntPtr pDev, ScreenPtr pScreen)
                  * is freed when that root window is destroyed, so don't
                  * free it again here. */
 
-                if (pBuffer->pSave)
-                    (*pScreen->DestroyPixmap) (pBuffer->pSave);
+                dixDestroyPixmap(pBuffer->pSave, 0);
 
                 free(pBuffer);
                 dixSetScreenPrivate(&pDev->devPrivates, miDCDeviceKey, pScreen,

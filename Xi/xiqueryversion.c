@@ -29,18 +29,17 @@
  * Protocol handling for the XIQueryVersion request/reply.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
-
-#include "inputstr.h"
 
 #include <X11/Xmd.h>
 #include <X11/X.h>
 #include <X11/extensions/XI2proto.h>
 
+#include "dix/exevents_priv.h"
+#include "os/fmt.h"
+
+#include "inputstr.h"
 #include "exglobals.h"
-#include "exevents.h"
 #include "xiqueryversion.h"
 #include "misc.h"
 
@@ -55,7 +54,6 @@ extern XExtensionVersion XIVersion;     /* defined in getvers.c */
 int
 ProcXIQueryVersion(ClientPtr client)
 {
-    xXIQueryVersionReply rep;
     XIClientPtr pXIClient;
     int major, minor;
 
@@ -114,16 +112,20 @@ ProcXIQueryVersion(ClientPtr client)
         pXIClient->minor_version = minor;
     }
 
-    rep = (xXIQueryVersionReply) {
+    xXIQueryVersionReply rep = {
         .repType = X_Reply,
         .RepType = X_XIQueryVersion,
         .sequenceNumber = client->sequence,
-        .length = 0,
         .major_version = major,
         .minor_version = minor
     };
 
-    WriteReplyToClient(client, sizeof(xXIQueryVersionReply), &rep);
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swaps(&rep.major_version);
+        swaps(&rep.minor_version);
+    }
+    WriteToClient(client, sizeof(xXIQueryVersionReply), &rep);
 
     return Success;
 }
@@ -134,19 +136,8 @@ int _X_COLD
 SProcXIQueryVersion(ClientPtr client)
 {
     REQUEST(xXIQueryVersionReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xXIQueryVersionReq);
     swaps(&stuff->major_version);
     swaps(&stuff->minor_version);
     return (ProcXIQueryVersion(client));
-}
-
-void _X_COLD
-SRepXIQueryVersion(ClientPtr client, int size, xXIQueryVersionReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    swaps(&rep->major_version);
-    swaps(&rep->minor_version);
-    WriteToClient(client, size, rep);
 }

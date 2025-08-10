@@ -56,6 +56,8 @@
 #include <xorg-config.h>
 #endif
 
+#include <assert.h>
+
 #include "xf86Parser.h"
 #include "xf86tokens.h"
 #include "Configint.h"
@@ -132,28 +134,28 @@ xf86parseModuleSection(void)
             xf86_lex_val.str = NULL;
             break;
         case LOAD:
-            if (xf86getSubToken(&(ptr->mod_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->mod_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Load");
             ptr->mod_load_lst =
                 xf86addNewLoadDirective(ptr->mod_load_lst, xf86_lex_val.str,
                                         XF86_LOAD_MODULE, NULL);
             break;
         case DISABLE:
-            if (xf86getSubToken(&(ptr->mod_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->mod_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Disable");
             ptr->mod_disable_lst =
                 xf86addNewLoadDirective(ptr->mod_disable_lst, xf86_lex_val.str,
                                         XF86_DISABLE_MODULE, NULL);
             break;
         case LOAD_DRIVER:
-            if (xf86getSubToken(&(ptr->mod_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->mod_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "LoadDriver");
             ptr->mod_load_lst =
                 xf86addNewLoadDirective(ptr->mod_load_lst, xf86_lex_val.str,
                                         XF86_LOAD_DRIVER, NULL);
             break;
         case SUBSECTION:
-            if (xf86getSubToken(&(ptr->mod_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->mod_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "SubSection");
             ptr->mod_load_lst =
                 xf86parseModuleSubSection(ptr->mod_load_lst, xf86_lex_val.str);
@@ -228,6 +230,7 @@ xf86addNewLoadDirective(XF86LoadPtr head, const char *name, int type,
     int token;
 
     new = calloc(1, sizeof(XF86LoadRec));
+    assert(new);
     new->load_name = name;
     new->load_type = type;
     new->load_opt = opts;

@@ -44,9 +44,7 @@ SOFTWARE.
 
 ******************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include	<X11/X.h>
 #include	<X11/Xmd.h>
@@ -81,7 +79,7 @@ with the sample server.
 */
 
 void
-miPolyGlyphBlt(DrawablePtr pDrawable, GC * pGC, int x, int y, unsigned int nglyph, CharInfoPtr * ppci,  /* array of character info */
+miPolyGlyphBlt(DrawablePtr pDrawable, GCPtr pGC, int x, int y, unsigned int nglyph, CharInfoPtr * ppci,  /* array of character info */
                void *pglyphBase       /* start of array of glyphs */
     )
 {
@@ -120,7 +118,7 @@ miPolyGlyphBlt(DrawablePtr pDrawable, GC * pGC, int x, int y, unsigned int nglyp
 
     pGCtmp = GetScratchGC(1, pDrawable->pScreen);
     if (!pGCtmp) {
-        (*pDrawable->pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
         return;
     }
 
@@ -132,9 +130,9 @@ miPolyGlyphBlt(DrawablePtr pDrawable, GC * pGC, int x, int y, unsigned int nglyp
              gcvals);
 
     nbyLine = BitmapBytePad(width);
-    pbits = xallocarray(height, nbyLine);
+    pbits = calloc(height, nbyLine);
     if (!pbits) {
-        (*pDrawable->pScreen->DestroyPixmap) (pPixmap);
+        dixDestroyPixmap(pPixmap, 0);
         FreeScratchGC(pGCtmp);
         return;
     }
@@ -176,13 +174,13 @@ miPolyGlyphBlt(DrawablePtr pDrawable, GC * pGC, int x, int y, unsigned int nglyp
         }
         x += pci->metrics.characterWidth;
     }
-    (*pDrawable->pScreen->DestroyPixmap) (pPixmap);
+    dixDestroyPixmap(pPixmap, 0);
     free(pbits);
     FreeScratchGC(pGCtmp);
 }
 
 void
-miImageGlyphBlt(DrawablePtr pDrawable, GC * pGC, int x, int y, unsigned int nglyph, CharInfoPtr * ppci, /* array of character info */
+miImageGlyphBlt(DrawablePtr pDrawable, GCPtr pGC, int x, int y, unsigned int nglyph, CharInfoPtr * ppci, /* array of character info */
                 void *pglyphBase      /* start of array of glyphs */
     )
 {

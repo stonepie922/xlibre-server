@@ -3,9 +3,13 @@
 #include <xorg-config.h>
 #endif
 
+#include "dix/colormap_priv.h"
+#include "dix/cursor_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "mi/mipointer_priv.h"
+
 #include "xf86.h"
 #include "xf86CursorPriv.h"
-#include "colormapst.h"
 #include "cursorstr.h"
 
 /* FIXME: This was added with the ABI change of the miPointerSpriteFuncs for
@@ -18,6 +22,7 @@
 #include "inputstr.h"
 
 DevPrivateKeyRec xf86CursorScreenKeyRec;
+DevScreenPrivateKeyRec xf86ScreenCursorBitsKeyRec;
 
 /* sprite functions */
 
@@ -42,7 +47,7 @@ static miPointerSpriteFuncRec xf86CursorSpriteFuncs = {
 static void xf86CursorInstallColormap(ColormapPtr);
 static void xf86CursorRecolorCursor(DeviceIntPtr pDev, ScreenPtr, CursorPtr,
                                     Bool);
-static Bool xf86CursorCloseScreen(ScreenPtr);
+static void xf86CursorCloseScreen(CallbackListPtr *, ScreenPtr, void *);
 static void xf86CursorQueryBestSize(int, unsigned short *, unsigned short *,
                                     ScreenPtr);
 
@@ -68,6 +73,10 @@ xf86InitCursor(ScreenPtr pScreen, xf86CursorInfoPtr infoPtr)
     if (!ScreenPriv)
         return FALSE;
 
+    if (!dixRegisterScreenPrivateKey(&xf86ScreenCursorBitsKeyRec, pScreen,
+                                     PRIVATE_CURSOR, 0))
+        return FALSE;
+
     dixSetPrivate(&pScreen->devPrivates, xf86CursorScreenKey, ScreenPriv);
 
     ScreenPriv->SWCursor = TRUE;
@@ -77,8 +86,7 @@ xf86InitCursor(ScreenPtr pScreen, xf86CursorInfoPtr infoPtr)
     ScreenPriv->PalettedCursor = FALSE;
     ScreenPriv->pInstalledMap = NULL;
 
-    ScreenPriv->CloseScreen = pScreen->CloseScreen;
-    pScreen->CloseScreen = xf86CursorCloseScreen;
+    dixScreenHookClose(pScreen, xf86CursorCloseScreen);
     ScreenPriv->QueryBestSize = pScreen->QueryBestSize;
     pScreen->QueryBestSize = xf86CursorQueryBestSize;
     ScreenPriv->RecolorCursor = pScreen->RecolorCursor;
@@ -116,10 +124,15 @@ xf86InitCursor(ScreenPtr pScreen, xf86CursorInfoPtr infoPtr)
 
 /***** Screen functions *****/
 
-static Bool
-xf86CursorCloseScreen(ScreenPtr pScreen)
+static void xf86CursorCloseScreen(CallbackListPtr *pcbl,
+                                  ScreenPtr pScreen, void *unused)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    if (!pScrn)
+        return;
+
+    dixScreenUnhookClose(pScreen, xf86CursorCloseScreen);
+
     miPointerScreenPtr PointPriv =
         (miPointerScreenPtr) dixLookupPrivate(&pScreen->devPrivates,
                                               miPointerScreenKey);
@@ -133,7 +146,6 @@ xf86CursorCloseScreen(ScreenPtr pScreen)
     if (ScreenPriv->CurrentCursor)
         FreeCursor(ScreenPriv->CurrentCursor, None);
 
-    pScreen->CloseScreen = ScreenPriv->CloseScreen;
     pScreen->QueryBestSize = ScreenPriv->QueryBestSize;
     pScreen->RecolorCursor = ScreenPriv->RecolorCursor;
     if (ScreenPriv->InstallColormap)
@@ -147,8 +159,7 @@ xf86CursorCloseScreen(ScreenPtr pScreen)
 
     free(ScreenPriv->transparentData);
     free(ScreenPriv);
-
-    return (*pScreen->CloseScreen) (pScreen);
+    dixSetPrivate(&pScreen->devPrivates, xf86CursorScreenKey, NULL);
 }
 
 static void
@@ -273,8 +284,8 @@ xf86CursorRealizeCursor(DeviceIntPtr pDev, ScreenPtr pScreen, CursorPtr pCurs)
                                                xf86CursorScreenKey);
 
     if (CursorRefCount(pCurs) <= 1)
-        dixSetScreenPrivate(&pCurs->devPrivates, CursorScreenKey, pScreen,
-                            NULL);
+        dixSetScreenPrivate(&pCurs->devPrivates, &xf86ScreenCursorBitsKeyRec,
+                            pScreen, NULL);
 
     return (*ScreenPriv->spriteFuncs->RealizeCursor) (pDev, pScreen, pCurs);
 }
@@ -288,9 +299,9 @@ xf86CursorUnrealizeCursor(DeviceIntPtr pDev, ScreenPtr pScreen, CursorPtr pCurs)
 
     if (CursorRefCount(pCurs) <= 1) {
         free(dixLookupScreenPrivate
-             (&pCurs->devPrivates, CursorScreenKey, pScreen));
-        dixSetScreenPrivate(&pCurs->devPrivates, CursorScreenKey, pScreen,
-                            NULL);
+             (&pCurs->devPrivates, &xf86ScreenCursorBitsKeyRec, pScreen));
+        dixSetScreenPrivate(&pCurs->devPrivates, &xf86ScreenCursorBitsKeyRec,
+                            pScreen, NULL);
     }
 
     return (*ScreenPriv->spriteFuncs->UnrealizeCursor) (pDev, pScreen, pCurs);

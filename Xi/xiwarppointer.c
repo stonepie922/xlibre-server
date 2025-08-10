@@ -29,23 +29,27 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>              /* for inputstr.h    */
 #include <X11/Xproto.h>         /* Request macro     */
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XI2proto.h>
+
+#include "dix/cursor_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "mi/mipointer_priv.h"
+
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
 #include "scrnintstr.h"         /* screen structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XI2proto.h>
 #include "extnsionst.h"
 #include "exevents.h"
 #include "exglobals.h"
 #include "mipointer.h"          /* for miPointerUpdateSprite */
-
 #include "xiwarppointer.h"
+
 /***********************************************************************
  *
  * This procedure allows a client to warp the pointer of a device.
@@ -58,7 +62,6 @@ SProcXIWarpPointer(ClientPtr client)
     REQUEST(xXIWarpPointerReq);
     REQUEST_SIZE_MATCH(xXIWarpPointerReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->src_win);
     swapl(&stuff->dst_win);
     swapl(&stuff->src_x);
@@ -95,8 +98,8 @@ ProcXIWarpPointer(ClientPtr client)
         return rc;
     }
 
-    if ((!IsMaster(pDev) && !IsFloating(pDev)) ||
-        (IsMaster(pDev) && !IsPointerDevice(pDev))) {
+    if ((!InputDevIsMaster(pDev) && !InputDevIsFloating(pDev)) ||
+        (InputDevIsMaster(pDev) && !IsPointerDevice(pDev))) {
         client->errorValue = stuff->deviceid;
         return BadDevice;
     }
@@ -174,8 +177,9 @@ ProcXIWarpPointer(ClientPtr client)
             y = pSprite->physLimits.y2 - 1;
 
         if (pSprite->hotShape)
-            ConfineToShape(pDev, pSprite->hotShape, &x, &y);
-        (*newScreen->SetCursorPosition) (pDev, newScreen, x, y, TRUE);
+            ConfineToShape(pSprite->hotShape, &x, &y);
+        if (newScreen->SetCursorPosition)
+            newScreen->SetCursorPosition(pDev, newScreen, x, y, TRUE);
     }
     else if (!PointerConfinedToScreen(pDev)) {
         NewCurrentScreen(pDev, newScreen, x, y);

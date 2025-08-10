@@ -50,9 +50,7 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "windowstr.h"          /* focus struct      */
 #include "inputstr.h"           /* DeviceIntPtr      */
@@ -68,26 +66,11 @@ SOFTWARE.
  *
  */
 
-int _X_COLD
-SProcXGetDeviceFocus(ClientPtr client)
-{
-    REQUEST(xGetDeviceFocusReq);
-    swaps(&stuff->length);
-    return (ProcXGetDeviceFocus(client));
-}
-
-/***********************************************************************
- *
- * This procedure gets the focus for a device.
- *
- */
-
 int
 ProcXGetDeviceFocus(ClientPtr client)
 {
     DeviceIntPtr dev;
     FocusClassPtr focus;
-    xGetDeviceFocusReply rep;
     int rc;
 
     REQUEST(xGetDeviceFocusReq);
@@ -99,14 +82,15 @@ ProcXGetDeviceFocus(ClientPtr client)
     if (!dev->focus)
         return BadDevice;
 
-    rep = (xGetDeviceFocusReply) {
+    focus = dev->focus;
+
+    xGetDeviceFocusReply rep = {
         .repType = X_Reply,
         .RepType = X_GetDeviceFocus,
         .sequenceNumber = client->sequence,
-        .length = 0
+        .time = focus->time.milliseconds,
+        .revertTo = focus->revert,
     };
-
-    focus = dev->focus;
 
     if (focus->win == NoneWin)
         rep.focus = None;
@@ -117,25 +101,12 @@ ProcXGetDeviceFocus(ClientPtr client)
     else
         rep.focus = focus->win->drawable.id;
 
-    rep.time = focus->time.milliseconds;
-    rep.revertTo = focus->revert;
-    WriteReplyToClient(client, sizeof(xGetDeviceFocusReply), &rep);
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+        swapl(&rep.focus);
+        swapl(&rep.time);
+    }
+    WriteToClient(client, sizeof(xGetDeviceFocusReply), &rep);
     return Success;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the GetDeviceFocus function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGetDeviceFocus(ClientPtr client, int size, xGetDeviceFocusReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    swapl(&rep->focus);
-    swapl(&rep->time);
-    WriteToClient(client, size, rep);
 }

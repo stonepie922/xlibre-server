@@ -71,35 +71,26 @@ SOFTWARE.
  * authorization from the copyright holder(s) and author(s).
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #ifdef HAVE_XORG_CONFIG_H
 #include <xorg-config.h>
 #include "xf86Extensions.h"
 #endif
 
-#ifdef HAVE_DMX_CONFIG_H
-#include <dmx-config.h>
-#undef XV
-#undef DBE
-#undef SCREENSAVER
-#undef RANDR
-#undef DAMAGE
-#undef COMPOSITE
-#undef MITSHM
-#endif
-
-#ifdef HAVE_XNEST_CONFIG_H
-#include <xnest-config.h>
-#undef COMPOSITE
+/* some DDXes must explicitly prohibit some extensions */
+#ifdef DISABLE_EXT_DPMS
 #undef DPMSExtension
 #endif
 
+#ifdef DISABLE_EXT_MITSHM
+#undef MITSHM
+#endif
+
+#include "miext/extinit_priv.h"
+
 #include "misc.h"
 #include "extension.h"
-#include "extinit.h"
 #include "micmap.h"
 #include "os.h"
 #include "globals.h"
@@ -108,8 +99,8 @@ SOFTWARE.
 
 /* List of built-in (statically linked) extensions */
 static const ExtensionModule staticExtensions[] = {
-    {GEExtensionInit, "Generic Event Extension", &noGEExtension},
-    {ShapeExtensionInit, "SHAPE", NULL},
+    {GEExtensionInit, "Generic Event Extension", NULL},
+    {ShapeExtensionInit, "SHAPE", &noShapeExtension},
 #ifdef MITSHM
     {ShmExtensionInit, "MIT-SHM", &noMITShmExtension},
 #endif
@@ -124,9 +115,12 @@ static const ExtensionModule staticExtensions[] = {
 #ifdef XCSECURITY
     {SecurityExtensionInit, "SECURITY", &noSecurityExtension},
 #endif
-#ifdef PANORAMIX
-    {PanoramiXExtensionInit, "XINERAMA", &noPanoramiXExtension},
+#ifdef CONFIG_NAMESPACE
+    {NamespaceExtensionInit, "NAMESPACE", &noNamespaceExtension},
 #endif
+#ifdef XINERAMA
+    {PanoramiXExtensionInit, "XINERAMA", &noPanoramiXExtension},
+#endif /* XINERAMA */
     /* must be before Render to layer DisplayCursor correctly */
     {XFixesExtensionInit, "XFIXES", &noXFixesExtension},
 #ifdef XF86BIGFONT
@@ -136,7 +130,7 @@ static const ExtensionModule staticExtensions[] = {
 #ifdef RANDR
     {RRExtensionInit, "RANDR", &noRRExtension},
 #endif
-#ifdef COMPOSITE
+#ifndef DISABLE_EXT_COMPOSITE
     {CompositeExtensionInit, "COMPOSITE", &noCompositeExtension},
 #endif
 #ifdef DAMAGE

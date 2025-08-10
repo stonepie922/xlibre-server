@@ -40,14 +40,12 @@
  * Based on code by: Keith Packard
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
 
 #include "exa_priv.h"
-
+#include "glyphstr_priv.h"
 #include "mipict.h"
 
 #if DEBUG_GLYPH_CACHE
@@ -196,7 +194,7 @@ exaRealizeGlyphCaches(ScreenPtr pScreen, unsigned int format)
                              CPComponentAlpha, &component_alpha, serverClient,
                              &error);
 
-    (*pScreen->DestroyPixmap) (pPixmap);        /* picture holds a refcount */
+    dixDestroyPixmap(pPixmap, 0); /* picture holds a refcount */
 
     if (!pPicture)
         return FALSE;
@@ -211,8 +209,8 @@ exaRealizeGlyphCaches(ScreenPtr pScreen, unsigned int format)
 
         cache->picture = pPicture;
         cache->picture->refcnt++;
-        cache->hashEntries = xallocarray(cache->hashSize, sizeof(int));
-        cache->glyphs = xallocarray(cache->size, sizeof(ExaCachedGlyphRec));
+        cache->hashEntries = calloc(cache->hashSize, sizeof(int));
+        cache->glyphs = calloc(cache->size, sizeof(ExaCachedGlyphRec));
         cache->glyphCount = 0;
 
         if (!cache->hashEntries || !cache->glyphs)
@@ -730,7 +728,7 @@ exaGlyphs(CARD8 op,
         {
             PictFormatPtr argbFormat;
 
-            (*pScreen->DestroyPixmap) (pMaskPixmap);
+            dixDestroyPixmap(pMaskPixmap, 0);
 
             if (!pMask)
                 return;
@@ -753,7 +751,7 @@ exaGlyphs(CARD8 op,
             pMask = CreatePicture(0, &pMaskPixmap->drawable, maskFormat, 0, 0,
                                   serverClient, &error);
             if (!pMask) {
-                (*pScreen->DestroyPixmap) (pMaskPixmap);
+                dixDestroyPixmap(pMaskPixmap, 0);
                 return;
             }
         }
@@ -834,6 +832,6 @@ exaGlyphs(CARD8 op,
                          xSrc + x - first_xOff,
                          ySrc + y - first_yOff, 0, 0, x, y, width, height);
         FreePicture((void *) pMask, (XID) 0);
-        (*pScreen->DestroyPixmap) (pMaskPixmap);
+        dixDestroyPixmap(pMaskPixmap, 0);
     }
 }

@@ -20,13 +20,17 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
 
-#include "fb.h"
+#include "fb/fb_priv.h"
+
+#ifdef FB_DEBUG
+static void fbInitializeDrawable(DrawablePtr pDrawable);
+#else
+static inline void fbInitializeDrawable(DrawablePtr pDrawable) {}
+#endif
 
 PixmapPtr
 fbCreatePixmap(ScreenPtr pScreen, int width, int height, int depth,
@@ -76,10 +80,8 @@ fbCreatePixmap(ScreenPtr pScreen, int width, int height, int depth,
     fbInitializeDrawable(&pPixmap->drawable);
 #endif
 
-#ifdef COMPOSITE
     pPixmap->screen_x = 0;
     pPixmap->screen_y = 0;
-#endif
 
     pPixmap->usage_hint = usage_hint;
 

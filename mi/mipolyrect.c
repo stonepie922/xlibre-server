@@ -43,9 +43,7 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 
 ******************************************************************/
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/Xprotostr.h>
@@ -88,7 +86,7 @@ miPolyRectangle(DrawablePtr pDraw, GCPtr pGC, int nrects, xRectangle *pRects)
         offset2 = pGC->lineWidth;
         offset1 = offset2 >> 1;
         offset3 = offset2 - offset1;
-        tmp = xallocarray(ntmp, sizeof(xRectangle));
+        tmp = calloc(ntmp, sizeof(xRectangle));
         if (!tmp)
             return;
         t = tmp;

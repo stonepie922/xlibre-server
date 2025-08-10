@@ -44,13 +44,16 @@ SOFTWARE.
 
 ******************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <assert.h>
 #include <X11/X.h>
 #include <X11/Xmd.h>
 #include <X11/Xproto.h>
+
+#include "dix/gc_priv.h"
+#include "os/osdep.h"
+
 #include "misc.h"
 #include "resource.h"
 #include "gcstruct.h"
@@ -59,11 +62,9 @@ SOFTWARE.
 #include "scrnintstr.h"
 #include "region.h"
 #include "dixstruct.h"
-
 #include "privates.h"
 #include "dix.h"
 #include "xace.h"
-#include <assert.h>
 
 extern FontPtr defaultFont;
 
@@ -72,7 +73,7 @@ static Bool CreateDefaultTile(GCPtr pGC);
 static unsigned char DefaultDash[2] = { 4, 4 };
 
 void
-ValidateGC(DrawablePtr pDraw, GC * pGC)
+ValidateGC(DrawablePtr pDraw, GCPtr pGC)
 {
     (*pGC->funcs->ValidateGC) (pGC, pGC->stateChanges, pDraw);
     pGC->stateChanges = 0;
@@ -120,7 +121,7 @@ ValidateGC(DrawablePtr pDraw, GC * pGC)
     _var = (_type)pUnion->ptr; pUnion++; }
 
 int
-ChangeGC(ClientPtr client, GC * pGC, BITS32 mask, ChangeGCValPtr pUnion)
+ChangeGC(ClientPtr client, GCPtr pGC, BITS32 mask, ChangeGCValPtr pUnion)
 {
     BITS32 index2;
     int error = 0;
@@ -253,7 +254,7 @@ ChangeGC(ClientPtr client, GC * pGC, BITS32 mask, ChangeGCValPtr pUnion)
             else {
                 pPixmap->refcnt++;
                 if (!pGC->tileIsPixel)
-                    (*pGC->pScreen->DestroyPixmap) (pGC->tile.pixmap);
+                    dixDestroyPixmap(pGC->tile.pixmap, 0);
                 pGC->tileIsPixel = FALSE;
                 pGC->tile.pixmap = pPixmap;
             }
@@ -270,7 +271,7 @@ ChangeGC(ClientPtr client, GC * pGC, BITS32 mask, ChangeGCValPtr pUnion)
                 if (pPixmap)
                     pPixmap->refcnt++;
                 if (pGC->stipple)
-                    (*pGC->pScreen->DestroyPixmap) (pGC->stipple);
+                    dixDestroyPixmap(pGC->stipple, 0);
                 pGC->stipple = pPixmap;
             }
             break;
@@ -360,9 +361,7 @@ ChangeGC(ClientPtr client, GC * pGC, BITS32 mask, ChangeGCValPtr pUnion)
                 }
             }
             else if (newdash != 0) {
-                unsigned char *dash;
-
-                dash = malloc(2 * sizeof(unsigned char));
+                unsigned char *dash = calloc(2, sizeof(unsigned char));
                 if (dash) {
                     if (pGC->dash != DefaultDash)
                         free(pGC->dash);
@@ -421,14 +420,14 @@ static const struct {
     RESTYPE type;
     Mask access_mode;
 } xidfields[] = {
-    {GCTile, RT_PIXMAP, DixReadAccess},
-    {GCStipple, RT_PIXMAP, DixReadAccess},
-    {GCFont, RT_FONT, DixUseAccess},
-    {GCClipMask, RT_PIXMAP, DixReadAccess},
+    {GCTile,     X11_RESTYPE_PIXMAP, DixReadAccess},
+    {GCStipple,  X11_RESTYPE_PIXMAP, DixReadAccess},
+    {GCFont,     X11_RESTYPE_FONT,   DixUseAccess},
+    {GCClipMask, X11_RESTYPE_PIXMAP, DixReadAccess},
 };
 
 int
-ChangeGCXIDs(ClientPtr client, GC * pGC, BITS32 mask, CARD32 *pC32)
+ChangeGCXIDs(ClientPtr client, GCPtr pGC, BITS32 mask, CARD32 *pC32)
 {
     ChangeGCVal vals[GCLastBit + 1];
     int i;
@@ -465,7 +464,7 @@ NewGCObject(ScreenPtr pScreen, int depth)
 {
     GCPtr pGC;
 
-    pGC = dixAllocateScreenObjectWithPrivates(pScreen, GC, PRIVATE_GC);
+    pGC = dixAllocateScreenObjectWithPrivates(pScreen, GCRec, PRIVATE_GC);
     if (!pGC) {
         return (GCPtr) NULL;
     }
@@ -547,8 +546,8 @@ CreateGC(DrawablePtr pDrawable, BITS32 mask, XID *pval, int *pStatus,
     }
 
     /* security creation/labeling check */
-    *pStatus = XaceHook(XACE_RESOURCE_ACCESS, client, gcid, RT_GC, pGC,
-                        RT_NONE, NULL, DixCreateAccess | DixSetAttrAccess);
+    *pStatus = XaceHookResourceAccess(client, gcid, X11_RESTYPE_GC, pGC,
+                        X11_RESTYPE_NONE, NULL, DixCreateAccess | DixSetAttrAccess);
     if (*pStatus != Success)
         goto out;
 
@@ -587,8 +586,7 @@ CreateDefaultTile(GCPtr pGC)
         (*pGC->pScreen->CreatePixmap) (pGC->pScreen, w, h, pGC->depth, 0);
     pgcScratch = GetScratchGC(pGC->depth, pGC->pScreen);
     if (!pTile || !pgcScratch) {
-        if (pTile)
-            (*pTile->drawable.pScreen->DestroyPixmap) (pTile);
+        dixDestroyPixmap(pTile, 0);
         if (pgcScratch)
             FreeScratchGC(pgcScratch);
         return FALSE;
@@ -614,7 +612,7 @@ CreateDefaultTile(GCPtr pGC)
 }
 
 int
-CopyGC(GC * pgcSrc, GC * pgcDst, BITS32 mask)
+CopyGC(GCPtr pgcSrc, GCPtr pgcDst, BITS32 mask)
 {
     BITS32 index2;
     BITS32 maskQ;
@@ -667,7 +665,7 @@ CopyGC(GC * pgcSrc, GC * pgcDst, BITS32 mask)
                 break;
             }
             if (!pgcDst->tileIsPixel)
-                (*pgcDst->pScreen->DestroyPixmap) (pgcDst->tile.pixmap);
+                dixDestroyPixmap(pgcDst->tile.pixmap, 0);
             pgcDst->tileIsPixel = pgcSrc->tileIsPixel;
             pgcDst->tile = pgcSrc->tile;
             if (!pgcDst->tileIsPixel)
@@ -679,7 +677,7 @@ CopyGC(GC * pgcSrc, GC * pgcDst, BITS32 mask)
             if (pgcDst->stipple == pgcSrc->stipple)
                 break;
             if (pgcDst->stipple)
-                (*pgcDst->pScreen->DestroyPixmap) (pgcDst->stipple);
+                dixDestroyPixmap(pgcDst->stipple, 0);
             pgcDst->stipple = pgcSrc->stipple;
             if (pgcDst->stipple)
                 pgcDst->stipple->refcnt++;
@@ -726,10 +724,8 @@ CopyGC(GC * pgcSrc, GC * pgcDst, BITS32 mask)
                 }
             }
             else {
-                unsigned char *dash;
                 unsigned int i;
-
-                dash = malloc(pgcSrc->numInDashList * sizeof(unsigned char));
+                unsigned char *dash = calloc(pgcSrc->numInDashList, sizeof(unsigned char));
                 if (dash) {
                     if (pgcDst->dash != DefaultDash)
                         free(pgcDst->dash);
@@ -768,16 +764,20 @@ int
 FreeGC(void *value, XID gid)
 {
     GCPtr pGC = (GCPtr) value;
+    if (!pGC)
+        return BadMatch;
 
     CloseFont(pGC->font, (Font) 0);
-    (*pGC->funcs->DestroyClip) (pGC);
+    if (pGC->funcs)
+        (*pGC->funcs->DestroyClip) (pGC);
 
     if (!pGC->tileIsPixel)
-        (*pGC->pScreen->DestroyPixmap) (pGC->tile.pixmap);
+        dixDestroyPixmap(pGC->tile.pixmap, 0);
     if (pGC->stipple)
-        (*pGC->pScreen->DestroyPixmap) (pGC->stipple);
+        dixDestroyPixmap(pGC->stipple, 0);
 
-    (*pGC->funcs->DestroyGC) (pGC);
+    if (pGC->funcs)
+        (*pGC->funcs->DestroyGC) (pGC);
     if (pGC->dash != DefaultDash)
         free(pGC->dash);
     dixFreeObjectWithPrivates(pGC, PRIVATE_GC);
@@ -817,13 +817,14 @@ CreateScratchGC(ScreenPtr pScreen, unsigned depth)
 }
 
 void
-FreeGCperDepth(int screenNum)
+FreeGCperDepth(ScreenPtr pScreen)
 {
     int i;
-    ScreenPtr pScreen;
     GCPtr *ppGC;
 
-    pScreen = screenInfo.screens[screenNum];
+    if (!pScreen)
+        return;
+
     ppGC = pScreen->GCperDepth;
 
     for (i = 0; i <= pScreen->numDepths; i++) {
@@ -882,7 +883,7 @@ CreateDefaultStipple(int screenNum)
     tmpval[2].val = FillSolid;
     pgcScratch = GetScratchGC(1, pScreen);
     if (!pgcScratch) {
-        (*pScreen->DestroyPixmap) (pScreen->defaultStipple);
+        dixDestroyPixmap(pScreen->defaultStipple, 0);
         return FALSE;
     }
     (void) ChangeGC(NullClient, pgcScratch,
@@ -896,14 +897,6 @@ CreateDefaultStipple(int screenNum)
                                       pgcScratch, 1, &rect);
     FreeScratchGC(pgcScratch);
     return TRUE;
-}
-
-void
-FreeDefaultStipple(int screenNum)
-{
-    ScreenPtr pScreen = screenInfo.screens[screenNum];
-
-    (*pScreen->DestroyPixmap) (pScreen->defaultStipple);
 }
 
 int
@@ -923,9 +916,9 @@ SetDashes(GCPtr pGC, unsigned offset, unsigned ndash, unsigned char *pdash)
     }
 
     if (ndash & 1)
-        p = malloc(2 * ndash * sizeof(unsigned char));
+        p = calloc(2 * ndash, sizeof(unsigned char));
     else
-        p = malloc(ndash * sizeof(unsigned char));
+        p = calloc(ndash, sizeof(unsigned char));
     if (!p)
         return BadAlloc;
 
@@ -1004,13 +997,13 @@ SetClipRects(GCPtr pGC, int xOrigin, int yOrigin, int nrects,
              xRectangle *prects, int ordering)
 {
     int newct, size;
-    xRectangle *prectsNew;
 
     newct = VerifyRectOrder(nrects, prects, ordering);
     if (newct < 0)
         return BadMatch;
     size = nrects * sizeof(xRectangle);
-    prectsNew = malloc(size);
+
+    xRectangle *prectsNew = calloc(1, size);
     if (!prectsNew && size)
         return BadAlloc;
 
@@ -1021,7 +1014,7 @@ SetClipRects(GCPtr pGC, int xOrigin, int yOrigin, int nrects,
     pGC->clipOrg.y = yOrigin;
     pGC->stateChanges |= GCClipYOrigin;
 
-    if (size)
+    if (size && prectsNew)
         memmove((char *) prectsNew, (char *) prects, size);
     (*pGC->funcs->ChangeClip) (pGC, newct, (void *) prectsNew, nrects);
     if (pGC->funcs->ChangeGC)

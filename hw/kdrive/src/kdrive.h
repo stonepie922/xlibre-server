@@ -28,11 +28,13 @@
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/Xos.h>
+
+#include "dix/colormap_priv.h"
+
 #include "scrnintstr.h"
 #include "pixmapstr.h"
 #include "windowstr.h"
 #include "servermd.h"
-#include "colormapst.h"
 #include "gcstruct.h"
 #include "input.h"
 #include "mipointer.h"
@@ -141,9 +143,6 @@ typedef struct {
 
     ColormapPtr pInstalledmap;  /* current colormap */
     xColorItem systemPalette[KD_MAX_PSEUDO_SIZE];       /* saved windows colors */
-
-    CreateScreenResourcesProcPtr CreateScreenResources;
-    CloseScreenProcPtr CloseScreen;
 } KdPrivScreenRec, *KdPrivScreenPtr;
 
 typedef enum _kdPointerState {
@@ -218,7 +217,7 @@ void KdRemovePointerDriver(KdPointerDriver * driver);
 KdPointerInfo *KdNewPointer(void);
 void KdFreePointer(KdPointerInfo *);
 int KdAddPointer(KdPointerInfo * ki);
-int KdAddConfigPointer(char *pointer);
+int KdAddConfigPointer(const char *pointer);
 void KdRemovePointer(KdPointerInfo * ki);
 
 #define KD_KEY_COUNT 248
@@ -275,7 +274,7 @@ void KdAddKeyboardDriver(KdKeyboardDriver * driver);
 void KdRemoveKeyboardDriver(KdKeyboardDriver * driver);
 KdKeyboardInfo *KdNewKeyboard(void);
 void KdFreeKeyboard(KdKeyboardInfo * ki);
-int KdAddConfigKeyboard(char *pointer);
+int KdAddConfigKeyboard(const char *pointer);
 int KdAddKeyboard(KdKeyboardInfo * ki);
 void KdRemoveKeyboard(KdKeyboardInfo * ki);
 
@@ -434,5 +433,7 @@ void
 /* function prototypes to be implemented by the drivers */
 void
  InitCard(char *name);
+
+Bool KdCloseScreen(ScreenPtr pScreen);
 
 #endif                          /* _KDRIVE_H_ */

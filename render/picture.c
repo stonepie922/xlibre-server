@@ -22,9 +22,11 @@
  * Author:  Keith Packard, SuSE, Inc.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/colormap_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "os/osdep.h"
 
 #include "misc.h"
 #include "scrnintstr.h"
@@ -34,16 +36,16 @@
 #include "windowstr.h"
 #include "input.h"
 #include "resource.h"
-#include "colormapst.h"
 #include "cursorstr.h"
 #include "dixstruct.h"
 #include "gcstruct.h"
 #include "servermd.h"
-#include "picturestr.h"
+#include "picturestr_priv.h"
+#include "glyphstr_priv.h"
 #include "xace.h"
-#ifdef PANORAMIX
+#ifdef XINERAMA
 #include "panoramiXsrv.h"
-#endif
+#endif /* XINERAMA */
 
 DevPrivateKeyRec PictureScreenPrivateKeyRec;
 DevPrivateKeyRec PictureWindowPrivateKeyRec;
@@ -61,13 +63,10 @@ PictureWindowFormat(WindowPtr pWindow)
                               WindowGetVisual(pWindow));
 }
 
-static Bool
-PictureDestroyWindow(WindowPtr pWindow)
+static void
+picture_window_destructor(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWindow)
 {
-    ScreenPtr pScreen = pWindow->drawable.pScreen;
     PicturePtr pPicture;
-    PictureScreenPtr ps = GetPictureScreen(pScreen);
-    Bool ret;
 
     while ((pPicture = GetPictureWindow(pWindow))) {
         SetPictureWindow(pWindow, pPicture->pNext);
@@ -75,22 +74,13 @@ PictureDestroyWindow(WindowPtr pWindow)
             FreeResource(pPicture->id, PictureType);
         FreePicture((void *) pPicture, pPicture->id);
     }
-    pScreen->DestroyWindow = ps->DestroyWindow;
-    ret = (*pScreen->DestroyWindow) (pWindow);
-    ps->DestroyWindow = pScreen->DestroyWindow;
-    pScreen->DestroyWindow = PictureDestroyWindow;
-    return ret;
 }
 
-static Bool
-PictureCloseScreen(ScreenPtr pScreen)
+static void PictureScreenClose(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
     PictureScreenPtr ps = GetPictureScreen(pScreen);
-    Bool ret;
     int n;
 
-    pScreen->CloseScreen = ps->CloseScreen;
-    ret = (*pScreen->CloseScreen) (pScreen);
     PictureResetFilters(pScreen);
     for (n = 0; n < ps->nformats; n++)
         if (ps->formats[n].type == PictTypeIndexed)
@@ -99,7 +89,7 @@ PictureCloseScreen(ScreenPtr pScreen)
     SetPictureScreen(pScreen, 0);
     free(ps->formats);
     free(ps);
-    return ret;
+    dixScreenUnhookPostClose(pScreen, PictureScreenClose);
 }
 
 static void
@@ -298,7 +288,7 @@ PictureCreateDefaultFormats(ScreenPtr pScreen, int *nformatp)
     if (!pFormats)
         return 0;
     for (f = 0; f < nformats; f++) {
-        pFormats[f].id = FakeClientID(0);
+        pFormats[f].id = dixAllocServerXID();
         pFormats[f].depth = formats[f].depth;
         format = formats[f].format;
         pFormats[f].format = format;
@@ -421,7 +411,7 @@ PictureInitIndexedFormat(ScreenPtr pScreen, PictFormatPtr format)
 
     if (format->index.vid == pScreen->rootVisual) {
         dixLookupResourceByType((void **) &format->index.pColormap,
-                                pScreen->defColormap, RT_COLORMAP,
+                                pScreen->defColormap, X11_RESTYPE_COLORMAP,
                                 serverClient, DixGetAttrAccess);
     }
     else {
@@ -430,8 +420,8 @@ PictureInitIndexedFormat(ScreenPtr pScreen, PictFormatPtr format)
         if (pVisual == NULL)
             return FALSE;
 
-        if (CreateColormap(FakeClientID(0), pScreen, pVisual,
-                           &format->index.pColormap, AllocNone, 0)
+        if (dixCreateColormap(dixAllocServerXID(), pScreen, pVisual,
+                              &format->index.pColormap, AllocNone, 0)
             != Success)
             return FALSE;
     }
@@ -592,7 +582,7 @@ GetPictureBytes(void *value, XID id, ResourceSizePtr size)
     size->pixmapRefSize = 0;
     if (picture->pDrawable && (picture->pDrawable->type == DRAWABLE_PIXMAP))
     {
-        SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(RT_PIXMAP);
+        SizeType pixmapSizeFunc = GetResourceTypeSizeFunc(X11_RESTYPE_PIXMAP);
         ResourceSizeRec pixmapSize = { 0, 0, 0 };
         PixmapPtr pixmap = (PixmapPtr)picture->pDrawable;
         pixmapSizeFunc(pixmap, pixmap->drawable.id, &pixmapSize);
@@ -609,7 +599,6 @@ FreePictFormat(void *pPictFormat, XID pid)
 Bool
 PictureInit(ScreenPtr pScreen, PictFormatPtr formats, int nformats)
 {
-    PictureScreenPtr ps;
     int n;
     CARD32 type, a, r, g, b;
 
@@ -642,7 +631,7 @@ PictureInit(ScreenPtr pScreen, PictFormatPtr formats, int nformats)
             (formats[n].id, PictFormatType, (void *) (formats + n))) {
             int i;
             for (i = 0; i < n; i++)
-                FreeResource(formats[i].id, RT_NONE);
+                FreeResource(formats[i].id, X11_RESTYPE_NONE);
             free(formats);
             return FALSE;
         }
@@ -672,7 +661,7 @@ PictureInit(ScreenPtr pScreen, PictFormatPtr formats, int nformats)
         }
         formats[n].format = PICT_FORMAT(0, type, a, r, g, b);
     }
-    ps = (PictureScreenPtr) malloc(sizeof(PictureScreenRec));
+    PictureScreenPtr ps = calloc(1, sizeof(PictureScreenRec));
     if (!ps) {
         free(formats);
         return FALSE;
@@ -690,12 +679,11 @@ PictureInit(ScreenPtr pScreen, PictFormatPtr formats, int nformats)
 
     ps->subpixel = SubPixelUnknown;
 
-    ps->CloseScreen = pScreen->CloseScreen;
-    ps->DestroyWindow = pScreen->DestroyWindow;
     ps->StoreColors = pScreen->StoreColors;
-    pScreen->DestroyWindow = PictureDestroyWindow;
-    pScreen->CloseScreen = PictureCloseScreen;
     pScreen->StoreColors = PictureStoreColors;
+
+    dixScreenHookWindowDestroy(pScreen, picture_window_destructor);
+    dixScreenHookPostClose(pScreen, PictureScreenClose);
 
     if (!PictureSetDefaultFilters(pScreen)) {
         PictureResetFilters(pScreen);
@@ -762,8 +750,8 @@ CreatePicture(Picture pid,
     pPicture->format = pFormat->format | (pDrawable->bitsPerPixel << 24);
 
     /* security creation/labeling check */
-    *error = XaceHook(XACE_RESOURCE_ACCESS, client, pid, PictureType, pPicture,
-                      RT_PIXMAP, pDrawable, DixCreateAccess | DixSetAttrAccess);
+    *error = XaceHookResourceAccess(client, pid, PictureType, pPicture,
+                      X11_RESTYPE_PIXMAP, pDrawable, DixCreateAccess | DixSetAttrAccess);
     if (*error != Success)
         goto out;
 
@@ -823,7 +811,7 @@ initGradient(SourcePictPtr pGradient, int stopCount,
         dpos = stopPoints[i];
     }
 
-    pGradient->gradient.stops = xallocarray(stopCount, sizeof(PictGradientStop));
+    pGradient->gradient.stops = calloc(stopCount, sizeof(PictGradientStop));
     if (!pGradient->gradient.stops) {
         *error = BadAlloc;
         return;
@@ -868,7 +856,7 @@ CreateSolidPicture(Picture pid, xRenderColor * color, int *error)
     }
 
     pPicture->id = pid;
-    pPicture->pSourcePict = (SourcePictPtr) malloc(sizeof(SourcePict));
+    pPicture->pSourcePict = calloc(1, sizeof(SourcePict));
     if (!pPicture->pSourcePict) {
         *error = BadAlloc;
         free(pPicture);
@@ -899,7 +887,7 @@ CreateLinearGradientPicture(Picture pid, xPointFixed * p1, xPointFixed * p2,
     }
 
     pPicture->id = pid;
-    pPicture->pSourcePict = (SourcePictPtr) malloc(sizeof(SourcePict));
+    pPicture->pSourcePict = calloc(1, sizeof(SourcePict));
     if (!pPicture->pSourcePict) {
         *error = BadAlloc;
         free(pPicture);
@@ -939,7 +927,7 @@ CreateRadialGradientPicture(Picture pid, xPointFixed * inner,
     }
 
     pPicture->id = pid;
-    pPicture->pSourcePict = (SourcePictPtr) malloc(sizeof(SourcePict));
+    pPicture->pSourcePict = calloc(1, sizeof(SourcePict));
     if (!pPicture->pSourcePict) {
         *error = BadAlloc;
         free(pPicture);
@@ -982,7 +970,7 @@ CreateConicalGradientPicture(Picture pid, xPointFixed * center, xFixed angle,
     }
 
     pPicture->id = pid;
-    pPicture->pSourcePict = (SourcePictPtr) malloc(sizeof(SourcePict));
+    pPicture->pSourcePict = calloc(1, sizeof(SourcePict));
     if (!pPicture->pSourcePict) {
         *error = BadAlloc;
         free(pPicture);
@@ -1004,23 +992,26 @@ CreateConicalGradientPicture(Picture pid, xPointFixed * center, xFixed angle,
 static int
 cpAlphaMap(void **result, XID id, ScreenPtr screen, ClientPtr client, Mask mode)
 {
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension) {
         PanoramiXRes *res;
         int err = dixLookupResourceByType((void **)&res, id, XRT_PICTURE,
                                           client, mode);
         if (err != Success)
             return err;
-        id = res->info[screen->myNum].id;
+        if (screen == NULL)
+            LogMessage(X_WARNING, "cpAlphaMap() screen == NULL\n");
+        else
+            id = res->info[screen->myNum].id;
     }
-#endif
+#endif /* XINERAMA */
     return dixLookupResourceByType(result, id, PictureType, client, mode);
 }
 
 static int
 cpClipMask(void **result, XID id, ScreenPtr screen, ClientPtr client, Mask mode)
 {
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension) {
         PanoramiXRes *res;
         int err = dixLookupResourceByType((void **)&res, id, XRT_PIXMAP,
@@ -1029,8 +1020,8 @@ cpClipMask(void **result, XID id, ScreenPtr screen, ClientPtr client, Mask mode)
             return err;
         id = res->info[screen->myNum].id;
     }
-#endif
-    return dixLookupResourceByType(result, id, RT_PIXMAP, client, mode);
+#endif /* XINERAMA */
+    return dixLookupResourceByType(result, id, X11_RESTYPE_PIXMAP, client, mode);
 }
 
 #define NEXT_VAL(_type) (vlist ? (_type) *vlist++ : (_type) ulist++->val)
@@ -1330,8 +1321,7 @@ SetPictureTransform(PicturePtr pPicture, PictTransform * transform)
 
     if (transform) {
         if (!pPicture->transform) {
-            pPicture->transform =
-                (PictTransform *) malloc(sizeof(PictTransform));
+            pPicture->transform = calloc(1, sizeof(PictTransform));
             if (!pPicture->transform)
                 return BadAlloc;
         }
@@ -1414,7 +1404,7 @@ FreePicture(void *value, XID pid)
                 }
             }
             else if (pPicture->pDrawable->type == DRAWABLE_PIXMAP) {
-                (*pScreen->DestroyPixmap) ((PixmapPtr) pPicture->pDrawable);
+                dixDestroyPixmap((PixmapPtr) pPicture->pDrawable, 0);
             }
         }
         dixFreeObjectWithPrivates(pPicture, PRIVATE_PICTURE);

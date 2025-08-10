@@ -29,9 +29,7 @@
 
 #include "sanitizedCarbon.h"
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "inputstr.h"
 #include "quartz.h"
@@ -54,6 +52,7 @@
 #endif
 
 #include "nonsdk_extinit.h"
+#include "miext/extinit_priv.h"
 
 /* 10.4's deferred update makes X slower.. have to live with the tearing
  * for now.. */

@@ -30,8 +30,11 @@
  *
  * This file covers core X rendering in glamor.
  */
+#include <dix-config.h>
 
 #include <stdlib.h>
+
+#include "os/bug_priv.h"
 
 #include "glamor_priv.h"
 
@@ -40,6 +43,8 @@ glamor_get_drawable_location(const DrawablePtr drawable)
 {
     PixmapPtr pixmap = glamor_get_drawable_pixmap(drawable);
     glamor_pixmap_private *pixmap_priv = glamor_get_pixmap_private(pixmap);
+
+    BUG_RETURN_VAL(!pixmap_priv, FALSE);
 
     if (pixmap_priv->gl_fbo == GLAMOR_FBO_UNATTACHED)
         return 'm';
@@ -58,11 +63,10 @@ glamor_compile_glsl_prog(GLenum type, const char *source)
     glCompileShader(prog);
     glGetShaderiv(prog, GL_COMPILE_STATUS, &ok);
     if (!ok) {
-        GLchar *info;
         GLint size;
 
         glGetShaderiv(prog, GL_INFO_LOG_LENGTH, &size);
-        info = malloc(size);
+        GLchar *info = calloc(1, size);
         if (info) {
             glGetShaderInfoLog(prog, size, NULL, info);
             ErrorF("Failed to compile %s: %s\n",
@@ -78,7 +82,7 @@ glamor_compile_glsl_prog(GLenum type, const char *source)
     return prog;
 }
 
-void
+Bool
 glamor_link_glsl_prog(ScreenPtr screen, GLint prog, const char *format, ...)
 {
     GLint ok;
@@ -98,16 +102,16 @@ glamor_link_glsl_prog(ScreenPtr screen, GLint prog, const char *format, ...)
     glLinkProgram(prog);
     glGetProgramiv(prog, GL_LINK_STATUS, &ok);
     if (!ok) {
-        GLchar *info;
         GLint size;
 
         glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &size);
-        info = malloc(size);
+        GLchar *info = calloc(1, size);
 
         glGetProgramInfoLog(prog, size, NULL, info);
         ErrorF("Failed to link: %s\n", info);
-        FatalError("GLSL link failure\n");
+        return FALSE;
     }
+    return TRUE;
 }
 
 
@@ -247,7 +251,7 @@ glamor_validate_gc(GCPtr gc, unsigned long changes, DrawablePtr drawable)
     gc->ops = &glamor_gc_ops;
 }
 
-void
+static void
 glamor_destroy_gc(GCPtr gc)
 {
     glamor_gc_private *gc_priv = glamor_get_gc_private(gc);

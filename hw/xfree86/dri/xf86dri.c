@@ -39,16 +39,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 #include <string.h>
-
-#include "xf86.h"
-
 #include <X11/X.h>
 #include <X11/Xproto.h>
+
+#include "dix/dix_priv.h"
+
+#include "xf86.h"
 #include "misc.h"
 #include "dixstruct.h"
 #include "extnsionst.h"
-#include "extinit.h"
-#include "colormapst.h"
 #include "cursorstr.h"
 #include "scrnintstr.h"
 #include "servermd.h"
@@ -56,7 +55,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <X11/dri/xf86driproto.h>
 #include "swaprep.h"
 #include "xf86str.h"
-#include "dri.h"
+#include "dri_priv.h"
 #include "sarea.h"
 #include "dristruct.h"
 #include "xf86drm.h"
@@ -66,8 +65,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 static int DRIErrorBase;
 
 static void XF86DRIResetProc(ExtensionEntry *extEntry);
-
-static unsigned char DRIReqCode = 0;
 
 /*ARGSUSED*/
 static void
@@ -422,30 +419,27 @@ ProcXF86DRIGetDrawableInfo(register ClientPtr client)
 
     if (rep.numClipRects) {
         /* Clip cliprects to screen dimensions (redirected windows) */
-        pClippedRects = xallocarray(rep.numClipRects, sizeof(drm_clip_rect_t));
+        pClippedRects = calloc(rep.numClipRects, sizeof(drm_clip_rect_t));
 
-        if (pClippedRects) {
-            ScreenPtr pScreen = screenInfo.screens[stuff->screen];
-            int i, j;
+        if (!pClippedRects)
+            return BadAlloc;
 
-            for (i = 0, j = 0; i < rep.numClipRects; i++) {
-                pClippedRects[j].x1 = max(pClipRects[i].x1, 0);
-                pClippedRects[j].y1 = max(pClipRects[i].y1, 0);
-                pClippedRects[j].x2 = min(pClipRects[i].x2, pScreen->width);
-                pClippedRects[j].y2 = min(pClipRects[i].y2, pScreen->height);
+        ScreenPtr pScreen = screenInfo.screens[stuff->screen];
+        int i, j;
 
-                if (pClippedRects[j].x1 < pClippedRects[j].x2 &&
-                    pClippedRects[j].y1 < pClippedRects[j].y2) {
-                    j++;
-                }
+        for (i = 0, j = 0; i < rep.numClipRects; i++) {
+            pClippedRects[j].x1 = max(pClipRects[i].x1, 0);
+            pClippedRects[j].y1 = max(pClipRects[i].y1, 0);
+            pClippedRects[j].x2 = min(pClipRects[i].x2, pScreen->width);
+            pClippedRects[j].y2 = min(pClipRects[i].y2, pScreen->height);
+
+            if (pClippedRects[j].x1 < pClippedRects[j].x2 &&
+                pClippedRects[j].y1 < pClippedRects[j].y2) {
+                j++;
             }
-
-            rep.numClipRects = j;
-        }
-        else {
-            rep.numClipRects = 0;
         }
 
+        rep.numClipRects = j;
         rep.length += sizeof(drm_clip_rect_t) * rep.numClipRects;
     }
 
@@ -559,19 +553,10 @@ ProcXF86DRIDispatch(register ClientPtr client)
 }
 
 static int _X_COLD
-SProcXF86DRIQueryVersion(register ClientPtr client)
-{
-    REQUEST(xXF86DRIQueryVersionReq);
-    swaps(&stuff->length);
-    return ProcXF86DRIQueryVersion(client);
-}
-
-static int _X_COLD
 SProcXF86DRIQueryDirectRenderingCapable(register ClientPtr client)
 {
     REQUEST(xXF86DRIQueryDirectRenderingCapableReq);
     REQUEST_SIZE_MATCH(xXF86DRIQueryDirectRenderingCapableReq);
-    swaps(&stuff->length);
     swapl(&stuff->screen);
     return ProcXF86DRIQueryDirectRenderingCapable(client);
 }
@@ -587,7 +572,7 @@ SProcXF86DRIDispatch(register ClientPtr client)
      */
     switch (stuff->data) {
     case X_XF86DRIQueryVersion:
-        return SProcXF86DRIQueryVersion(client);
+        return ProcXF86DRIQueryVersion(client);
     case X_XF86DRIQueryDirectRenderingCapable:
         return SProcXF86DRIQueryDirectRenderingCapable(client);
     default:
@@ -607,7 +592,6 @@ XFree86DRIExtensionInit(void)
                                  ProcXF86DRIDispatch,
                                  SProcXF86DRIDispatch,
                                  XF86DRIResetProc, StandardMinorOpcode))) {
-        DRIReqCode = (unsigned char) extEntry->base;
         DRIErrorBase = extEntry->errorBase;
     }
 }

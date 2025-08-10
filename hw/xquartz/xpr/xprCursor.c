@@ -31,14 +31,15 @@
 
 #include "sanitizedCarbon.h"
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "quartz.h"
 #include "xpr.h"
 #include "darwinEvents.h"
 #include <Xplugin.h>
+
+#include "dix/input_priv.h"
+#include "mi/mipointer_priv.h"
 
 #include "mi.h"
 #include "scrnintstr.h"
@@ -47,7 +48,6 @@
 #include "windowstr.h"
 #include "globals.h"
 #include "servermd.h"
-#include "dixevents.h"
 #include "x-hash.h"
 
 typedef struct {
@@ -396,11 +396,11 @@ QuartzResumeXCursor(ScreenPtr pScreen)
 
     /* TODO: Tablet? */
 
-    pWin = GetSpriteWindow(darwinPointer);
+    pWin = InputDevSpriteWindow(darwinPointer);
     if (pWin->drawable.pScreen != pScreen)
         return;
 
-    pCursor = GetSpriteCursor(darwinPointer);
+    pCursor = InputDevGetSpriteCursor(darwinPointer);
     if (pCursor == NULL)
         return;
 

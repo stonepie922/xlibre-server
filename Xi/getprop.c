@@ -50,17 +50,17 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/dix_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structs    */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "exglobals.h"
 #include "swaprep.h"
-
 #include "getprop.h"
 
 extern XExtEventInfo EventInfo[];
@@ -76,7 +76,6 @@ int _X_COLD
 SProcXGetDeviceDontPropagateList(ClientPtr client)
 {
     REQUEST(xGetDeviceDontPropagateListReq);
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xGetDeviceDontPropagateListReq);
     swapl(&stuff->window);
     return (ProcXGetDeviceDontPropagateList(client));
@@ -95,18 +94,15 @@ ProcXGetDeviceDontPropagateList(ClientPtr client)
     int i, rc;
     XEventClass *buf = NULL, *tbuf;
     WindowPtr pWin;
-    xGetDeviceDontPropagateListReply rep;
     OtherInputMasks *others;
 
     REQUEST(xGetDeviceDontPropagateListReq);
     REQUEST_SIZE_MATCH(xGetDeviceDontPropagateListReq);
 
-    rep = (xGetDeviceDontPropagateListReply) {
+    xGetDeviceDontPropagateListReply rep = {
         .repType = X_Reply,
         .RepType = X_GetDeviceDontPropagateList,
         .sequenceNumber = client->sequence,
-        .length = 0,
-        .count = 0
     };
 
     rc = dixLookupWindow(&pWin, stuff->window, client, DixGetAttrAccess);
@@ -118,7 +114,9 @@ ProcXGetDeviceDontPropagateList(ClientPtr client)
             ClassFromMask(NULL, others->dontPropagateMask[i], i, &count, COUNT);
         if (count) {
             rep.count = count;
-            buf = xallocarray(rep.count, sizeof(XEventClass));
+            buf = calloc(rep.count, sizeof(XEventClass));
+            if (!buf)
+                return BadAlloc;
             rep.length = bytes_to_int32(rep.count * sizeof(XEventClass));
 
             tbuf = buf;
@@ -128,7 +126,12 @@ ProcXGetDeviceDontPropagateList(ClientPtr client)
         }
     }
 
-    WriteReplyToClient(client, sizeof(xGetDeviceDontPropagateListReply), &rep);
+    if (client->swapped) {
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.length);
+        swaps(&rep.count);
+    }
+    WriteToClient(client, sizeof(xGetDeviceDontPropagateListReply), &rep);
 
     if (count) {
         client->pSwapReplyFunc = (ReplySwapPtr) Swap32Write;
@@ -164,21 +167,4 @@ XEventClass
                 }
         }
     return buf;
-}
-
-/***********************************************************************
- *
- * This procedure writes the reply for the XGetDeviceDontPropagateList function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGetDeviceDontPropagateList(ClientPtr client, int size,
-                                xGetDeviceDontPropagateListReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    swaps(&rep->count);
-    WriteToClient(client, size, rep);
 }

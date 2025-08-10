@@ -21,10 +21,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
 #include <xkb-config.h>
-#endif
 #include "kdrive.h"
 #include "inputstr.h"
 
@@ -34,26 +32,25 @@
 #include <X11/XF86keysym.h>
 #endif
 #include <stdio.h>
-#ifdef __sun
 #include <sys/file.h>           /* needed for FNONBLOCK & FASYNC */
-#endif
-
-#include "xkbsrv.h"
 
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
+
+#include "config/hotplug_priv.h"
+#include "dix/input_priv.h"
+#include "mi/mi_priv.h"
+#include "mi/mipointer_priv.h"
+#include "os/cmdline.h"
+
+#include "xkbsrv.h"
 #include "XIstubs.h"            /* even though we don't use stubs.  cute, no? */
 #include "exevents.h"
-#include "extinit.h"
 #include "exglobals.h"
 #include "eventstr.h"
 #include "xserver-properties.h"
 #include "inpututils.h"
 #include "optionstr.h"
-
-#if defined(CONFIG_UDEV) || defined(CONFIG_HAL)
-#include <hotplug.h>
-#endif
 
 #define AtomFromName(x) MakeAtom(x, strlen(x), 1)
 
@@ -677,7 +674,7 @@ KdRemoveKeyboardDriver(KdKeyboardDriver * driver)
 KdKeyboardInfo *
 KdNewKeyboard(void)
 {
-    KdKeyboardInfo *ki = calloc(sizeof(KdKeyboardInfo), 1);
+    KdKeyboardInfo *ki = calloc(1, sizeof(KdKeyboardInfo));
 
     if (!ki)
         return NULL;
@@ -701,14 +698,14 @@ KdNewKeyboard(void)
 }
 
 int
-KdAddConfigKeyboard(char *keyboard)
+KdAddConfigKeyboard(const char *keyboard)
 {
     struct KdConfigDevice **prev, *new;
 
     if (!keyboard)
         return Success;
 
-    new = (struct KdConfigDevice *) calloc(sizeof(struct KdConfigDevice), 1);
+    new = (struct KdConfigDevice *) calloc(1, sizeof(struct KdConfigDevice));
     if (!new)
         return BadAlloc;
 
@@ -765,14 +762,14 @@ KdRemoveKeyboard(KdKeyboardInfo * ki)
 }
 
 int
-KdAddConfigPointer(char *pointer)
+KdAddConfigPointer(const char *pointer)
 {
     struct KdConfigDevice **prev, *new;
 
     if (!pointer)
         return Success;
 
-    new = (struct KdConfigDevice *) calloc(sizeof(struct KdConfigDevice), 1);
+    new = (struct KdConfigDevice *) calloc(1, sizeof(struct KdConfigDevice));
     if (!new)
         return BadAlloc;
 
@@ -940,6 +937,8 @@ KdParseKeyboard(const char *arg)
     if (!ki)
         return NULL;
 
+    if (ki->name)
+        free(ki->name);
     ki->name = strdup("Unknown KDrive Keyboard");
     ki->path = NULL;
     ki->driver = NULL;
@@ -1035,6 +1034,17 @@ KdParsePointerOptions(KdPointerInfo * pi)
                    key, value);
     }
 }
+
+/*
+ * Mouse argument syntax:
+ *
+ *  device,protocol,options...
+ *
+ *  Options are any of:
+ *      1-5         n button mouse
+ *      2button     emulate middle button
+ *      {NMO}       Reorder buttons
+ */
 
 static KdPointerInfo *
 KdParsePointer(const char *arg)

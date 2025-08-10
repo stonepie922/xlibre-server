@@ -17,16 +17,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "selection.h"
+#include "dix/dix_priv.h"
+#include "dix/property_priv.h"
+#include "dix/selection_priv.h"
+#include "miext/extinit_priv.h"
+
 #include "inputstr.h"
 #include "windowstr.h"
 #include "propertyst.h"
 #include "extnsionst.h"
-#include "extinit.h"
 #include "xselinuxint.h"
 
 #define CTX_DEV offsetof(SELinuxSubjectRec, dev_create_sid)
@@ -44,6 +45,9 @@ typedef struct {
     CARD32 id;
 } SELinuxListItemRec;
 
+Bool noSELinuxExtension = FALSE;
+int selinuxEnforcingState = SELINUX_MODE_DEFAULT;
+
 /*
  * Extension Dispatch
  */
@@ -51,7 +55,7 @@ typedef struct {
 static char *
 SELinuxCopyContext(char *ptr, unsigned len)
 {
-    char *copy = malloc(len + 1);
+    char *copy = calloc(1, len + 1);
 
     if (!copy)
         return NULL;
@@ -66,7 +70,6 @@ ProcSELinuxQueryVersion(ClientPtr client)
     SELinuxQueryVersionReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
-        .length = 0,
         .server_major = SELINUX_MAJOR_VERSION,
         .server_minor = SELINUX_MINOR_VERSION
     };
@@ -83,7 +86,6 @@ ProcSELinuxQueryVersion(ClientPtr client)
 static int
 SELinuxSendContextReply(ClientPtr client, security_id_t sid)
 {
-    SELinuxGetContextReply rep;
     char *ctx = NULL;
     int len = 0;
 
@@ -93,7 +95,7 @@ SELinuxSendContextReply(ClientPtr client, security_id_t sid)
         len = strlen(ctx) + 1;
     }
 
-    rep = (SELinuxGetContextReply) {
+    SELinuxGetContextReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
         .length = bytes_to_int32(len),
@@ -296,7 +298,7 @@ ProcSELinuxGetClientContext(ClientPtr client)
     REQUEST(SELinuxGetContextReq);
     REQUEST_SIZE_MATCH(SELinuxGetContextReq);
 
-    rc = dixLookupClient(&target, stuff->id, client, DixGetAttrAccess);
+    rc = dixLookupResourceOwner(&target, stuff->id, client, DixGetAttrAccess);
     if (rc != Success)
         return rc;
 
@@ -311,6 +313,8 @@ SELinuxPopulateItem(SELinuxListItemRec * i, PrivateRec ** privPtr, CARD32 id,
     SELinuxObjectRec *obj = dixLookupPrivate(privPtr, objectKey);
     SELinuxObjectRec *data = dixLookupPrivate(privPtr, dataKey);
 
+    if (!i)
+        return BadValue;
     if (avc_sid_to_context_raw(obj->sid, &i->octx) < 0)
         return BadValue;
     if (avc_sid_to_context_raw(data->sid, &i->dctx) < 0)
@@ -329,6 +333,9 @@ SELinuxFreeItems(SELinuxListItemRec * items, int count)
 {
     int k;
 
+    if (!items)
+        return;
+
     for (k = 0; k < count; k++) {
         freecon(items[k].octx);
         freecon(items[k].dctx);
@@ -340,15 +347,14 @@ static int
 SELinuxSendItemsToClient(ClientPtr client, SELinuxListItemRec * items,
                          int size, int count)
 {
-    int rc, k, pos = 0;
-    SELinuxListItemsReply rep;
-    CARD32 *buf;
-
-    buf = calloc(size, sizeof(CARD32));
+    int rc = BadAlloc, k, pos = 0;
+    CARD32 *buf = calloc(size, sizeof(CARD32));
     if (size && !buf) {
-        rc = BadAlloc;
         goto out;
     }
+
+    if (!buf) // silence analyzer warning
+        goto sendreply;
 
     /* Fill in the buffer */
     for (k = 0; k < count; k++) {
@@ -373,8 +379,9 @@ SELinuxSendItemsToClient(ClientPtr client, SELinuxListItemRec * items,
         pos += items[k].dctx_len;
     }
 
+sendreply: ;
     /* Send reply to client */
-    rep = (SELinuxListItemsReply) {
+    SELinuxListItemsReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
         .length = size,
@@ -416,7 +423,7 @@ ProcSELinuxListProperties(ClientPtr client)
 
     /* Count the number of properties and allocate items */
     count = 0;
-    for (pProp = wUserProps(pWin); pProp; pProp = pProp->next)
+    for (pProp = pWin->properties; pProp; pProp = pProp->next)
         count++;
     items = calloc(count, sizeof(SELinuxListItemRec));
     if (count && !items)
@@ -425,7 +432,7 @@ ProcSELinuxListProperties(ClientPtr client)
     /* Fill in the items and calculate size */
     i = 0;
     size = 0;
-    for (pProp = wUserProps(pWin); pProp; pProp = pProp->next) {
+    for (pProp = pWin->properties; pProp; pProp = pProp->next) {
         id = pProp->propertyName;
         rc = SELinuxPopulateItem(items + i, &pProp->devPrivates, id, &size);
         if (rc != Success) {
@@ -620,8 +627,6 @@ static int _X_COLD
 SProcSELinuxDispatch(ClientPtr client)
 {
     REQUEST(xReq);
-
-    swaps(&stuff->length);
 
     switch (stuff->data) {
     case X_SELinuxQueryVersion:

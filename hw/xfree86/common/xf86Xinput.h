@@ -51,12 +51,13 @@
 #ifndef _xf86Xinput_h
 #define _xf86Xinput_h
 
+#include <X11/Xfuncproto.h>
+
 #include "xf86.h"
 #include "xf86str.h"
 #include "inputstr.h"
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
-#include "XIstubs.h"
 
 /* Input device flags */
 #define XI86_ALWAYS_CORE	0x04    /* device always controls the pointer */
@@ -113,26 +114,15 @@ struct _InputInfoRec {
     InputAttributes *attrs;
 };
 
-/* xf86Globals.c */
-extern InputInfoPtr xf86InputDevs;
-
 /* xf86Xinput.c */
 extern _X_EXPORT void xf86PostMotionEvent(DeviceIntPtr device, int is_absolute,
                                           int first_valuator, int num_valuators,
                                           ...);
-extern _X_EXPORT void xf86PostMotionEventP(DeviceIntPtr device, int is_absolute,
-                                           int first_valuator,
-                                           int num_valuators,
-                                           const int *valuators);
 extern _X_EXPORT void xf86PostMotionEventM(DeviceIntPtr device, int is_absolute,
                                            const ValuatorMask *mask);
 extern _X_EXPORT void xf86PostProximityEvent(DeviceIntPtr device, int is_in,
                                              int first_valuator,
                                              int num_valuators, ...);
-extern _X_EXPORT void xf86PostProximityEventP(DeviceIntPtr device, int is_in,
-                                              int first_valuator,
-                                              int num_valuators,
-                                              const int *valuators);
 extern _X_EXPORT void xf86PostProximityEventM(DeviceIntPtr device, int is_in,
                                               const ValuatorMask *mask);
 extern _X_EXPORT void xf86PostButtonEvent(DeviceIntPtr device, int is_absolute,
@@ -147,12 +137,6 @@ extern _X_EXPORT void xf86PostButtonEventP(DeviceIntPtr device, int is_absolute,
 extern _X_EXPORT void xf86PostButtonEventM(DeviceIntPtr device, int is_absolute,
                                            int button, int is_down,
                                            const ValuatorMask *mask);
-extern _X_EXPORT void xf86PostKeyEvent(DeviceIntPtr device,
-                                       unsigned int key_code, int is_down);
-extern _X_EXPORT void xf86PostKeyEventM(DeviceIntPtr device,
-                                        unsigned int key_code, int is_down);
-extern _X_EXPORT void xf86PostKeyEventP(DeviceIntPtr device,
-                                        unsigned int key_code, int is_down);
 extern _X_EXPORT void xf86PostKeyboardEvent(DeviceIntPtr device,
                                             unsigned int key_code, int is_down);
 extern _X_EXPORT void xf86PostTouchEvent(DeviceIntPtr dev, uint32_t touchid,
@@ -186,19 +170,10 @@ extern _X_EXPORT void xf86InitValuatorDefaults(DeviceIntPtr dev, int axnum);
 extern _X_EXPORT void xf86AddEnabledDevice(InputInfoPtr pInfo);
 extern _X_EXPORT void xf86RemoveEnabledDevice(InputInfoPtr pInfo);
 extern _X_EXPORT void xf86DisableDevice(DeviceIntPtr dev, Bool panic);
-extern _X_EXPORT void xf86EnableDevice(DeviceIntPtr dev);
-extern _X_EXPORT void xf86InputEnableVTProbe(void);
-
-/* not exported */
-int xf86NewInputDevice(InputInfoPtr pInfo, DeviceIntPtr *pdev, BOOL is_auto);
-InputInfoPtr xf86AllocateInput(void);
 
 /* xf86Helper.c */
 extern _X_EXPORT void xf86AddInputDriver(InputDriverPtr driver, void *module,
                                          int flags);
-extern _X_EXPORT void xf86DeleteInputDriver(int drvIndex);
-extern _X_EXPORT InputDriverPtr xf86LookupInputDriver(const char *name);
-extern _X_EXPORT InputInfoPtr xf86LookupInput(const char *name);
 extern _X_EXPORT void xf86DeleteInput(InputInfoPtr pInp, int flags);
 extern _X_EXPORT void xf86MotionHistoryAllocate(InputInfoPtr pInfo);
 extern _X_EXPORT void
@@ -208,15 +183,6 @@ _X_ATTRIBUTE_PRINTF(4, 5);
 extern _X_EXPORT void
 xf86IDrvMsg(InputInfoPtr dev, MessageType type, const char *format, ...)
 _X_ATTRIBUTE_PRINTF(3, 4);
-extern _X_EXPORT void
-xf86VIDrvMsgVerb(InputInfoPtr dev,
-                 MessageType type, int verb, const char *format, va_list args)
-_X_ATTRIBUTE_PRINTF(4, 0);
-
-extern _X_EXPORT void xf86AddInputEventDrainCallback(CallbackProcPtr callback,
-                                                     void *param);
-extern _X_EXPORT void xf86RemoveInputEventDrainCallback(CallbackProcPtr callback,
-                                                        void *param);
 
 /* xf86Option.c */
 extern _X_EXPORT void

@@ -50,18 +50,17 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/exevents_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* Window            */
 #include "extnsionst.h"         /* EventSwapPtr      */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
-#include "exevents.h"
 #include "exglobals.h"
-
 #include "grabdev.h"
 #include "sendexev.h"
 
@@ -83,12 +82,11 @@ SProcXSendExtensionEvent(ClientPtr client)
     EventSwapPtr proc;
 
     REQUEST(xSendExtensionEventReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xSendExtensionEventReq);
     swapl(&stuff->destination);
     swaps(&stuff->count);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xSendExtensionEventReq)) + stuff->count +
         bytes_to_int32(stuff->num_events * sizeof(xEvent)))
         return BadLength;
@@ -134,7 +132,7 @@ ProcXSendExtensionEvent(ClientPtr client)
     REQUEST(xSendExtensionEventReq);
     REQUEST_AT_LEAST_SIZE(xSendExtensionEventReq);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xSendExtensionEventReq)) + stuff->count +
         (stuff->num_events * bytes_to_int32(sizeof(xEvent))))
         return BadLength;

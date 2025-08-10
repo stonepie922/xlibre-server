@@ -50,34 +50,20 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/resource_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
 #include "scrnintstr.h"         /* screen structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "XIstubs.h"
 #include "exglobals.h"
 
 #include "closedev.h"
-
-/***********************************************************************
- *
- * This procedure closes an input device.
- *
- */
-
-int _X_COLD
-SProcXCloseDevice(ClientPtr client)
-{
-    REQUEST(xCloseDeviceReq);
-    swaps(&stuff->length);
-    REQUEST_SIZE_MATCH(xCloseDeviceReq);
-    return (ProcXCloseDevice(client));
-}
 
 /***********************************************************************
  *
@@ -102,7 +88,7 @@ DeleteDeviceEvents(DeviceIntPtr dev, WindowPtr pWin, ClientPtr client)
         next = grab->next;
         if ((grab->device == dev) &&
             (client->clientAsMask == CLIENT_BITS(grab->resource)))
-            FreeResource(grab->resource, RT_NONE);
+            FreeResource(grab->resource, X11_RESTYPE_NONE);
     }
 }
 

@@ -19,19 +19,19 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
 #include "glamor_priv.h"
 
 void
-glamor_solid_boxes(PixmapPtr pixmap,
+glamor_solid_boxes(DrawablePtr drawable,
                    BoxPtr box, int nbox, unsigned long fg_pixel)
 {
-    DrawablePtr drawable = &pixmap->drawable;
     GCPtr gc;
     xRectangle *rect;
     int n;
 
-    rect = xallocarray(nbox, sizeof(xRectangle));
+    rect = calloc(nbox, sizeof(xRectangle));
     if (!rect)
         return;
     for (n = 0; n < nbox; n++) {

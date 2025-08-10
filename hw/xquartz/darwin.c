@@ -28,12 +28,18 @@
  * use or other dealings in this Software without prior written authorization.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <sys/stat.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
+
+#include "miext/extinit_priv.h"
+#include "os/ddx_priv.h"
+#include "os/log_priv.h"
+#include "os/osdep.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "os.h"
 #include "servermd.h"
 #include "inputstr.h"
@@ -48,7 +54,6 @@
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
 #include "exevents.h"
-#include "extinit.h"
 #include "glx_extinit.h"
 #include "xserver-properties.h"
 
@@ -66,6 +71,9 @@
 
 #define NO_CFPLUGIN
 #include <IOKit/hidsystem/IOHIDLib.h>
+
+#include "input_priv.h"
+#include "screenint_priv.h"
 
 #ifdef MITSHM
 #include "shmint.h"
@@ -166,7 +174,7 @@ void
 DarwinPrintBanner(void)
 {
     ErrorF("Xquartz starting:\n");
-    ErrorF("X.Org X Server %s\n", XSERVER_VERSION);
+    ErrorF("XLibre X Server %s\n", XSERVER_VERSION);
 }
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,26 +41,29 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/colormap_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "os/osdep.h"
 
 #include "compint.h"
 #include "compositeext.h"
+
+Bool noCompositeExtension = FALSE;
 
 DevPrivateKeyRec CompScreenPrivateKeyRec;
 DevPrivateKeyRec CompWindowPrivateKeyRec;
 DevPrivateKeyRec CompSubwindowsPrivateKeyRec;
 
-static Bool
-compCloseScreen(ScreenPtr pScreen)
+static void compCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
     CompScreenPtr cs = GetCompScreen(pScreen);
-    Bool ret;
 
     free(cs->alternateVisuals);
+    free(cs->implicitRedirectExceptions);
 
-    pScreen->CloseScreen = cs->CloseScreen;
     pScreen->InstallColormap = cs->InstallColormap;
     pScreen->ChangeWindowAttributes = cs->ChangeWindowAttributes;
     pScreen->ReparentWindow = cs->ReparentWindow;
@@ -72,17 +75,16 @@ compCloseScreen(ScreenPtr pScreen)
     pScreen->ClipNotify = cs->ClipNotify;
     pScreen->UnrealizeWindow = cs->UnrealizeWindow;
     pScreen->RealizeWindow = cs->RealizeWindow;
-    pScreen->DestroyWindow = cs->DestroyWindow;
     pScreen->CreateWindow = cs->CreateWindow;
     pScreen->CopyWindow = cs->CopyWindow;
-    pScreen->PositionWindow = cs->PositionWindow;
     pScreen->SourceValidate = cs->SourceValidate;
+
+    dixScreenUnhookClose(pScreen, compCloseScreen);
+    dixScreenUnhookWindowDestroy(pScreen, compWindowDestroy);
+    dixScreenUnhookWindowPosition(pScreen, compWindowPosition);
 
     free(cs);
     dixSetPrivate(&pScreen->devPrivates, CompScreenPrivateKey, NULL);
-    ret = (*pScreen->CloseScreen) (pScreen);
-
-    return ret;
 }
 
 static void
@@ -212,28 +214,6 @@ CompositeRegisterAlternateVisuals(ScreenPtr pScreen, VisualID * vids,
     return compRegisterAlternateVisuals(cs, vids, nVisuals);
 }
 
-Bool
-CompositeRegisterImplicitRedirectionException(ScreenPtr pScreen,
-                                              VisualID parentVisual,
-                                              VisualID winVisual)
-{
-    CompScreenPtr cs = GetCompScreen(pScreen);
-    CompImplicitRedirectException *p;
-
-    p = reallocarray(cs->implicitRedirectExceptions,
-                     cs->numImplicitRedirectExceptions + 1, sizeof(p[0]));
-    if (p == NULL)
-        return FALSE;
-
-    p[cs->numImplicitRedirectExceptions].parentVisual = parentVisual;
-    p[cs->numImplicitRedirectExceptions].winVisual = winVisual;
-
-    cs->implicitRedirectExceptions = p;
-    cs->numImplicitRedirectExceptions++;
-
-    return TRUE;
-}
-
 typedef struct _alternateVisual {
     int depth;
     CARD32 format;
@@ -330,8 +310,6 @@ compAddAlternateVisuals(ScreenPtr pScreen, CompScreenPtr cs)
 Bool
 compScreenInit(ScreenPtr pScreen)
 {
-    CompScreenPtr cs;
-
     if (!dixRegisterPrivateKey(&CompScreenPrivateKeyRec, PRIVATE_SCREEN, 0))
         return FALSE;
     if (!dixRegisterPrivateKey(&CompWindowPrivateKeyRec, PRIVATE_WINDOW, 0))
@@ -341,11 +319,11 @@ compScreenInit(ScreenPtr pScreen)
 
     if (GetCompScreen(pScreen))
         return TRUE;
-    cs = (CompScreenPtr) malloc(sizeof(CompScreenRec));
+    CompScreenPtr cs = calloc(1, sizeof(CompScreenRec));
     if (!cs)
         return FALSE;
 
-    cs->overlayWid = FakeClientID(0);
+    cs->overlayWid = dixAllocServerXID();
     cs->pOverlayWin = NULL;
     cs->pOverlayClients = NULL;
 
@@ -364,17 +342,15 @@ compScreenInit(ScreenPtr pScreen)
     if (!disableBackingStore)
         pScreen->backingStoreSupport = WhenMapped;
 
-    cs->PositionWindow = pScreen->PositionWindow;
-    pScreen->PositionWindow = compPositionWindow;
+    dixScreenHookClose(pScreen, compCloseScreen);
+    dixScreenHookWindowDestroy(pScreen, compWindowDestroy);
+    dixScreenHookWindowPosition(pScreen, compWindowPosition);
 
     cs->CopyWindow = pScreen->CopyWindow;
     pScreen->CopyWindow = compCopyWindow;
 
     cs->CreateWindow = pScreen->CreateWindow;
     pScreen->CreateWindow = compCreateWindow;
-
-    cs->DestroyWindow = pScreen->DestroyWindow;
-    pScreen->DestroyWindow = compDestroyWindow;
 
     cs->RealizeWindow = pScreen->RealizeWindow;
     pScreen->RealizeWindow = compRealizeWindow;
@@ -405,9 +381,6 @@ compScreenInit(ScreenPtr pScreen)
 
     cs->ChangeWindowAttributes = pScreen->ChangeWindowAttributes;
     pScreen->ChangeWindowAttributes = compChangeWindowAttributes;
-
-    cs->CloseScreen = pScreen->CloseScreen;
-    pScreen->CloseScreen = compCloseScreen;
 
     cs->SourceValidate = pScreen->SourceValidate;
     pScreen->SourceValidate = compSourceValidate;

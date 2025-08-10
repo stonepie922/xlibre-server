@@ -33,7 +33,7 @@
 #include <input.h>
 #include <xkbsrv.h>
 #include <xf86.h>
-#include <xf86Xinput.h>
+#include <xf86Xinput_priv.h>
 #include "xorgVersion.h"
 #include <xserver-properties.h>
 #include <os.h>
@@ -126,9 +126,9 @@ notify_sync_finished(ClientPtr ptr, void *closure)
         already shut down and the descriptor is closed.
     */
     if (write(fd, &response, response.header.length) != response.header.length) {
-        LogMessageVerbSigSafe(X_ERROR, 0,
-                              "inputtest: Failed to write sync response: %s\n",
-                              strerror(errno));
+        LogMessageVerb(X_ERROR, 0,
+                       "inputtest: Failed to write sync response: %s\n",
+                       strerror(errno));
     }
     input_unlock();
     return TRUE;
@@ -830,7 +830,7 @@ get_event_size(enum xf86ITEventType type)
         case XF86IT_EVENT_GESTURE_PINCH: return sizeof(xf86ITEventGesturePinch);
         case XF86IT_EVENT_GESTURE_SWIPE: return sizeof(xf86ITEventGestureSwipe);
     }
-    abort();
+    FatalError("xf86-input-inputtest: get_event_size() got undefined event type %d\n", (int)type);
 }
 
 static void
@@ -940,7 +940,7 @@ get_type_name(InputInfoPtr pInfo, xf86ITDevicePtr driver_data)
 static xf86ITDevicePtr
 device_alloc(void)
 {
-    xf86ITDevicePtr driver_data = calloc(sizeof(xf86ITDevice), 1);
+    xf86ITDevicePtr driver_data = calloc(1, sizeof(xf86ITDevice));
 
     if (!driver_data)
         return NULL;
@@ -1107,18 +1107,17 @@ InputDriverRec driver = {
 };
 
 static XF86ModuleVersionInfo version_info = {
-    "inputtest",
-    MODULEVENDORSTRING,
-    MODINFOSTRING1,
-    MODINFOSTRING2,
-    XORG_VERSION_CURRENT,
-    XORG_VERSION_MAJOR,
-    XORG_VERSION_MINOR,
-    XORG_VERSION_PATCH,
-    ABI_CLASS_XINPUT,
-    ABI_XINPUT_VERSION,
-    MOD_CLASS_XINPUT,
-    {0, 0, 0, 0}
+    .modname      = "inputtest",
+    .vendor       = MODULEVENDORSTRING,
+    ._modinfo1_   = MODINFOSTRING1,
+    ._modinfo2_   = MODINFOSTRING2,
+    .xf86version  = XORG_VERSION_CURRENT,
+    .majorversion = XORG_VERSION_MAJOR,
+    .minorversion = XORG_VERSION_MINOR,
+    .patchlevel   = XORG_VERSION_PATCH,
+    .abiclass     = ABI_CLASS_XINPUT,
+    .abiversion   = ABI_XINPUT_VERSION,
+    .moduleclass  = MOD_CLASS_XINPUT,
 };
 
 static void*
@@ -1131,5 +1130,4 @@ setup_proc(void *module, void *options, int *errmaj, int *errmin)
 _X_EXPORT XF86ModuleData inputtestModuleData = {
     .vers = &version_info,
     .setup = &setup_proc,
-    .teardown = NULL
 };

@@ -53,28 +53,34 @@
 #include <xorg-config.h>
 #endif
 
+#include <errno.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/Xatom.h>
-#include "misc.h"
-#include "xf86.h"
-#include "xf86Priv.h"
-#define XF86_OS_PRIVS
-#include "xf86_OSlib.h"
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
 #include <X11/keysym.h>
+
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "include/property.h"
+#include "mi/mi_priv.h"
+#include "os/log_priv.h"
+
+#include "misc.h"
+#include "xf86_priv.h"
+#include "xf86Priv.h"
+#include "xf86_os_support.h"
+#include "xf86_OSlib.h"
 
 #ifdef XFreeXDGA
 #include "dgaproc.h"
+#include "dgaproc_priv.h"
 #endif
 
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "inputstr.h"
-#include "xf86Xinput.h"
-
-#include "mi.h"
+#include "xf86Xinput_priv.h"
 #include "mipointer.h"
-
 #include "xkbsrv.h"
 #include "xkbstr.h"
 
@@ -84,7 +90,8 @@
 #endif
 
 #include "xf86platformBus.h"
-#include "systemd-logind.h"
+
+#include "../os-support/linux/systemd-logind.h"
 
 extern void (*xf86OSPMClose) (void);
 
@@ -159,7 +166,7 @@ xf86ProcessActionEvent(ActionEvent action, void *arg)
     switch (action) {
     case ACTION_TERMINATE:
         if (!xf86Info.dontZap) {
-            xf86Msg(X_INFO, "Server zapped. Shutting down.\n");
+            LogMessageVerb(X_INFO, 1, "Server zapped. Shutting down.\n");
             GiveUp(0);
         }
         break;
@@ -256,16 +263,6 @@ xf86RemoveEnabledDevice(InputInfoPtr pInfo)
     InputThreadUnregisterDev(pInfo->fd);
 }
 
-/*
- * xf86PrintBacktrace --
- *    Print a stack backtrace for debugging purposes.
- */
-void
-xf86PrintBacktrace(void)
-{
-    xorg_backtrace();
-}
-
 static void
 xf86ReleaseKeys(DeviceIntPtr pDev)
 {
@@ -298,8 +295,7 @@ xf86ReleaseKeys(DeviceIntPtr pDev)
     }
 }
 
-void
-xf86DisableInputDeviceForVTSwitch(InputInfoPtr pInfo)
+static void xf86DisableInputDeviceForVTSwitch(InputInfoPtr pInfo)
 {
     if (!pInfo->dev)
         return;
@@ -344,7 +340,35 @@ xf86UpdateHasVTProperty(Bool hasVT)
     }
 }
 
-void
+static void xf86DisableInputHandler(void *handler);
+static void xf86EnableInputHandler(void *handler);
+
+static void _xf86EnableGeneralHandler(void *handler);
+static void _xf86DisableGeneralHandler(void *handler);
+
+_X_EXPORT /* needs to be exported for Nvidia legacy (470.256.02) */
+void xf86EnableGeneralHandler(void *handler);
+
+_X_EXPORT /* needs to be exported for Nvidia legacy (470.256.02) */
+void xf86DisableGeneralHandler(void *handler);
+
+void xf86EnableGeneralHandler(void *handler) {
+    LogMessageVerb(X_WARNING, 0, "Outdated driver still using xf86EnableGeneralHandler() !\n");
+    LogMessageVerb(X_WARNING, 0, "File a bug report to driver vendor or use a FOSS driver.\n");
+    LogMessageVerb(X_WARNING, 0, "https://forums.developer.nvidia.com/c/gpu-graphics/linux/148\n");
+    LogMessageVerb(X_WARNING, 0, "Proprietary drivers are inherently unstable, they just can't be done right.\n");
+    _xf86EnableGeneralHandler(handler);
+}
+
+void xf86DisableGeneralHandler(void *handler) {
+    LogMessageVerb(X_WARNING, 0, "Outdated driver still using xf86DisableGeneralHandler() !\n");
+    LogMessageVerb(X_WARNING, 0, "File a bug report to driver vendor or use a FOSS driver.\n");
+    LogMessageVerb(X_WARNING, 0, "https://forums.developer.nvidia.com/c/gpu-graphics/linux/148\n");
+    LogMessageVerb(X_WARNING, 0, "Proprietary drivers are inherently unstable, they just can't be done right.\n");
+    _xf86DisableGeneralHandler(handler);
+}
+
+static void
 xf86VTLeave(void)
 {
     int i;
@@ -352,7 +376,7 @@ xf86VTLeave(void)
     IHPtr ih;
 
     DebugF("xf86VTSwitch: Leaving, xf86Exiting is %s\n",
-           BOOLTOSTRING((dispatchException & DE_TERMINATE) ? TRUE : FALSE));
+           (dispatchException & DE_TERMINATE) ? "TRUE" : "FALSE");
 #ifdef DPMSExtension
     if (DPMSPowerLevel != DPMSModeOn)
         DPMSSet(serverClient, DPMSModeOn);
@@ -371,7 +395,7 @@ xf86VTLeave(void)
         if (ih->is_input)
             xf86DisableInputHandler(ih);
         else
-            xf86DisableGeneralHandler(ih);
+            _xf86DisableGeneralHandler(ih);
     }
     for (pInfo = xf86InputDevs; pInfo; pInfo = pInfo->next)
         xf86DisableInputDeviceForVTSwitch(pInfo);
@@ -431,7 +455,7 @@ switch_failed:
         if (ih->is_input)
             xf86EnableInputHandler(ih);
         else
-            xf86EnableGeneralHandler(ih);
+            _xf86EnableGeneralHandler(ih);
     }
     input_unlock();
 }
@@ -479,7 +503,7 @@ xf86VTEnter(void)
         if (ih->is_input)
             xf86EnableInputHandler(ih);
         else
-            xf86EnableGeneralHandler(ih);
+            _xf86EnableGeneralHandler(ih);
     }
 #ifdef XSERVER_PLATFORM_BUS
     /* check for any new output devices */
@@ -539,7 +563,7 @@ addInputHandler(int fd, InputHandlerProc proc, void *data)
     if (fd < 0 || !proc)
         return NULL;
 
-    ih = calloc(sizeof(*ih), 1);
+    ih = calloc(1, sizeof(*ih));
     if (!ih)
         return NULL;
 
@@ -556,16 +580,6 @@ addInputHandler(int fd, InputHandlerProc proc, void *data)
     ih->next = InputHandlers;
     InputHandlers = ih;
 
-    return ih;
-}
-
-void *
-xf86AddInputHandler(int fd, InputHandlerProc proc, void *data)
-{
-    IHPtr ih = addInputHandler(fd, proc, data);
-
-    if (ih)
-        ih->is_input = TRUE;
     return ih;
 }
 
@@ -611,27 +625,10 @@ removeInputHandler(IHPtr ih)
         p = InputHandlers;
         while (p && p->next != ih)
             p = p->next;
-        if (ih)
+        if (ih && p)
             p->next = ih->next;
     }
     free(ih);
-}
-
-int
-xf86RemoveInputHandler(void *handler)
-{
-    IHPtr ih;
-    int fd;
-
-    if (!handler)
-        return -1;
-
-    ih = handler;
-    fd = ih->fd;
-
-    removeInputHandler(ih);
-
-    return fd;
 }
 
 int
@@ -651,8 +648,7 @@ xf86RemoveGeneralHandler(void *handler)
     return fd;
 }
 
-void
-xf86DisableInputHandler(void *handler)
+static void xf86DisableInputHandler(void *handler)
 {
     IHPtr ih;
 
@@ -665,8 +661,7 @@ xf86DisableInputHandler(void *handler)
         RemoveNotifyFd(ih->fd);
 }
 
-void
-xf86DisableGeneralHandler(void *handler)
+static void _xf86DisableGeneralHandler(void *handler)
 {
     IHPtr ih;
 
@@ -679,8 +674,7 @@ xf86DisableGeneralHandler(void *handler)
         RemoveNotifyFd(ih->fd);
 }
 
-void
-xf86EnableInputHandler(void *handler)
+static void xf86EnableInputHandler(void *handler)
 {
     IHPtr ih;
 
@@ -693,8 +687,7 @@ xf86EnableInputHandler(void *handler)
         SetNotifyFd(ih->fd, xf86InputHandlerNotify, X_NOTIFY_READ, ih);
 }
 
-void
-xf86EnableGeneralHandler(void *handler)
+static void _xf86EnableGeneralHandler(void *handler)
 {
     IHPtr ih;
 

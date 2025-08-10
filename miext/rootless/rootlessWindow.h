@@ -34,15 +34,17 @@
 #ifndef _ROOTLESSWINDOW_H
 #define _ROOTLESSWINDOW_H
 
+#include "dix/screen_hooks_priv.h"
+
 #include "rootlessCommon.h"
 
 Bool RootlessCreateWindow(WindowPtr pWin);
-Bool RootlessDestroyWindow(WindowPtr pWin);
+void RootlessWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWin);
 
 void RootlessSetShape(WindowPtr pWin, int kind);
 
 Bool RootlessChangeWindowAttributes(WindowPtr pWin, unsigned long vmask);
-Bool RootlessPositionWindow(WindowPtr pWin, int x, int y);
+void RootlessWindowPosition(CallbackListPtr *pcbl, ScreenPtr pScreen, XorgScreenWindowPositionParamRec *param);
 Bool RootlessRealizeWindow(WindowPtr pWin);
 Bool RootlessUnrealizeWindow(WindowPtr pWin);
 void RootlessRestackWindow(WindowPtr pWin, WindowPtr pOldNextSib);

@@ -1833,6 +1833,7 @@ Some of them are:
     xf86Depth                 -depth from the command line
     xf86Weight                -weight from the command line
     xf86Gamma                 -{r,g,b,}gamma from the command line
+    xf86FlipPixels            -flippixels from the command line
     xf86ProbeOnly             -probeonly from the command line
     defaultColorVisualClass   -cc from the command line
 	</literallayout>
@@ -1854,28 +1855,6 @@ functions:
 	  </programlisting>
 	  <blockquote><para>
       Returns the value of <varname>xf86Verbose</varname>.
-	    </para></blockquote>
-
-	</para></blockquote>
-
-     <blockquote><para>
-	  <programlisting>
-    int xf86GetDepth();
-	  </programlisting>
-	  <blockquote><para>
-      Returns the <option>-depth</option> command line setting.  If not
-      set on the command line, <constant>-1</constant> is returned.
-	    </para></blockquote>
-
-	</para></blockquote>
-
-     <blockquote><para>
-	  <programlisting>
-    rgb xf86GetWeight();
-	  </programlisting>
-	  <blockquote><para>
-      Returns the <option>-weight</option> command line setting.  If not
-      set on the command line, <literal remap="tt">{0, 0, 0}</literal> is returned.
 	    </para></blockquote>
 
 	</para></blockquote>
@@ -1992,18 +1971,6 @@ functions is as follows:
 	  <blockquote><para>
       Returns <constant>TRUE</constant> if the server is at the end of a
       generation and is in the process of exiting, and
-      <constant>FALSE</constant> otherwise.
-	    </para></blockquote>
-
-	</para></blockquote>
-
-      <blockquote><para>
-	  <programlisting>
-    Bool xf86ServerIsResetting();
-	  </programlisting>
-	  <blockquote><para>
-      Returns <constant>TRUE</constant> if the server is at the end of a
-      generation and is in the process of resetting, and
       <constant>FALSE</constant> otherwise.
 	    </para></blockquote>
 
@@ -2618,18 +2585,6 @@ Several functions are provided to simplify resource registration:
       This function returns <constant>TRUE</constant> if the entity referenced
       by <parameter>entityIndex</parameter> is the primary display device (i.e.,
       the one initialised at boot time and used in text mode).
-		</para>
-
-	      </blockquote></para></blockquote>
-
-	  <blockquote><para>
-	      <programlisting>
-    Bool xf86IsScreenPrimary(ScrnInfoPtr pScrn);
-	      </programlisting>
-	      <blockquote><para>
-      This function returns <constant>TRUE</constant> if the primary entity
-      is registered with the screen referenced by
-      <parameter>pScrn</parameter>.
 		</para>
 
 	      </blockquote></para></blockquote>
@@ -3308,18 +3263,6 @@ video memory using the following functions (definitions taken from
     )
       </programlisting>
     </para>
-
-    <para>
-The function:
-      <programlisting>
-    Bool xf86FBManagerRunning(ScreenPtr pScreen);
-      </programlisting>
-
-can be used by an extension to check if the driver has initialized
-the memory manager.  The manager is not available if this returns
-<constant>FALSE</constant> and the functions above will all fail.
-    </para>
-
 
     <para>
 <function>xf86AllocateOffscreenArea()</function> can be used to request a
@@ -5620,17 +5563,6 @@ strongly encouraged to improve the consistency of driver behaviour.
 
       <blockquote><para>
 	  <programlisting>
-    xf86MsgVerb(MessageType type, int verb, const char *format, ...);
-	  </programlisting>
-	  <blockquote><para>
-      Like <function>xf86Msg()</function>, but with the verbosity level given
-      explicitly.
-	    </para>
-
-	  </blockquote></para></blockquote>
-
-      <blockquote><para>
-	  <programlisting>
     xf86DrvMsg(int scrnIndex, MessageType type, const char *format, ...);
 	  </programlisting>
 	  <blockquote><para>
@@ -5998,6 +5930,19 @@ strongly encouraged to improve the consistency of driver behaviour.
       config file section, it is used together with the virtual size to
       calculate the dpi values.  This function should be called after
       all the mode resolution has been done.
+	    </para>
+
+	  </blockquote></para></blockquote>
+
+      <blockquote><para>
+	  <programlisting>
+    void xf86SetBlackWhitePixels(ScrnInfoPtr pScrn);
+	  </programlisting>
+	  <blockquote><para>
+      This functions sets the <structfield>blackPixel</structfield> and
+      <structfield>whitePixel</structfield> fields of the <structname>ScrnInfoRec</structname>
+      according to whether or not the <option>-flipPixels</option> command
+      line options is present.
 	    </para>
 
 	  </blockquote></para></blockquote>
@@ -6751,30 +6696,6 @@ programming the standard VGA registers, and for handling VGA colourmaps.
 
       <blockquote><para>
 	  <programlisting>
-    Bool vgaHWSetRegCounts(ScrnInfoPtr pScrn, int numCRTC,
-                          int numSequencer, int numGraphics, int numAttribute);
-	  </programlisting>
-	  <blockquote><para>
-      This function allows the number of CRTC, Sequencer, Graphics and
-      Attribute registers to be changed.  This makes it possible for
-      extended registers to be saved and restored with
-      <function>vgaHWSave()</function> and <function>vgaHWRestore()</function>.
-      This function should be called after a <structname>vgaHWRec</structname>
-      has been allocated with <function>vgaHWGetHWRec()</function>.  The
-      default values are defined in <filename>vgaHW.h</filename> as follows:
-
-	      <programlisting>
-#define VGA_NUM_CRTC 25
-#define VGA_NUM_SEQ   5
-#define VGA_NUM_GFX   9
-#define VGA_NUM_ATTR 21
-	      </programlisting>
-	    </para>
-
-	  </blockquote></para></blockquote>
-
-      <blockquote><para>
-	  <programlisting>
     Bool vgaHWCopyReg(vgaRegPtr dst, vgaRegPtr src);
 	  </programlisting>
 	  <blockquote><para>
@@ -6922,17 +6843,6 @@ programming the standard VGA registers, and for handling VGA colourmaps.
 
       <blockquote><para>
 	  <programlisting>
-    void vgaHWDisable(vgaHWPtr hwp);
-	  </programlisting>
-	  <blockquote><para>
-      This function disables the VGA subsystem.  (Note, this function is
-      present in XFree86 4.1.0 and later.).
-	    </para>
-
-	  </blockquote></para></blockquote>
-
-      <blockquote><para>
-	  <programlisting>
     void vgaHWSave(ScrnInfoPtr pScrn, vgaRegPtr save, int flags);
 	  </programlisting>
 	  <blockquote><para>
@@ -6994,11 +6904,6 @@ programming the standard VGA registers, and for handling VGA colourmaps.
         Graphics[0-8]
         Sequencer[0-4]
 	      </literallayout>
-	    </para>
-
-	    <para>
-    The number of registers actually saved may be modified by a prior call
-    to <function>vgaHWSetRegCounts()</function>.
 	    </para>
 
 	  </blockquote></para></blockquote>
@@ -7078,11 +6983,6 @@ programming the standard VGA registers, and for handling VGA colourmaps.
         Graphics[0-8]
         Sequencer[0-4]
 	      </literallayout>
-	    </para>
-
-	    <para>
-    The number of registers actually restored may be modified by a prior call
-    to <function>vgaHWSetRegCounts()</function>.
 	    </para>
 
 	  </blockquote></para></blockquote>
@@ -7752,7 +7652,7 @@ static const OptionInfoRec ZZZOptions[] = {
 	<programlisting>
 static MODULESETUPPROTO(zzzSetup);
 
-XF86ModuleData zzzModuleData = { &amp;zzzVersRec, zzzSetup, NULL };
+XF86ModuleData zzzModuleData = { .vers = &amp;zzzVersRec, .setup = zzzSetup, .teardown = NULL };
 
 static pointer
 zzzSetup(pointer module, pointer opts, int *errmaj, int *errmin)
@@ -7793,7 +7693,7 @@ zzzSetup(pointer module, pointer opts, int *errmaj, int *errmin)
     The <structname>ScrnInfoRec</structname>'s <structfield>driverPrivate</structfield> is
     initialised to <constant>NULL</constant>, so it is easy to check if the
     initialisation has already been done.  After allocating it, initialise
-    the fields.  By using <function>xnfcalloc()</function> to do the allocation
+    the fields.  By using <function>XNFcallocarray()</function> to do the allocation
     it is zeroed, and if the allocation fails the server exits.
 	</para>
 
@@ -7812,7 +7712,7 @@ ZZZGetRec(ScrnInfoPtr pScrn)
 {
     if (pScrn-&gt;driverPrivate != NULL)
         return TRUE;
-    pScrn-&gt;driverPrivate = xnfcalloc(sizeof(ZZZRec), 1);
+    pScrn-&gt;driverPrivate = XNFcallocarray(1, sizeof(ZZZRec));
     /* Initialise as required */
     ...
     return TRUE;

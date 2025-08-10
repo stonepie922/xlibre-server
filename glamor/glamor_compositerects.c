@@ -26,6 +26,7 @@
  * 	original author is Chris Wilson at sna.
  *
  */
+#include <dix-config.h>
 
 #include "glamor_priv.h"
 #include "mipict.h"
@@ -57,7 +58,7 @@ _pixman_region_init_clipped_rectangles(pixman_region16_t * region,
     unsigned int i, j;
 
     if (num_rects > ARRAY_SIZE(stack_boxes)) {
-        boxes = xallocarray(num_rects, sizeof(pixman_box16_t));
+        boxes = calloc(num_rects, sizeof(pixman_box16_t));
         if (boxes == NULL)
             return FALSE;
     }
@@ -227,12 +228,10 @@ glamor_composite_rectangles(CARD8 op,
     boxes = pixman_region_rectangles(&region, &num_boxes);
     if (op == PictOpSrc || op == PictOpClear) {
         CARD32 pixel;
-        int dst_x, dst_y;
 
-        glamor_get_drawable_deltas(dst->pDrawable, pixmap, &dst_x, &dst_y);
-        pixman_region_translate(&region, dst_x, dst_y);
+        pixman_region_translate(&region, -dst->pDrawable->x, -dst->pDrawable->y);
 
-        DEBUGF("%s: pixmap +(%d, %d) extents (%d, %d),(%d, %d)\n",
+        DEBUGF("%s: drawable extents (%d, %d),(%d, %d)\n",
                __FUNCTION__, dst_x, dst_y,
                RegionExtents(&region)->x1, RegionExtents(&region)->y1,
                RegionExtents(&region)->x2, RegionExtents(&region)->y2);
@@ -241,7 +240,7 @@ glamor_composite_rectangles(CARD8 op,
             pixel = 0;
         else
             miRenderColorToPixel(dst->pFormat, color, &pixel);
-        glamor_solid_boxes(pixmap, boxes, num_boxes, pixel);
+        glamor_solid_boxes(dst->pDrawable, boxes, num_boxes, pixel);
 
         goto done;
     }

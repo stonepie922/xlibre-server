@@ -60,9 +60,7 @@ SOFTWARE.
  *
  *****************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #ifdef WIN32
 #include <X11/Xwinsock.h>
@@ -87,29 +85,26 @@ SOFTWARE.
 #if defined(TCPCONN)
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#ifdef apollo
-#ifndef NO_TCP_H
-#include <netinet/tcp.h>
-#endif
-#else
 #ifdef CSRG_BASED
 #include <sys/param.h>
 #endif
 #include <netinet/tcp.h>
-#endif
 #include <arpa/inet.h>
 #endif
-
 #include <sys/uio.h>
-
 #endif                          /* WIN32 */
-#include "misc.h"               /* for typedef of pointer */
-#include "osdep.h"
-#include "opaque.h"
-#include "dixstruct.h"
-#include "xace.h"
 
-#define Pid_t pid_t
+#include "dix/dix_priv.h"
+#include "os/audit.h"
+#include "os/auth.h"
+#include "os/client_priv.h"
+#include "os/log_priv.h"
+#include "os/osdep.h"
+
+#include "misc.h"               /* for typedef of pointer */
+#include "dixstruct_priv.h"
+#include "globals.h"
+#include "xace.h"
 
 #ifdef HAVE_GETPEERUCRED
 #include <ucred.h>
@@ -123,18 +118,21 @@ SOFTWARE.
 #endif
 
 #include "probes.h"
+#include "xdmcp.h"
+
+#define MAX_CONNECTIONS (1<<16)
 
 struct ospoll   *server_poll;
 
 Bool NewOutputPending;          /* not yet attempted to write some new output */
 Bool NoListenAll;               /* Don't establish any listening sockets */
 
-static Bool RunFromSmartParent; /* send SIGUSR1 to parent process */
-Bool RunFromSigStopParent;      /* send SIGSTOP to our own process; Upstart (or
-                                   equivalent) will send SIGCONT back. */
 static char dynamic_display[7]; /* display name */
 Bool PartialNetwork;            /* continue even if unable to bind all addrs */
-static Pid_t ParentProcess;
+#if !defined(WIN32)
+static pid_t ParentProcess;
+static Bool RunFromSmartParent; /* send SIGUSR1 to parent process */
+#endif
 
 int GrabInProgress = 0;
 
@@ -211,8 +209,6 @@ NotifyParentProcess(void)
             kill(ParentProcess, SIGUSR1);
         }
     }
-    if (RunFromSigStopParent)
-        raise(SIGSTOP);
 #ifdef HAVE_SYSTEMD_DAEMON
     /* If we have been started as a systemd service, tell systemd that
        we are ready. Otherwise sd_notify() won't do anything. */
@@ -273,7 +269,12 @@ CreateWellKnownSockets(void)
         LogSetDisplay();
     }
 
-    ListenTransFds = xallocarray(ListenTransCount, sizeof (int));
+    if (ListenTransCount >= MAX_CONNECTIONS) {
+        FatalError ("Tried to clear too many listening sockets - OOM");
+        return; // mostly to keep GCC from complaining about too large alloc
+    }
+
+    ListenTransFds = calloc(ListenTransCount, sizeof(int));
     if (ListenTransFds == NULL)
         FatalError ("Failed to create listening socket array");
 
@@ -395,11 +396,20 @@ AuthAudit(ClientPtr client, Bool letin,
             strlcpy(addr, "local host", sizeof(addr));
             break;
 #if defined(TCPCONN)
-        case AF_INET:
-            snprintf(addr, sizeof(addr), "IP %s",
-                     inet_ntoa(((struct sockaddr_in *) saddr)->sin_addr));
+        case AF_INET:{
+#if defined(HAVE_INET_NTOP)
+            char ipaddr[INET_ADDRSTRLEN];
+
+            inet_ntop(AF_INET, &((struct sockaddr_in *) saddr)->sin_addr,
+                      ipaddr, sizeof(ipaddr));
+#else
+            const char *ipaddr =
+                inet_ntoa(((struct sockaddr_in *) saddr)->sin_addr);
+#endif
+            snprintf(addr, sizeof(addr), "IP %s", ipaddr);
+        }
             break;
-#if defined(IPv6) && defined(AF_INET6)
+#if defined(IPv6)
         case AF_INET6:{
             char ipaddr[INET6_ADDRSTRLEN];
 
@@ -581,7 +591,7 @@ ClientAuthorized(ClientPtr client,
     XdmcpOpenDisplay(priv->fd);
 #endif                          /* XDMCP */
 
-    XaceHook(XACE_AUTH_AVAIL, client, auth_id);
+    XaceHookAuthAvail(client, auth_id);
 
     /* At this point, if the client is authorized to change the access control
      * list, we should getpeername() information, and add the client to
@@ -612,10 +622,9 @@ ClientReady(int fd, int xevents, void *data)
 static ClientPtr
 AllocNewConnection(XtransConnInfo trans_conn, int fd, CARD32 conn_time)
 {
-    OsCommPtr oc;
     ClientPtr client;
 
-    oc = malloc(sizeof(OsCommRec));
+    OsCommPtr oc = calloc(1, sizeof(OsCommRec));
     if (!oc)
         return NullClient;
     oc->trans_conn = trans_conn;
@@ -868,7 +877,7 @@ OnlyListenToOneClient(ClientPtr client)
 {
     int rc;
 
-    rc = XaceHook(XACE_SERVER_ACCESS, client, DixGrabAccess);
+    rc = XaceHookServerAccess(client, DixGrabAccess);
     if (rc != Success)
         return rc;
 
@@ -1018,7 +1027,7 @@ ListenOnOpenFD(int fd, int noxauth)
         }
     }
 
-    if (!display_env) {
+    if (!display_env || display_env[0] != '/') {
         /* Just some default so things don't break and die. */
         snprintf(port, sizeof(port), ":%d", atoi(display));
     }
@@ -1037,9 +1046,9 @@ ListenOnOpenFD(int fd, int noxauth)
 
     /* Allocate space to store it */
     ListenTransFds =
-        xnfreallocarray(ListenTransFds, ListenTransCount + 1, sizeof(int));
+        XNFreallocarray(ListenTransFds, ListenTransCount + 1, sizeof(int));
     ListenTransConns =
-        xnfreallocarray(ListenTransConns, ListenTransCount + 1,
+        XNFreallocarray(ListenTransConns, ListenTransCount + 1,
                         sizeof(XtransConnInfo));
 
     /* Store it */

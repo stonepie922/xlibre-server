@@ -52,9 +52,7 @@ SOFTWARE.
  * bresenham zero-width lines, except walks an X edge
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #ifdef _XOPEN_SOURCE
@@ -65,21 +63,13 @@ SOFTWARE.
 #undef _XOPEN_SOURCE
 #endif
 #include <X11/X.h>
+
+#include "mi/mi_priv.h"
+
 #include "windowstr.h"
 #include "gcstruct.h"
 #include "regionstr.h"
 #include "miwideline.h"
-#include "mi.h"
-
-#if 0
-#ifdef HAVE_DIX_CONFIG_H
-#include <dix-config.h>
-#endif
-
-#include "misc.h"
-#include "pixmapstr.h"
-#include "gcstruct.h"
-#endif
 
 typedef struct {
     int count;                  /* number of spans                  */
@@ -453,8 +443,8 @@ miFillUniqueSpanGroup(DrawablePtr pDraw, GCPtr pGC, SpanGroup * spanGroup)
         ylength = spanGroup->ymax - ymin + 1;
 
         /* Allocate Spans for y buckets */
-        yspans = xallocarray(ylength, sizeof(Spans));
-        ysizes = xallocarray(ylength, sizeof(int));
+        yspans = calloc(ylength, sizeof(Spans));
+        ysizes = calloc(ylength, sizeof(int));
 
         if (!yspans || !ysizes) {
             free(yspans);
@@ -521,8 +511,8 @@ miFillUniqueSpanGroup(DrawablePtr pDraw, GCPtr pGC, SpanGroup * spanGroup)
         }                       /* for i thorough Spans */
 
         /* Now sort by x and uniquify each bucket into the final array */
-        points = xallocarray(count, sizeof(DDXPointRec));
-        widths = xallocarray(count, sizeof(int));
+        points = calloc(count, sizeof(DDXPointRec));
+        widths = calloc(count, sizeof(int));
         if (!points || !widths) {
             for (i = 0; i < ylength; i++) {
                 free(yspans[i].points);
@@ -569,10 +559,10 @@ miFillUniqueSpanGroup(DrawablePtr pDraw, GCPtr pGC, SpanGroup * spanGroup)
 static Bool
 InitSpans(Spans * spans, size_t nspans)
 {
-    spans->points = xallocarray(nspans, sizeof(*spans->points));
+    spans->points = calloc(nspans, sizeof(*spans->points));
     if (!spans->points)
         return FALSE;
-    spans->widths = xallocarray(nspans, sizeof(*spans->widths));
+    spans->widths = calloc(nspans, sizeof(*spans->widths));
     if (!spans->widths) {
         free(spans->points);
         return FALSE;
@@ -1903,7 +1893,7 @@ miWideLine(DrawablePtr pDrawable, GCPtr pGC,
     SpanDataPtr spanData;
     long pixel;
     Bool projectLeft, projectRight;
-    LineFaceRec leftFace, rightFace, prevRightFace;
+    LineFaceRec leftFace = { 0 }, rightFace = { 0 }, prevRightFace;
     LineFaceRec firstFace;
     int first;
     Bool somethingDrawn = FALSE;

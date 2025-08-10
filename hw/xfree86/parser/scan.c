@@ -66,6 +66,7 @@
 #include <X11/Xdefs.h>
 #include <X11/Xfuncproto.h>
 #include <limits.h>
+#include "xf86Parser_priv.h"
 
 #if !defined(MAXHOSTNAMELEN)
 #define MAXHOSTNAMELEN 32
@@ -117,20 +118,20 @@ xf86getNextLine(void)
 
     /*
      * reallocate the string if it was grown last time (i.e., is no
-     * longer CONFIG_BUF_LEN); we malloc the new strings first, so
-     * that if either of the mallocs fail, we can fall back on the
+     * longer CONFIG_BUF_LEN); we calloc the new strings first, so
+     * that if either of the callocs fail, we can fall back on the
      * existing buffer allocations
      */
 
     if (configBufLen != CONFIG_BUF_LEN) {
 
-        tmpConfigBuf = malloc(CONFIG_BUF_LEN);
-        tmpConfigRBuf = malloc(CONFIG_BUF_LEN);
+        tmpConfigBuf = calloc(1, CONFIG_BUF_LEN);
+        tmpConfigRBuf = calloc(1, CONFIG_BUF_LEN);
 
         if (!tmpConfigBuf || !tmpConfigRBuf) {
 
             /*
-             * at least one of the mallocs failed; keep the old buffers
+             * at least one of the callocs failed; keep the old buffers
              * and free any partial allocations
              */
 
@@ -141,7 +142,7 @@ xf86getNextLine(void)
         else {
 
             /*
-             * malloc succeeded; free the old buffers and use the new
+             * calloc succeeded; free the old buffers and use the new
              * buffers
              */
 
@@ -340,10 +341,10 @@ xf86getToken(const xf86ConfigSymTabRec * tab)
         }
 
         /* GJA -- handle '-' and ','  * Be careful: "-hsync" is a keyword. */
-        else if ((c == ',') && !isalpha(configBuf[configPos])) {
+        else if ((c == ',') && !isalpha((unsigned char)configBuf[configPos])) {
             return COMMA;
         }
-        else if ((c == '-') && !isalpha(configBuf[configPos])) {
+        else if ((c == '-') && !isalpha((unsigned char)configBuf[configPos])) {
             return DASH;
         }
 
@@ -392,9 +393,9 @@ xf86getToken(const xf86ConfigSymTabRec * tab)
             }
             while ((c != '\"') && (c != '\n') && (c != '\r') && (c != '\0'));
             configRBuf[i] = '\0';
-            xf86_lex_val.str = malloc(strlen(configRBuf) + 1);
+            xf86_lex_val.str = calloc(1, strlen(configRBuf) + 1);
             strcpy(xf86_lex_val.str, configRBuf);        /* private copy ! */
-            return STRING;
+            return XF86_TOKEN_STRING;
         }
 
         /*
@@ -427,7 +428,7 @@ xf86getToken(const xf86ConfigSymTabRec * tab)
 
         if (temp == COMMA || temp == DASH)
             return temp;
-        if (temp == NUMBER || temp == STRING)
+        if (temp == NUMBER || temp == XF86_TOKEN_STRING)
             return temp;
     }
 
@@ -568,7 +569,6 @@ static char *
 DoSubstitution(const char *template, const char *cmdline, const char *projroot,
                int *cmdlineUsed, int *envUsed, const char *XConfigFile)
 {
-    char *result;
     int i, l;
     static const char *env = NULL;
     static char *hostname = NULL;
@@ -581,7 +581,10 @@ DoSubstitution(const char *template, const char *cmdline, const char *projroot,
     if (envUsed)
         *envUsed = 0;
 
-    result = malloc(PATH_MAX + 1);
+    char *result = calloc(1, PATH_MAX + 1);
+    if (!result)
+        return NULL;
+
     l = 0;
     for (i = 0; template[i]; i++) {
         if (template[i] != '%') {
@@ -622,7 +625,7 @@ DoSubstitution(const char *template, const char *cmdline, const char *projroot,
                 break;
             case 'H':
                 if (!hostname) {
-                    if ((hostname = malloc(MAXHOSTNAMELEN + 1))) {
+                    if ((hostname = calloc(1, MAXHOSTNAMELEN + 1))) {
                         if (gethostname(hostname, MAXHOSTNAMELEN) == 0) {
                             hostname[MAXHOSTNAMELEN] = '\0';
                         }
@@ -768,7 +771,6 @@ AddConfigDirFiles(const char *dirpath, struct dirent **list, int num)
     Bool warnOnce = FALSE;
 
     for (i = 0; i < num; i++) {
-        char *path;
         FILE *file;
 
         if (numFiles >= CONFIG_MAX_FILES) {
@@ -779,7 +781,7 @@ AddConfigDirFiles(const char *dirpath, struct dirent **list, int num)
             continue;
         }
 
-        path = malloc(PATH_MAX + 1);
+        char *path = calloc(1, PATH_MAX + 1);
         snprintf(path, PATH_MAX + 1, "%s/%s", dirpath, list[i]->d_name);
         file = fopen(path, "r");
         if (!file) {
@@ -856,8 +858,8 @@ xf86initConfigFiles(void)
     configLineNo = 0;
     pushToken = LOCK_TOKEN;
 
-    configBuf = malloc(CONFIG_BUF_LEN);
-    configRBuf = malloc(CONFIG_BUF_LEN);
+    configBuf = calloc(1, CONFIG_BUF_LEN);
+    configRBuf = calloc(1, CONFIG_BUF_LEN);
     configBuf[0] = '\0';        /* sanity ... */
 }
 
@@ -974,7 +976,7 @@ xf86parseError(const char *format, ...)
     ErrorF("Parse error on line %d of section %s in file %s\n\t",
            configLineNo, configSection, filename);
     va_start(ap, format);
-    VErrorF(format, ap);
+    LogVMessageVerb(X_NONE, -1, format, ap);
     va_end(ap);
 
     ErrorF("\n");
@@ -989,7 +991,7 @@ xf86validationError(const char *format, ...)
 
     ErrorF("Data incomplete in file %s\n\t", filename);
     va_start(ap, format);
-    VErrorF(format, ap);
+    LogVMessageVerb(X_NONE, -1, format, ap);
     va_end(ap);
 
     ErrorF("\n");
@@ -1034,8 +1036,8 @@ xf86nameCompare(const char *s1, const char *s2)
         s1++;
     while (*s2 == '_' || *s2 == ' ' || *s2 == '\t')
         s2++;
-    c1 = (isupper(*s1) ? tolower(*s1) : *s1);
-    c2 = (isupper(*s2) ? tolower(*s2) : *s2);
+    c1 = (isupper((unsigned char)*s1) ? tolower((unsigned char)*s1) : *s1);
+    c2 = (isupper((unsigned char)*s2) ? tolower((unsigned char)*s2) : *s2);
     while (c1 == c2) {
         if (c1 == '\0')
             return 0;
@@ -1045,8 +1047,8 @@ xf86nameCompare(const char *s1, const char *s2)
             s1++;
         while (*s2 == '_' || *s2 == ' ' || *s2 == '\t')
             s2++;
-        c1 = (isupper(*s1) ? tolower(*s1) : *s1);
-        c2 = (isupper(*s2) ? tolower(*s2) : *s2);
+        c1 = (isupper((unsigned char)*s1) ? tolower((unsigned char)*s1) : *s1);
+        c2 = (isupper((unsigned char)*s2) ? tolower((unsigned char)*s2) : *s2);
     }
     return c1 - c2;
 }

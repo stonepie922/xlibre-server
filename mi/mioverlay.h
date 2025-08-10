@@ -22,7 +22,6 @@ miOverlayGetPrivateClips(WindowPtr pWin,
 extern _X_EXPORT Bool miOverlayCollectUnderlayRegions(WindowPtr, RegionPtr *);
 extern _X_EXPORT void miOverlayComputeCompositeClip(GCPtr, WindowPtr);
 extern _X_EXPORT Bool miOverlayCopyUnderlay(ScreenPtr);
-extern _X_EXPORT void miOverlaySetTransFunction(ScreenPtr, miOverlayTransFunc);
 extern _X_EXPORT void miOverlaySetRootClip(ScreenPtr, Bool);
 
 #endif                          /* __MIOVERLAY_H */

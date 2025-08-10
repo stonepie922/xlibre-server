@@ -6,16 +6,18 @@ set -o xtrace
 # Packages which are needed by this script, but not for the xserver build
 EPHEMERAL="
 	libcairo2-dev
-	libevdev-dev
 	libexpat-dev
 	libgles2-mesa-dev
-	libinput-dev
 	libxkbcommon-dev
 	x11-utils
 	x11-xserver-utils
 	xauth
 	xvfb
 	"
+
+# Add bullseye-backports for the newer linux-libc-dev & meson packages
+echo 'deb http://deb.debian.org/debian bullseye-backports main' >> /etc/apt/sources.list
+apt update
 
 apt-get install -y \
 	$EPHEMERAL \
@@ -32,8 +34,8 @@ apt-get install -y \
 	libaudit-dev \
 	libbsd-dev \
 	libcairo2 \
+	libcairo2-dev \
 	libdbus-1-dev \
-	libdmx-dev \
 	libdrm-dev \
 	libegl1-mesa-dev \
 	libepoxy-dev \
@@ -46,10 +48,13 @@ apt-get install -y \
 	libgles2 \
 	libglx-mesa0 \
 	libinput10 \
-	libnvidia-egl-wayland-dev \
+	libinput-dev \
+	libpango1.0-0 \
+	libpango1.0-dev \
 	libpciaccess-dev \
 	libpixman-1-dev \
 	libselinux1-dev \
+	libspice-protocol-dev \
 	libsystemd-dev \
 	libtool \
 	libudev-dev \
@@ -58,6 +63,9 @@ apt-get install -y \
 	libx11-xcb-dev \
 	libxau-dev \
 	libxaw7-dev \
+	libxcb-damage0-dev \
+	libxcb-dri2-0-dev \
+	libxcb-dri3-dev \
 	libxcb-glx0-dev \
 	libxcb-icccm4-dev \
 	libxcb-image0-dev \
@@ -67,11 +75,15 @@ apt-get install -y \
 	libxcb-render0-dev \
 	libxcb-shape0-dev \
 	libxcb-shm0-dev \
+	libxcb-sync-dev \
 	libxcb-util0-dev \
 	libxcb-xf86dri0-dev \
+	libxcb-xinput-dev \
 	libxcb-xkb-dev \
 	libxcb-xv0-dev \
 	libxcb1-dev \
+	libxcursor-dev \
+	libxdamage-dev \
 	libxdmcp-dev \
 	libxext-dev \
 	libxfixes-dev \
@@ -83,21 +95,31 @@ apt-get install -y \
 	libxmu-dev \
 	libxmuu-dev \
 	libxpm-dev \
+	libxrandr-dev \
 	libxrender-dev \
 	libxres-dev \
 	libxshmfence-dev \
+	libxss-dev \
 	libxt-dev \
 	libxtst-dev \
 	libxv-dev \
+	libxvmc-dev \
+	libxxf86vm-dev \
 	libz-mingw-w64-dev \
+	linux-libc-dev/bullseye-backports \
 	mesa-common-dev \
-	meson \
+	meson/bullseye-backports \
 	mingw-w64-tools \
 	nettle-dev \
 	pkg-config \
+	python3-attr \
+	python3-jinja2 \
 	python3-mako \
 	python3-numpy \
 	python3-six \
+	valgrind \
+	weston \
+	x11-xkb-utils \
 	xfonts-utils \
 	xkb-data \
 	xtrans-dev \
@@ -107,60 +129,45 @@ apt-get install -y \
 
 cd /root
 
+# drm 2.4.116 for drmSyncobjEventfd
+git clone https://gitlab.freedesktop.org/mesa/drm --depth 1 --branch=libdrm-2.4.121
+cd drm
+meson _build
+ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
+cd ..
+rm -rf drm
+
 # xserver requires libxcvt
-git clone https://gitlab.freedesktop.org/xorg/lib//libxcvt.git --depth 1 --branch=libxcvt-0.1.0
+git clone https://gitlab.freedesktop.org/xorg/lib/libxcvt.git --depth 1 --branch=libxcvt-0.1.0
 cd libxcvt
 meson _build
 ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
 cd ..
 rm -rf libxcvt
 
-# xserver requires xorgproto >= 2021.4.99.2 for XI 2.3.99.1
-git clone https://gitlab.freedesktop.org/xorg/proto/xorgproto.git --depth 1 --branch=xorgproto-2021.4.99.2
+# xserver requires xorgproto >= 2024.1
+git clone https://gitlab.freedesktop.org/xorg/proto/xorgproto.git --depth 1 --branch=xorgproto-2024.1
 pushd xorgproto
 ./autogen.sh
 make -j${FDO_CI_CONCURRENT:-4} install
 popd
 rm -rf xorgproto
 
-# weston 9.0 requires libwayland >= 1.18
-git clone https://gitlab.freedesktop.org/wayland/wayland.git --depth 1 --branch=1.18.0
-cd wayland
-meson _build -D{documentation,dtd_validation}=false
-ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
+git clone https://gitlab.freedesktop.org/mesa/piglit.git
+cd piglit
+git checkout 265896c86f90cb72e8f218ba6a3617fca8b9a1e3
 cd ..
-rm -rf wayland
 
-# Xwayland requires wayland-protocols >= 1.18, but Debian buster has 1.17 only
-git clone https://gitlab.freedesktop.org/wayland/wayland-protocols.git --depth 1 --branch=1.18
-cd wayland-protocols
-./autogen.sh
-make -j${FDO_CI_CONCURRENT:-4} install
-cd ..
-rm -rf wayland-protocols
-
-# Xwayland requires weston > 5.0, but Debian buster has 5.0 only
-git clone https://gitlab.freedesktop.org/wayland/weston.git --depth 1 --branch=9.0
-cd weston
-meson _build -Dbackend-{drm,drm-screencast-vaapi,fbdev,rdp,wayland,x11}=false \
-      -Dbackend-default=headless -Dcolor-management-{colord,lcms}=false \
-      -Ddemo-clients=false -Dimage-{jpeg,webp}=false \
-      -D{pipewire,remoting,screenshare,test-junit-xml,wcap-decode,weston-launch,xwayland}=false \
-      -Dshell-{fullscreen,ivi,kiosk}=false -Dsimple-clients=
-ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
-cd ..
-rm -rf weston
-
-git clone https://gitlab.freedesktop.org/mesa/piglit.git --depth 1
-
-git clone https://gitlab.freedesktop.org/xorg/test/xts --depth 1
+git clone https://gitlab.freedesktop.org/xorg/test/xts
 cd xts
+git checkout 12a887c2c72c4258962b56ced7b0aec782f1ffed
 ./autogen.sh
 xvfb-run make -j${FDO_CI_CONCURRENT:-4}
 cd ..
 
-git clone https://gitlab.freedesktop.org/xorg/test/rendercheck --depth 1
+git clone https://gitlab.freedesktop.org/xorg/test/rendercheck
 cd rendercheck
+git checkout 67a820621b1475ebfcf3d4f9d7f03a5fc3b9769a
 meson build
 ninja -j${FDO_CI_CONCURRENT:-4} -C build install
 cd ..
@@ -172,14 +179,6 @@ echo 'path=/root/xts' >> piglit/piglit.conf
 
 find -name \*.a -o -name \*.o -o -name \*.c -o -name \*.h -o -name \*.la\* | xargs rm
 strip xts/xts5/*/.libs/*
-
-# Running meson dist requires xkbcomp 1.4.1 or newer, but Debian buster has 1.4.0 only
-git clone https://gitlab.freedesktop.org/xorg/app/xkbcomp.git --depth 1 --branch=xkbcomp-1.4.1
-cd xkbcomp
-./autogen.sh --datarootdir=/usr/share
-make -j${FDO_CI_CONCURRENT:-4} install
-cd ..
-rm -rf xkbcomp
 
 apt-get purge -y \
 	$EPHEMERAL

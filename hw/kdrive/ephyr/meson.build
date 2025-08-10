@@ -23,19 +23,23 @@ xephyr_dep = [
 
 xephyr_glamor = []
 if build_glamor
-    srcs += 'ephyr_glamor_glx.c'
+    srcs += 'ephyr_glamor.c'
     if build_xv
         srcs += 'ephyr_glamor_xv.c'
     endif
     xephyr_glamor += glamor
-    xephyr_glamor += glamor_egl_stubs
-    xephyr_dep += dependency('x11-xcb')
     xephyr_dep += epoxy_dep
+    xephyr_dep += dependency('xcb-glx')
 endif
 
 if build_xv
     srcs += 'ephyrvideo.c'
     xephyr_dep += dependency('xcb-xv')
+endif
+
+# mingw needs this for nanosleep()
+if host_machine.system() == 'windows'
+    xephyr_dep += cc.find_library('pthread', required : true, static: true)
 endif
 
 xephyr_server = executable(

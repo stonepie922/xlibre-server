@@ -21,18 +21,20 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
+#include "miext/extinit_priv.h"
+#include "os/client_priv.h"
+#include "Xext/panoramiX.h"
+#include "Xext/panoramiXsrv.h"
 
 #include "damageextint.h"
 #include "damagestr.h"
 #include "protocol-versions.h"
-#include "extinit.h"
+#include "dixstruct_priv.h"
 
-#ifdef PANORAMIX
-#include "panoramiX.h"
-#include "panoramiXsrv.h"
+#ifdef XINERAMA
 
 typedef struct {
     DamageExtPtr ext;
@@ -40,9 +42,11 @@ typedef struct {
 } PanoramiXDamageRes;
 
 static RESTYPE XRT_DAMAGE;
-static int (*PanoramiXSaveDamageCreate) (ClientPtr);
+static int damageUseXinerama = 0;
 
-#endif
+static int PanoramiXDamageCreate(ClientPtr client, xDamageCreateReq *stuff);
+
+#endif /* XINERAMA */
 
 static unsigned char DamageReqCode;
 static int DamageEventBase;
@@ -51,6 +55,8 @@ static RESTYPE DamageExtType;
 static DevPrivateKeyRec DamageClientPrivateKeyRec;
 
 #define DamageClientPrivateKey (&DamageClientPrivateKeyRec)
+
+Bool noDamageExtension = FALSE;
 
 static void
 DamageNoteCritical(ClientPtr pClient)
@@ -67,7 +73,7 @@ DamageNoteCritical(ClientPtr pClient)
 static void
 damageGetGeometry(DrawablePtr draw, int *x, int *y, int *w, int *h)
 {
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension && draw->type == DRAWABLE_WINDOW) {
         WindowPtr win = (WindowPtr)draw;
 
@@ -79,7 +85,7 @@ damageGetGeometry(DrawablePtr draw, int *x, int *y, int *w, int *h)
             return;
         }
     }
-#endif
+#endif /* XINERAMA */
 
     *x = draw->x;
     *y = draw->y;
@@ -92,13 +98,12 @@ DamageExtNotify(DamageExtPtr pDamageExt, BoxPtr pBoxes, int nBoxes)
 {
     ClientPtr pClient = pDamageExt->pClient;
     DrawablePtr pDrawable = pDamageExt->pDrawable;
-    xDamageNotifyEvent ev;
     int i, x, y, w, h;
 
     damageGetGeometry(pDrawable, &x, &y, &w, &h);
 
     UpdateCurrentTimeIf();
-    ev = (xDamageNotifyEvent) {
+    xDamageNotifyEvent ev = {
         .type = DamageEventBase + XDamageNotify,
         .level = pDamageExt->level,
         .drawable = pDamageExt->drawable,
@@ -161,7 +166,7 @@ DamageExtDestroy(DamagePtr pDamage, void *closure)
 
     pDamageExt->pDamage = 0;
     if (pDamageExt->id)
-        FreeResource(pDamageExt->id, RT_NONE);
+        FreeResource(pDamageExt->id, X11_RESTYPE_NONE);
 }
 
 void
@@ -180,7 +185,6 @@ ProcDamageQueryVersion(ClientPtr client)
     xDamageQueryVersionReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
-        .length = 0
     };
 
     REQUEST(xDamageQueryVersionReq);
@@ -229,7 +233,7 @@ static DamageExtPtr
 DamageExtCreate(DrawablePtr pDrawable, DamageReportLevel level,
                 ClientPtr client, XID id, XID drawable)
 {
-    DamageExtPtr pDamageExt = malloc(sizeof(DamageExtRec));
+    DamageExtPtr pDamageExt = calloc(1, sizeof(DamageExtRec));
     if (!pDamageExt)
         return NULL;
 
@@ -255,13 +259,11 @@ DamageExtCreate(DrawablePtr pDrawable, DamageReportLevel level,
 }
 
 static DamageExtPtr
-doDamageCreate(ClientPtr client, int *rc)
+doDamageCreate(ClientPtr client, int *rc, xDamageCreateReq *stuff)
 {
     DrawablePtr pDrawable;
     DamageExtPtr pDamageExt;
     DamageReportLevel level;
-
-    REQUEST(xDamageCreateReq);
 
     *rc = dixLookupDrawable(&pDrawable, stuff->drawable, client, 0,
                             DixGetAttrAccess | DixReadAccess);
@@ -301,8 +303,14 @@ ProcDamageCreate(ClientPtr client)
     int rc;
     REQUEST(xDamageCreateReq);
     REQUEST_SIZE_MATCH(xDamageCreateReq);
+
+#ifdef XINERAMA
+    if (damageUseXinerama)
+        return PanoramiXDamageCreate(client, stuff);
+#endif
+
     LEGAL_NEW_RESOURCE(stuff->damage, client);
-    doDamageCreate(client, &rc);
+    doDamageCreate(client, &rc, stuff);
     return rc;
 }
 
@@ -313,12 +321,12 @@ ProcDamageDestroy(ClientPtr client)
     DamageExtPtr pDamageExt;
 
     REQUEST_SIZE_MATCH(xDamageDestroyReq);
-    VERIFY_DAMAGEEXT(pDamageExt, stuff->damage, client, DixWriteAccess);
-    FreeResource(stuff->damage, RT_NONE);
+    VERIFY_DAMAGEEXT(pDamageExt, stuff->damage, client, DixDestroyAccess);
+    FreeResource(stuff->damage, X11_RESTYPE_NONE);
     return Success;
 }
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
 static RegionPtr
 DamageExtSubtractWindowClip(DamageExtPtr pDamageExt)
 {
@@ -366,7 +374,7 @@ DamageExtFreeWindowClip(RegionPtr reg)
     if (reg != &PanoramiXScreenRegion)
         RegionDestroy(reg);
 }
-#endif
+#endif /* XINERAMA */
 
 /*
  * DamageSubtract intersects with borderClip, so we must reconstruct the
@@ -377,7 +385,7 @@ DamageExtSubtract(DamageExtPtr pDamageExt, const RegionPtr pRegion)
 {
     DamagePtr pDamage = pDamageExt->pDamage;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension) {
         RegionPtr damage = DamageRegion(pDamage);
         RegionSubtract(damage, damage, pRegion);
@@ -395,7 +403,7 @@ DamageExtSubtract(DamageExtPtr pDamageExt, const RegionPtr pRegion)
 
         return RegionNotEmpty(damage);
     }
-#endif
+#endif /* XINERAMA */
 
     return DamageSubtract(pDamage, pRegion);
 }
@@ -458,116 +466,98 @@ ProcDamageAdd(ClientPtr client)
     return Success;
 }
 
-/* Major version controls available requests */
-static const int version_requests[] = {
-    X_DamageQueryVersion,       /* before client sends QueryVersion */
-    X_DamageAdd,                /* Version 1 */
-};
-
-static int (*ProcDamageVector[XDamageNumberRequests]) (ClientPtr) = {
-    /*************** Version 1 ******************/
-    ProcDamageQueryVersion,
-    ProcDamageCreate,
-    ProcDamageDestroy,
-    ProcDamageSubtract,
-    /*************** Version 1.1 ****************/
-    ProcDamageAdd,
-};
-
 static int
 ProcDamageDispatch(ClientPtr client)
 {
-    REQUEST(xDamageReq);
-    DamageClientPtr pDamageClient = GetDamageClient(client);
-
-    if (pDamageClient->major_version >= ARRAY_SIZE(version_requests))
-        return BadRequest;
-    if (stuff->damageReqType > version_requests[pDamageClient->major_version])
-        return BadRequest;
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    REQUEST(xReq);
+    switch (stuff->data) {
+        /* version 1 */
+        case X_DamageQueryVersion:
+            return ProcDamageQueryVersion(client);
+        case X_DamageCreate:
+            return ProcDamageCreate(client);
+        case X_DamageDestroy:
+            return ProcDamageDestroy(client);
+        case X_DamageSubtract:
+            return ProcDamageSubtract(client);
+        /* version 1.1 */
+        case X_DamageAdd:
+            return ProcDamageAdd(client);
+        default:
+            return BadRequest;
+    }
 }
 
 static int _X_COLD
 SProcDamageQueryVersion(ClientPtr client)
 {
     REQUEST(xDamageQueryVersionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDamageQueryVersionReq);
     swapl(&stuff->majorVersion);
     swapl(&stuff->minorVersion);
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    return ProcDamageQueryVersion(client);
 }
 
 static int _X_COLD
 SProcDamageCreate(ClientPtr client)
 {
     REQUEST(xDamageCreateReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDamageCreateReq);
     swapl(&stuff->damage);
     swapl(&stuff->drawable);
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    return ProcDamageCreate(client);
 }
 
 static int _X_COLD
 SProcDamageDestroy(ClientPtr client)
 {
     REQUEST(xDamageDestroyReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDamageDestroyReq);
     swapl(&stuff->damage);
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    return ProcDamageDestroy(client);
 }
 
 static int _X_COLD
 SProcDamageSubtract(ClientPtr client)
 {
     REQUEST(xDamageSubtractReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDamageSubtractReq);
     swapl(&stuff->damage);
     swapl(&stuff->repair);
     swapl(&stuff->parts);
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    return ProcDamageSubtract(client);
 }
 
 static int _X_COLD
 SProcDamageAdd(ClientPtr client)
 {
     REQUEST(xDamageAddReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xDamageSubtractReq);
     swapl(&stuff->drawable);
     swapl(&stuff->region);
-    return (*ProcDamageVector[stuff->damageReqType]) (client);
+    return ProcDamageAdd(client);
 }
-
-static int (*SProcDamageVector[XDamageNumberRequests]) (ClientPtr) = {
-    /*************** Version 1 ******************/
-    SProcDamageQueryVersion,
-    SProcDamageCreate,
-    SProcDamageDestroy,
-    SProcDamageSubtract,
-    /*************** Version 1.1 ****************/
-    SProcDamageAdd,
-};
 
 static int _X_COLD
 SProcDamageDispatch(ClientPtr client)
 {
-    REQUEST(xDamageReq);
-    DamageClientPtr pDamageClient = GetDamageClient(client);
-
-    if (pDamageClient->major_version >= ARRAY_SIZE(version_requests))
-        return BadRequest;
-    if (stuff->damageReqType > version_requests[pDamageClient->major_version])
-        return BadRequest;
-    return (*SProcDamageVector[stuff->damageReqType]) (client);
+    REQUEST(xReq);
+    switch (stuff->data) {
+        /* version 1 */
+        case X_DamageQueryVersion:
+            return SProcDamageQueryVersion(client);
+        case X_DamageCreate:
+            return SProcDamageCreate(client);
+        case X_DamageDestroy:
+            return SProcDamageDestroy(client);
+        case X_DamageSubtract:
+            return SProcDamageSubtract(client);
+        /* version 1.1 */
+        case X_DamageAdd:
+            return SProcDamageAdd(client);
+        default:
+            return BadRequest;
+    }
 }
 
 static int
@@ -603,7 +593,7 @@ SDamageNotifyEvent(xDamageNotifyEvent * from, xDamageNotifyEvent * to)
     cpswaps(from->geometry.height, to->geometry.height);
 }
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
 
 static void
 PanoramiXDamageReport(DamagePtr pDamage, RegionPtr pRegion, void *closure)
@@ -636,15 +626,12 @@ PanoramiXDamageExtDestroy(DamagePtr pDamage, void *closure)
 }
 
 static int
-PanoramiXDamageCreate(ClientPtr client)
+PanoramiXDamageCreate(ClientPtr client, xDamageCreateReq *stuff)
 {
     PanoramiXDamageRes *damage;
     PanoramiXRes *draw;
     int i, rc;
 
-    REQUEST(xDamageCreateReq);
-
-    REQUEST_SIZE_MATCH(xDamageCreateReq);
     LEGAL_NEW_RESOURCE(stuff->damage, client);
     rc = dixLookupResourceByClass((void **)&draw, stuff->drawable, XRC_DRAWABLE,
                                   client, DixGetAttrAccess | DixReadAccess);
@@ -657,7 +644,7 @@ PanoramiXDamageCreate(ClientPtr client)
     if (!AddResource(stuff->damage, XRT_DAMAGE, damage))
         return BadAlloc;
 
-    damage->ext = doDamageCreate(client, &rc);
+    damage->ext = doDamageCreate(client, &rc, stuff);
     if (rc == Success && draw->type == XRT_WINDOW) {
         FOR_NSCREENS_FORWARD(i) {
             DrawablePtr pDrawable;
@@ -683,7 +670,7 @@ PanoramiXDamageCreate(ClientPtr client)
     }
 
     if (rc != Success)
-        FreeResource(stuff->damage, RT_NONE);
+        FreeResource(stuff->damage, X11_RESTYPE_NONE);
 
     return rc;
 }
@@ -712,17 +699,16 @@ PanoramiXDamageInit(void)
     if (!XRT_DAMAGE)
         FatalError("Couldn't Xineramify Damage extension\n");
 
-    PanoramiXSaveDamageCreate = ProcDamageVector[X_DamageCreate];
-    ProcDamageVector[X_DamageCreate] = PanoramiXDamageCreate;
+    damageUseXinerama = 1;
 }
 
 void
 PanoramiXDamageReset(void)
 {
-    ProcDamageVector[X_DamageCreate] = PanoramiXSaveDamageCreate;
+    damageUseXinerama = 0;
 }
 
-#endif /* PANORAMIX */
+#endif /* XINERAMA */
 
 void
 DamageExtensionInit(void)
@@ -751,10 +737,10 @@ DamageExtensionInit(void)
             (EventSwapPtr) SDamageNotifyEvent;
         SetResourceTypeErrorValue(DamageExtType,
                                   extEntry->errorBase + BadDamage);
-#ifdef PANORAMIX
+#ifdef XINERAMA
         if (XRT_DAMAGE)
             SetResourceTypeErrorValue(XRT_DAMAGE,
                                       extEntry->errorBase + BadDamage);
-#endif
+#endif /* XINERAMA */
     }
 }

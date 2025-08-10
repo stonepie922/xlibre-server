@@ -1,9 +1,11 @@
 srcs_dix = [
     'atom.c',
     'colormap.c',
+    'color.c',
     'cursor.c',
     'devices.c',
     'dispatch.c',
+    'display.c',
     'dixfonts.c',
     'main.c',
     'dixutils.c',
@@ -17,8 +19,8 @@ srcs_dix = [
     'globals.c',
     'glyphcurs.c',
     'grabs.c',
-    'initatoms.c',
     'inpututils.c',
+    'lookup.c',
     'pixmap.c',
     'privates.c',
     'property.c',
@@ -26,13 +28,22 @@ srcs_dix = [
     'region.c',
     'registry.c',
     'resource.c',
+    'screen_hooks.c',
     'selection.c',
+    'screen.c',
     'swaprep.c',
     'swapreq.c',
     'tables.c',
     'touch.c',
     'window.c',
 ]
+
+atom_generator = generator(
+    find_program('generate-atoms'),
+    output: '@BASENAME@.c',
+    arguments : ['@INPUT@', '@OUTPUT@'])
+
+builtinatoms_src = atom_generator.process('BuiltInAtoms')
 
 dtrace_src = []
 if with_dtrace
@@ -46,13 +57,13 @@ endif
 
 dtrace_dep = declare_dependency(sources: [dtrace_src, dtrace_hdr])
 
-libxserver_dix = static_library('libxserver_dix',
-    srcs_dix,
+libxserver_dix = static_library('xserver_dix',
+    [ srcs_dix, builtinatoms_src ],
     include_directories: inc,
     dependencies: [ dtrace_dep, common_dep, ]
 )
 
-libxserver_main = static_library('libxserver_main',
+libxserver_main = static_library('xserver_main',
     'stubmain.c',
     include_directories: inc,
     dependencies: common_dep,

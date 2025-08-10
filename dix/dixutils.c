@@ -80,20 +80,21 @@ Author:  Adobe Systems Incorporated
 
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/Xmd.h>
+
+#include "dix/callback_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/resource_priv.h"
+
 #include "misc.h"
 #include "windowstr.h"
 #include "dixstruct.h"
 #include "pixmapstr.h"
 #include "gcstruct.h"
 #include "scrnintstr.h"
-#define  XK_LATIN1
-#include <X11/keysymdef.h>
 #include "xace.h"
 
 /*
@@ -138,47 +139,6 @@ ClientTimeToServerTime(CARD32 c)
             ts.months += 1;
     }
     return ts;
-}
-
-/*
- * ISO Latin-1 case conversion routine
- *
- * this routine always null-terminates the result, so
- * beware of too-small buffers
- */
-
-static unsigned char
-ISOLatin1ToLower(unsigned char source)
-{
-    unsigned char dest;
-
-    if ((source >= XK_A) && (source <= XK_Z))
-        dest = source + (XK_a - XK_A);
-    else if ((source >= XK_Agrave) && (source <= XK_Odiaeresis))
-        dest = source + (XK_agrave - XK_Agrave);
-    else if ((source >= XK_Ooblique) && (source <= XK_Thorn))
-        dest = source + (XK_oslash - XK_Ooblique);
-    else
-        dest = source;
-    return dest;
-}
-
-int
-CompareISOLatin1Lowered(const unsigned char *s1, int s1len,
-                        const unsigned char *s2, int s2len)
-{
-    unsigned char c1, c2;
-
-    for (;;) {
-        /* note -- compare against zero so that -1 ignores len */
-        c1 = s1len-- ? *s1++ : '\0';
-        c2 = s2len-- ? *s2++ : '\0';
-        if (!c1 ||
-            (c1 != c2 &&
-             (c1 = ISOLatin1ToLower(c1)) != (c2 = ISOLatin1ToLower(c2))))
-            break;
-    }
-    return (int) c1 - (int) c2;
 }
 
 /*
@@ -236,21 +196,21 @@ dixLookupWindow(WindowPtr *pWin, XID id, ClientPtr client, Mask access)
 int
 dixLookupGC(GCPtr *pGC, XID id, ClientPtr client, Mask access)
 {
-    return dixLookupResourceByType((void **) pGC, id, RT_GC, client, access);
+    return dixLookupResourceByType((void **) pGC, id, X11_RESTYPE_GC, client, access);
 }
 
 int
 dixLookupFontable(FontPtr *pFont, XID id, ClientPtr client, Mask access)
 {
     int rc;
-    GC *pGC;
+    GCPtr pGC;
 
     client->errorValue = id;    /* EITHER font or gc */
-    rc = dixLookupResourceByType((void **) pFont, id, RT_FONT, client,
+    rc = dixLookupResourceByType((void **) pFont, id, X11_RESTYPE_FONT, client,
                                  access);
     if (rc != BadFont)
         return rc;
-    rc = dixLookupResourceByType((void **) &pGC, id, RT_GC, client, access);
+    rc = dixLookupResourceByType((void **) &pGC, id, X11_RESTYPE_GC, client, access);
     if (rc == BadGC)
         return BadFont;
     if (rc == Success)
@@ -259,32 +219,32 @@ dixLookupFontable(FontPtr *pFont, XID id, ClientPtr client, Mask access)
 }
 
 int
-dixLookupClient(ClientPtr *pClient, XID rid, ClientPtr client, Mask access)
+dixLookupResourceOwner(ClientPtr *result, XID id, ClientPtr client, Mask access_mode)
 {
     void *pRes;
-    int rc = BadValue, clientIndex = CLIENT_ID(rid);
+    int rc = BadValue, clientIndex = dixClientIdForXID(id);
 
-    if (!clientIndex || !clients[clientIndex] || (rid & SERVER_BIT))
+    if (!clientIndex || !clients[clientIndex] || (id & SERVER_BIT))
         goto bad;
 
-    rc = dixLookupResourceByClass(&pRes, rid, RC_ANY, client, DixGetAttrAccess);
+    rc = dixLookupResourceByClass(&pRes, id, RC_ANY, client, DixGetAttrAccess);
     if (rc != Success)
         goto bad;
 
-    rc = XaceHook(XACE_CLIENT_ACCESS, client, clients[clientIndex], access);
+    rc = XaceHookClientAccess(client, clients[clientIndex], access_mode);
     if (rc != Success)
         goto bad;
 
-    *pClient = clients[clientIndex];
+    *result = clients[clientIndex];
     return Success;
  bad:
     if (client)
-        client->errorValue = rid;
-    *pClient = NULL;
+        client->errorValue = id;
+    *result = NULL;
     return rc;
 }
 
-int
+XRetCode
 AlterSaveSetForClient(ClientPtr client, WindowPtr pWin, unsigned mode,
                       Bool toRoot, Bool map)
 {
@@ -375,7 +335,6 @@ static Bool handlerDeleted;
 /**
  *
  *  \param pTimeout   DIX doesn't want to know how OS represents time
- *  \param pReadMask  nor how it represents the det of descriptors
  */
 void
 BlockHandler(void *pTimeout)
@@ -525,6 +484,10 @@ ProcessWorkQueue(void)
 {
     WorkQueuePtr q, *p;
 
+    // don't have a work queue yet
+    if (!workQueue)
+        return;
+
     p = &workQueue;
     /*
      * Scan the work queue once, calling each function.  Those
@@ -569,9 +532,7 @@ Bool
 QueueWorkProc(Bool (*function) (ClientPtr pClient, void *closure),
               ClientPtr client, void *closure)
 {
-    WorkQueuePtr q;
-
-    q = malloc(sizeof *q);
+    WorkQueuePtr q = calloc(1, sizeof *q);
     if (!q)
         return FALSE;
     q->function = function;
@@ -603,9 +564,7 @@ static SleepQueuePtr sleepQueue = NULL;
 Bool
 ClientSleep(ClientPtr client, ClientSleepProcPtr function, void *closure)
 {
-    SleepQueuePtr q;
-
-    q = malloc(sizeof *q);
+    SleepQueuePtr q = calloc(1, sizeof *q);
     if (!q)
         return FALSE;
 
@@ -618,8 +577,7 @@ ClientSleep(ClientPtr client, ClientSleepProcPtr function, void *closure)
     return TRUE;
 }
 
-Bool
-ClientSignal(ClientPtr client)
+Bool dixClientSignal(ClientPtr client)
 {
     SleepQueuePtr q;
 
@@ -692,9 +650,7 @@ static CallbackListPtr **listsToCleanup = NULL;
 static Bool
 _AddCallback(CallbackListPtr *pcbl, CallbackProcPtr callback, void *data)
 {
-    CallbackPtr cbr;
-
-    cbr = malloc(sizeof(CallbackRec));
+    CallbackPtr cbr = calloc(1, sizeof(CallbackRec));
     if (!cbr)
         return FALSE;
     cbr->proc = callback;
@@ -782,25 +738,26 @@ _CallCallbacks(CallbackListPtr *pcbl, void *call_data)
     }
 }
 
-static void
-_DeleteCallbackList(CallbackListPtr *pcbl)
+void DeleteCallbackList(CallbackListPtr *pcbl)
 {
+    if (!pcbl || !*pcbl)
+        return;
+
     CallbackListPtr cbl = *pcbl;
-    CallbackPtr cbr, nextcbr;
-    int i;
 
     if (cbl->inCallback) {
         cbl->deleted = TRUE;
         return;
     }
 
-    for (i = 0; i < numCallbackListsToCleanup; i++) {
+    for (int i = 0; i < numCallbackListsToCleanup; i++) {
         if (listsToCleanup[i] == pcbl) {
             listsToCleanup[i] = NULL;
             break;
         }
     }
 
+    CallbackPtr cbr, nextcbr;
     for (cbr = cbl->list; cbr != NULL; cbr = nextcbr) {
         nextcbr = cbr->next;
         free(cbr);
@@ -812,12 +769,12 @@ _DeleteCallbackList(CallbackListPtr *pcbl)
 static Bool
 CreateCallbackList(CallbackListPtr *pcbl)
 {
-    CallbackListPtr cbl;
     int i;
 
     if (!pcbl)
         return FALSE;
-    cbl = malloc(sizeof(CallbackListRec));
+
+    CallbackListPtr cbl = calloc(1, sizeof(CallbackListRec));
     if (!cbl)
         return FALSE;
     cbl->inCallback = 0;
@@ -833,7 +790,7 @@ CreateCallbackList(CallbackListPtr *pcbl)
         }
     }
 
-    listsToCleanup = (CallbackListPtr **) xnfrealloc(listsToCleanup,
+    listsToCleanup = (CallbackListPtr **) XNFrealloc(listsToCleanup,
                                                      sizeof(CallbackListPtr *) *
                                                      (numCallbackListsToCleanup
                                                       + 1));
@@ -862,14 +819,6 @@ DeleteCallback(CallbackListPtr *pcbl, CallbackProcPtr callback, void *data)
     if (!pcbl || !*pcbl)
         return FALSE;
     return _DeleteCallback(pcbl, callback, data);
-}
-
-void
-DeleteCallbackList(CallbackListPtr *pcbl)
-{
-    if (!pcbl || !*pcbl)
-        return;
-    _DeleteCallbackList(pcbl);
 }
 
 void

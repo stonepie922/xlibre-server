@@ -37,9 +37,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#ifdef __CYGWIN__
-#include <sys/select.h>
-#endif
 #include <fcntl.h>
 #include <setjmp.h>
 #define HANDLE void *
@@ -77,8 +74,8 @@ extern void winDebug(const char *format, ...);
 extern void winReshapeMultiWindow(WindowPtr pWin);
 extern void winUpdateRgnMultiWindow(WindowPtr pWin);
 
-#ifndef CYGDEBUG
-#define CYGDEBUG NO
+#ifndef ENABLE_DEBUG
+#define ENABLE_DEBUG NO
 #endif
 
 /*
@@ -87,9 +84,6 @@ extern void winUpdateRgnMultiWindow(WindowPtr pWin);
 
 #define WIN_CONNECT_RETRIES	5
 #define WIN_CONNECT_DELAY	5
-#ifdef HAS_DEVWINDOWS
-#define WIN_MSG_QUEUE_FNAME	"/dev/windows"
-#endif
 
 /*
  * Local structures
@@ -189,7 +183,7 @@ static Bool g_shutdown = FALSE;
  * Translate msg id to text, for debug purposes
  */
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
 static const char *
 MessageName(winWMMessagePtr msg)
 {
@@ -386,7 +380,7 @@ GetWindowName(WMInfoPtr pWMInfo, xcb_window_t iWin, char **ppWindowName)
     xcb_connection_t *conn = pWMInfo->conn;
     char *pszWindowName = NULL;
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
     ErrorF("GetWindowName\n");
 #endif
 
@@ -458,7 +452,7 @@ GetWindowName(WMInfoPtr pWMInfo, xcb_window_t iWin, char **ppWindowName)
                 (strstr(pszWindowName, pszClientHostname) == 0)) {
                 /* ... add '@<clientmachine>' to end of window name */
                 *ppWindowName =
-                    malloc(strlen(pszWindowName) +
+                    calloc(1, strlen(pszWindowName) +
                            strlen(pszClientMachine) + 2);
                 strcpy(*ppWindowName, pszWindowName);
                 strcat(*ppWindowName, "@");
@@ -634,8 +628,7 @@ UpdateName(WMInfoPtr pWMInfo, xcb_window_t iWindow)
             /* Convert from UTF-8 to wide char */
             int iLen =
                 MultiByteToWideChar(CP_UTF8, 0, pszWindowName, -1, NULL, 0);
-            wchar_t *pwszWideWindowName =
-                malloc(sizeof(wchar_t)*(iLen + 1));
+            wchar_t *pwszWideWindowName = calloc(iLen + 1, sizeof(wchar_t));
             MultiByteToWideChar(CP_UTF8, 0, pszWindowName, -1,
                                 pwszWideWindowName, iLen);
 
@@ -791,7 +784,7 @@ winMultiWindowWMProc(void *pArg)
     /* Initialize the Window Manager */
     winInitMultiWindowWM(pWMInfo, pProcArg);
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
     ErrorF("winMultiWindowWMProc ()\n");
 #endif
 
@@ -808,7 +801,7 @@ winMultiWindowWMProc(void *pArg)
             pthread_exit(NULL);
         }
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
         ErrorF("winMultiWindowWMProc - MSG: %s (%d) ID: %d\n",
                MessageName(&(pNode->msg)), (int)pNode->msg.msg, (int)pNode->msg.dwID);
 #endif
@@ -1002,7 +995,7 @@ winMultiWindowWMProc(void *pArg)
     /* Free the passed-in argument */
     free(pProcArg);
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
     ErrorF("-winMultiWindowWMProc ()\n");
 #endif
     return NULL;
@@ -1395,23 +1388,18 @@ winInitWM(void **ppWMInfo,
           pthread_mutex_t * ppmServerStarted,
           int dwScreen, HWND hwndScreen, Bool compositeWM)
 {
-    WMProcArgPtr pArg = malloc(sizeof(WMProcArgRec));
-    WMInfoPtr pWMInfo = malloc(sizeof(WMInfoRec));
-    XMsgProcArgPtr pXMsgArg = malloc(sizeof(XMsgProcArgRec));
+    WMProcArgPtr pArg = calloc(1, sizeof(WMProcArgRec));
+    WMInfoPtr pWMInfo = calloc(1, sizeof(WMInfoRec));
+    XMsgProcArgPtr pXMsgArg = calloc(1, sizeof(XMsgProcArgRec));
 
     /* Bail if the input parameters are bad */
     if (pArg == NULL || pWMInfo == NULL || pXMsgArg == NULL) {
-        ErrorF("winInitWM - malloc failed.\n");
+        ErrorF("winInitWM - calloc failed.\n");
         free(pArg);
         free(pWMInfo);
         free(pXMsgArg);
         return FALSE;
     }
-
-    /* Zero the allocated memory */
-    ZeroMemory(pArg, sizeof(WMProcArgRec));
-    ZeroMemory(pWMInfo, sizeof(WMInfoRec));
-    ZeroMemory(pXMsgArg, sizeof(XMsgProcArgRec));
 
     /* Set a return pointer to the Window Manager info structure */
     *ppWMInfo = pWMInfo;
@@ -1446,7 +1434,7 @@ winInitWM(void **ppWMInfo,
         return FALSE;
     }
 
-#if CYGDEBUG || YES
+#if ENABLE_DEBUG || YES
     winDebug("winInitWM - Returning.\n");
 #endif
 
@@ -1634,13 +1622,12 @@ winInitMultiWindowWM(WMInfoPtr pWMInfo, WMProcArgPtr pProcArg)
 void
 winSendMessageToWM(void *pWMInfo, winWMMessagePtr pMsg)
 {
-    WMMsgNodePtr pNode;
 
-#if CYGMULTIWINDOW_DEBUG
+#if ENABLE_DEBUG
     ErrorF("winSendMessageToWM %s\n", MessageName(pMsg));
 #endif
 
-    pNode = malloc(sizeof(WMMsgNodeRec));
+    WMMsgNodePtr pNode = calloc(1, sizeof(WMMsgNodeRec));
     if (pNode != NULL) {
         memcpy(&pNode->msg, pMsg, sizeof(winWMMessageRec));
         PushMessage(&((WMInfoPtr) pWMInfo)->wmMsgQueue, pNode);

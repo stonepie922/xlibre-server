@@ -50,18 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/exevents_priv.h"
+#include "dix/input_priv.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
-#include "exevents.h"
 #include "exglobals.h"
 #include "xace.h"
-
 #include "grabdev.h"
 #include "grabdevk.h"
 
@@ -75,7 +75,6 @@ int _X_COLD
 SProcXGrabDeviceKey(ClientPtr client)
 {
     REQUEST(xGrabDeviceKeyReq);
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xGrabDeviceKeyReq);
     swapl(&stuff->grabWindow);
     swaps(&stuff->modifiers);
@@ -99,13 +98,12 @@ ProcXGrabDeviceKey(ClientPtr client)
     DeviceIntPtr mdev;
     XEventClass *class;
     struct tmask tmp[EMASKSIZE];
-    GrabParameters param;
     GrabMask mask;
 
     REQUEST(xGrabDeviceKeyReq);
     REQUEST_AT_LEAST_SIZE(xGrabDeviceKeyReq);
 
-    if (stuff->length !=
+    if (client->req_len !=
         bytes_to_int32(sizeof(xGrabDeviceKeyReq)) + stuff->event_count)
         return BadLength;
 
@@ -123,7 +121,7 @@ ProcXGrabDeviceKey(ClientPtr client)
     }
     else {
         mdev = PickKeyboard(client);
-        ret = XaceHook(XACE_DEVICE_ACCESS, client, mdev, DixUseAccess);
+        ret = XaceHookDeviceAccess(client, mdev, DixUseAccess);
         if (ret != Success)
             return ret;
     }
@@ -135,7 +133,7 @@ ProcXGrabDeviceKey(ClientPtr client)
                                   X_GrabDeviceKey)) != Success)
         return ret;
 
-    param = (GrabParameters) {
+    GrabParameters param = {
         .grabtype = XI,
         .ownerEvents = stuff->ownerEvents,
         .this_device_mode = stuff->this_device_mode,

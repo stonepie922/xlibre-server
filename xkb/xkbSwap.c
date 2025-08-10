@@ -24,19 +24,19 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "stdio.h"
 #include <X11/X.h>
 #include <X11/Xproto.h>
+
+#include "xkb/xkbsrv_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
-#include <xkbsrv.h>
 #include "xkbstr.h"
 #include "extnsionst.h"
-#include "xkb.h"
+#include "xkb-procs.h"
 
         /*
          * REQUEST SWAPPING
@@ -45,8 +45,6 @@ static int _X_COLD
 SProcXkbUseExtension(ClientPtr client)
 {
     REQUEST(xkbUseExtensionReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbUseExtensionReq);
     swaps(&stuff->wantedMajor);
     swaps(&stuff->wantedMinor);
@@ -57,8 +55,6 @@ static int _X_COLD
 SProcXkbSelectEvents(ClientPtr client)
 {
     REQUEST(xkbSelectEventsReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSelectEventsReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->affectWhich);
@@ -73,10 +69,10 @@ SProcXkbSelectEvents(ClientPtr client)
             CARD16 *c16;
             CARD32 *c32;
         } from;
-        register unsigned bit, ndx, maskLeft, dataLeft, size;
+        register unsigned bit, ndx, maskLeft, dataLeft;
 
         from.c8 = (CARD8 *) &stuff[1];
-        dataLeft = (client->req_len * 4) - SIZEOF(xkbSelectEventsReq);
+        dataLeft = (client->req_len * 4) - sizeof(xkbSelectEventsReq);
         maskLeft = (stuff->affectWhich & (~XkbMapNotifyMask));
         for (ndx = 0, bit = 1; (maskLeft != 0); ndx++, bit <<= 1) {
             if (((bit & maskLeft) == 0) || (ndx == XkbMapNotify))
@@ -85,42 +81,43 @@ SProcXkbSelectEvents(ClientPtr client)
             if ((stuff->selectAll & bit) || (stuff->clear & bit))
                 continue;
             switch (ndx) {
+            // CARD16
             case XkbNewKeyboardNotify:
             case XkbStateNotify:
             case XkbNamesNotify:
             case XkbAccessXNotify:
             case XkbExtensionDeviceNotify:
-                size = 2;
+                if (dataLeft < sizeof(CARD16)*2)
+                    return BadLength;
+                swaps(&from.c16[0]);
+                swaps(&from.c16[1]);
+                from.c8 += sizeof(CARD16)*2;
+                dataLeft -= sizeof(CARD16)*2;
                 break;
+            // CARD32
             case XkbControlsNotify:
             case XkbIndicatorStateNotify:
             case XkbIndicatorMapNotify:
-                size = 4;
+                if (dataLeft < sizeof(CARD32)*2)
+                    return BadLength;
+                swapl(&from.c32[0]);
+                swapl(&from.c32[1]);
+                from.c8 += sizeof(CARD32)*2;
+                dataLeft -= sizeof(CARD32)*2;
                 break;
+            // CARD8
             case XkbBellNotify:
             case XkbActionMessage:
             case XkbCompatMapNotify:
-                size = 1;
+                if (dataLeft < 2)
+                    return BadLength;
+                from.c8 += 4;
+                dataLeft -= 4;
                 break;
             default:
                 client->errorValue = _XkbErrCode2(0x1, bit);
                 return BadValue;
             }
-            if (dataLeft < (size * 2))
-                return BadLength;
-            if (size == 2) {
-                swaps(&from.c16[0]);
-                swaps(&from.c16[1]);
-            }
-            else if (size == 4) {
-                swapl(&from.c32[0]);
-                swapl(&from.c32[1]);
-            }
-            else {
-                size = 2;
-            }
-            from.c8 += (size * 2);
-            dataLeft -= (size * 2);
         }
         if (dataLeft > 2) {
             ErrorF("[xkb] Extra data (%d bytes) after SelectEvents\n",
@@ -135,8 +132,6 @@ static int _X_COLD
 SProcXkbBell(ClientPtr client)
 {
     REQUEST(xkbBellReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbBellReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->bellClass);
@@ -152,8 +147,6 @@ static int _X_COLD
 SProcXkbGetState(ClientPtr client)
 {
     REQUEST(xkbGetStateReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetStateReq);
     swaps(&stuff->deviceSpec);
     return ProcXkbGetState(client);
@@ -163,8 +156,6 @@ static int _X_COLD
 SProcXkbLatchLockState(ClientPtr client)
 {
     REQUEST(xkbLatchLockStateReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbLatchLockStateReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->groupLatch);
@@ -175,8 +166,6 @@ static int _X_COLD
 SProcXkbGetControls(ClientPtr client)
 {
     REQUEST(xkbGetControlsReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetControlsReq);
     swaps(&stuff->deviceSpec);
     return ProcXkbGetControls(client);
@@ -186,8 +175,6 @@ static int _X_COLD
 SProcXkbSetControls(ClientPtr client)
 {
     REQUEST(xkbSetControlsReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbSetControlsReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->affectInternalVMods);
@@ -219,8 +206,6 @@ static int _X_COLD
 SProcXkbGetMap(ClientPtr client)
 {
     REQUEST(xkbGetMapReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetMapReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->full);
@@ -233,8 +218,6 @@ static int _X_COLD
 SProcXkbSetMap(ClientPtr client)
 {
     REQUEST(xkbSetMapReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetMapReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->present);
@@ -249,8 +232,6 @@ static int _X_COLD
 SProcXkbGetCompatMap(ClientPtr client)
 {
     REQUEST(xkbGetCompatMapReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetCompatMapReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->firstSI);
@@ -262,8 +243,6 @@ static int _X_COLD
 SProcXkbSetCompatMap(ClientPtr client)
 {
     REQUEST(xkbSetCompatMapReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetCompatMapReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->firstSI);
@@ -275,8 +254,6 @@ static int _X_COLD
 SProcXkbGetIndicatorState(ClientPtr client)
 {
     REQUEST(xkbGetIndicatorStateReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetIndicatorStateReq);
     swaps(&stuff->deviceSpec);
     return ProcXkbGetIndicatorState(client);
@@ -286,8 +263,6 @@ static int _X_COLD
 SProcXkbGetIndicatorMap(ClientPtr client)
 {
     REQUEST(xkbGetIndicatorMapReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetIndicatorMapReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->which);
@@ -298,8 +273,6 @@ static int _X_COLD
 SProcXkbSetIndicatorMap(ClientPtr client)
 {
     REQUEST(xkbSetIndicatorMapReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetIndicatorMapReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->which);
@@ -310,8 +283,6 @@ static int _X_COLD
 SProcXkbGetNamedIndicator(ClientPtr client)
 {
     REQUEST(xkbGetNamedIndicatorReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetNamedIndicatorReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->ledClass);
@@ -324,8 +295,6 @@ static int _X_COLD
 SProcXkbSetNamedIndicator(ClientPtr client)
 {
     REQUEST(xkbSetNamedIndicatorReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbSetNamedIndicatorReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->ledClass);
@@ -340,8 +309,6 @@ static int _X_COLD
 SProcXkbGetNames(ClientPtr client)
 {
     REQUEST(xkbGetNamesReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetNamesReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->which);
@@ -352,8 +319,6 @@ static int _X_COLD
 SProcXkbSetNames(ClientPtr client)
 {
     REQUEST(xkbSetNamesReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetNamesReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->virtualMods);
@@ -367,8 +332,6 @@ static int _X_COLD
 SProcXkbGetGeometry(ClientPtr client)
 {
     REQUEST(xkbGetGeometryReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetGeometryReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->name);
@@ -379,8 +342,6 @@ static int _X_COLD
 SProcXkbSetGeometry(ClientPtr client)
 {
     REQUEST(xkbSetGeometryReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetGeometryReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->name);
@@ -397,8 +358,6 @@ static int _X_COLD
 SProcXkbPerClientFlags(ClientPtr client)
 {
     REQUEST(xkbPerClientFlagsReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbPerClientFlagsReq);
     swaps(&stuff->deviceSpec);
     swapl(&stuff->change);
@@ -413,8 +372,6 @@ static int _X_COLD
 SProcXkbListComponents(ClientPtr client)
 {
     REQUEST(xkbListComponentsReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbListComponentsReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->maxNames);
@@ -425,8 +382,6 @@ static int _X_COLD
 SProcXkbGetKbdByName(ClientPtr client)
 {
     REQUEST(xkbGetKbdByNameReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbGetKbdByNameReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->want);
@@ -438,8 +393,6 @@ static int _X_COLD
 SProcXkbGetDeviceInfo(ClientPtr client)
 {
     REQUEST(xkbGetDeviceInfoReq);
-
-    swaps(&stuff->length);
     REQUEST_SIZE_MATCH(xkbGetDeviceInfoReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->wanted);
@@ -452,8 +405,6 @@ static int _X_COLD
 SProcXkbSetDeviceInfo(ClientPtr client)
 {
     REQUEST(xkbSetDeviceInfoReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetDeviceInfoReq);
     swaps(&stuff->deviceSpec);
     swaps(&stuff->change);
@@ -465,8 +416,6 @@ static int _X_COLD
 SProcXkbSetDebuggingFlags(ClientPtr client)
 {
     REQUEST(xkbSetDebuggingFlagsReq);
-
-    swaps(&stuff->length);
     REQUEST_AT_LEAST_SIZE(xkbSetDebuggingFlagsReq);
     swapl(&stuff->affectFlags);
     swapl(&stuff->flags);

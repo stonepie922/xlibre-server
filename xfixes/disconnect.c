@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  * Copyright 2010 Red Hat, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -42,12 +42,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/dix_priv.h"
 
 #include "xfixesint.h"
-#include "opaque.h"
 
 static DevPrivateKeyRec ClientDisconnectPrivateKeyRec;
 
@@ -78,49 +77,33 @@ int _X_COLD
 SProcXFixesSetClientDisconnectMode(ClientPtr client)
 {
     REQUEST(xXFixesSetClientDisconnectModeReq);
-
-    swaps(&stuff->length);
-
     REQUEST_SIZE_MATCH(xXFixesSetClientDisconnectModeReq);
 
     swapl(&stuff->disconnect_mode);
 
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
+    return ProcXFixesSetClientDisconnectMode(client);
 }
 
 int
 ProcXFixesGetClientDisconnectMode(ClientPtr client)
 {
     ClientDisconnectPtr pDisconnect = GetClientDisconnect(client);
-    xXFixesGetClientDisconnectModeReply reply;
 
     REQUEST_SIZE_MATCH(xXFixesGetClientDisconnectModeReq);
 
-    reply = (xXFixesGetClientDisconnectModeReply) {
+    xXFixesGetClientDisconnectModeReply rep = {
         .type = X_Reply,
         .sequenceNumber = client->sequence,
         .length = 0,
         .disconnect_mode = pDisconnect->disconnect_mode,
     };
     if (client->swapped) {
-        swaps(&reply.sequenceNumber);
-        swapl(&reply.disconnect_mode);
+        swaps(&rep.sequenceNumber);
+        swapl(&rep.disconnect_mode);
     }
-    WriteToClient(client, sizeof(xXFixesGetClientDisconnectModeReply), &reply);
+    WriteToClient(client, sizeof(rep), &rep);
 
     return Success;
-}
-
-int _X_COLD
-SProcXFixesGetClientDisconnectMode(ClientPtr client)
-{
-    REQUEST(xXFixesGetClientDisconnectModeReq);
-
-    swaps(&stuff->length);
-
-    REQUEST_SIZE_MATCH(xXFixesGetClientDisconnectModeReq);
-
-    return (*ProcXFixesVector[stuff->xfixesReqType]) (client);
 }
 
 Bool

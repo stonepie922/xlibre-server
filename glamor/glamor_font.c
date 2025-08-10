@@ -20,6 +20,12 @@
  * OF THIS SOFTWARE.
  */
 
+#include <dix-config.h>
+
+#include <stddef.h>
+#include <X11/fonts/fontstruct.h> // libxfont2.h missed to include that
+#include <X11/fonts/libxfont2.h>
+
 #include "glamor_priv.h"
 #include "glamor_font.h"
 #include <dixfontstr.h>
@@ -45,7 +51,6 @@ glamor_font_get(ScreenPtr screen, FontPtr font)
     unsigned char       c[2];
     CharInfoPtr         glyph;
     unsigned long       count;
-    char                *bits;
 
     if (!glamor_glsl_has_ints(glamor_priv))
         return NULL;
@@ -96,7 +101,7 @@ glamor_font_get(ScreenPtr screen, FontPtr font)
         /* fallback if we don't fit inside a texture */
         return NULL;
     }
-    bits = malloc(overall_width * overall_height);
+    char *bits = calloc(overall_width, overall_height);
     if (!bits)
         return NULL;
 

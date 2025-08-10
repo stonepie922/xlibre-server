@@ -20,13 +20,24 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "config/hotplug_priv.h"
+#include "dix/screenint_priv.h"
+#include "os/cmdline.h"
+#include "os/ddx_priv.h"
+
+#include "mi/mi_priv.h"
+#include "os/osdep.h"
+
 #include "kdrive.h"
 #include <mivalidate.h>
 #include <dixstruct.h>
 #include "privates.h"
+
+/* workaround for <windows.h> being included somewhere and conflicting with us */
+#undef CreateWindow
+
 #ifdef RANDR
 #include <randrstr.h>
 #endif
@@ -44,13 +55,9 @@
 #include <execinfo.h>
 #endif
 
-#if defined(CONFIG_UDEV) || defined(CONFIG_HAL)
-#include <hotplug.h>
-#endif
-
 /* This stub can be safely removed once we can
  * split input and GPU parts in hotplug.h et al. */
-#include <systemd-logind.h>
+#include "../../xfree86/os-support/linux/systemd-logind.h"
 
 typedef struct _kdDepths {
     CARD8 depth;
@@ -352,7 +359,7 @@ KdUseMsg(void)
     ErrorF
         ("-rgba rgb/bgr/vrgb/vbgr/none   Specify subpixel ordering for LCD panels\n");
     ErrorF
-        ("-mouse driver [,n,,options]    Specify the pointer driver and its options (n is the number of buttons)\n");
+        ("-mouse driver [,n,options]    Specify the pointer driver and its options (n is the number of buttons)\n");
     ErrorF
         ("-keybd driver [,,options]      Specify the keyboard driver and its options\n");
     ErrorF("-xkb-rules       Set default XkbRules value (can be overridden by -keybd options)\n");
@@ -369,7 +376,7 @@ KdUseMsg(void)
     ErrorF("-softCursor      Force software cursor\n");
     ErrorF("-videoTest       Start the server, pause momentarily and exit\n");
     ErrorF
-        ("-origin X,Y      Locates the next screen in the the virtual screen (Xinerama)\n");
+        ("-origin X,Y      Locates the next screen in the virtual screen (Xinerama)\n");
     ErrorF("-switchCmd       Command to execute on vt switch\n");
     ErrorF
         ("vtxx             Use virtual terminal xx instead of the next available\n");
@@ -536,22 +543,17 @@ KdCreateScreenResources(ScreenPtr pScreen)
 {
     KdScreenPriv(pScreen);
     KdCardInfo *card = pScreenPriv->card;
-    Bool ret;
 
-    pScreen->CreateScreenResources = pScreenPriv->CreateScreenResources;
-    if (pScreen->CreateScreenResources)
-        ret = (*pScreen->CreateScreenResources) (pScreen);
-    else
-        ret = -1;
-    pScreenPriv->CreateScreenResources = pScreen->CreateScreenResources;
-    pScreen->CreateScreenResources = KdCreateScreenResources;
-    if (ret && card->cfuncs->createRes)
-        ret = (*card->cfuncs->createRes) (pScreen);
-    return ret;
+    if (!miCreateScreenResources(pScreen))
+        return FALSE;
+
+    if (card->cfuncs->createRes)
+        return card->cfuncs->createRes(pScreen);
+
+    return TRUE;
 }
 
-static Bool
-KdCloseScreen(ScreenPtr pScreen)
+Bool KdCloseScreen(ScreenPtr pScreen)
 {
     KdScreenPriv(pScreen);
     KdScreenInfo *screen = pScreenPriv->screen;
@@ -562,12 +564,8 @@ KdCloseScreen(ScreenPtr pScreen)
         (*card->cfuncs->closeScreen)(pScreen);
 
     pScreenPriv->closed = TRUE;
-    pScreen->CloseScreen = pScreenPriv->CloseScreen;
 
-    if (pScreen->CloseScreen)
-        ret = (*pScreen->CloseScreen) (pScreen);
-    else
-        ret = TRUE;
+    ret = fbCloseScreen(pScreen);
 
     if (screen->mynum == card->selected)
         KdDisableScreen(pScreen);
@@ -608,7 +606,6 @@ KdSaveScreen(ScreenPtr pScreen, int on)
 static Bool
 KdCreateWindow(WindowPtr pWin)
 {
-#ifndef PHOENIX
     if (!pWin->parent) {
         KdScreenPriv(pWin->drawable.pScreen);
 
@@ -617,7 +614,6 @@ KdCreateWindow(WindowPtr pWin)
             RegionBreak(&pWin->clipList);
         }
     }
-#endif
     return fbCreateWindow(pWin);
 }
 
@@ -786,15 +782,7 @@ KdScreenInit(ScreenPtr pScreen, int argc, char **argv)
         if (!(*card->cfuncs->finishInitScreen) (pScreen))
             return FALSE;
 
-    /*
-     * Wrap CloseScreen, the order now is:
-     *  KdCloseScreen
-     *  fbCloseScreen
-     */
-    pScreenPriv->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = KdCloseScreen;
-
-    pScreenPriv->CreateScreenResources = pScreen->CreateScreenResources;
     pScreen->CreateScreenResources = KdCreateScreenResources;
 
     if (screen->softCursor ||

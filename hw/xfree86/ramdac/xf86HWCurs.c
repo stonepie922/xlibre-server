@@ -4,12 +4,14 @@
 #endif
 
 #include <string.h>
+#include <X11/X.h>
+
+#include "dix/colormap_priv.h"
+#include "randr/randrstr_priv.h"
 
 #include "misc.h"
 #include "xf86.h"
 #include "xf86_OSproc.h"
-
-#include <X11/X.h>
 #include "scrnintstr.h"
 #include "pixmapstr.h"
 #include "windowstr.h"
@@ -17,9 +19,7 @@
 #include "cursorstr.h"
 #include "mi.h"
 #include "mipointer.h"
-#include "randrstr.h"
 #include "xf86CursorPriv.h"
-
 #include "servermd.h"
 
 static void
@@ -197,15 +197,15 @@ xf86ScreenSetCursor(ScreenPtr pScreen, CursorPtr pCurs, int x, int y)
     }
 
     /*
-     * Hot plugged GPU's do not have a CursorScreenKey, force sw cursor.
+     * Hot plugged GPU's do not have a xf86ScreenCursorBitsKeyRec, force sw cursor.
      * This check can be removed once dix/privates.c gets relocation code for
      * PRIVATE_CURSOR. Also see the related comment in AddGPUScreen().
      */
-    if (!_dixGetScreenPrivateKey(CursorScreenKey, pScreen))
+    if (!_dixGetScreenPrivateKey(&xf86ScreenCursorBitsKeyRec, pScreen))
         return FALSE;
 
-    bits =
-        dixLookupScreenPrivate(&pCurs->devPrivates, CursorScreenKey, pScreen);
+    bits = dixLookupScreenPrivate(&pCurs->devPrivates,
+                                  &xf86ScreenCursorBitsKeyRec, pScreen);
 
     x -= infoPtr->pScrn->frameX0;
     y -= infoPtr->pScrn->frameY0;
@@ -213,8 +213,8 @@ xf86ScreenSetCursor(ScreenPtr pScreen, CursorPtr pCurs, int x, int y)
     if (!pCurs->bits->argb || !xf86DriverHasLoadCursorARGB(infoPtr))
         if (!bits) {
             bits = (*infoPtr->RealizeCursor) (infoPtr, pCurs);
-            dixSetScreenPrivate(&pCurs->devPrivates, CursorScreenKey, pScreen,
-                                bits);
+            dixSetScreenPrivate(&pCurs->devPrivates,
+                                &xf86ScreenCursorBitsKeyRec, pScreen, bits);
         }
 
     if (!(infoPtr->Flags & HARDWARE_CURSOR_UPDATE_UNHIDDEN))

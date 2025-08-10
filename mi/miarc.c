@@ -46,22 +46,22 @@ SOFTWARE.
 /* Author: Keith Packard and Bob Scheifler */
 /* Warning: this code is toxic, do not dally very long here. */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <math.h>
 #include <X11/X.h>
 #include <X11/Xprotostr.h>
+#include <X11/Xfuncproto.h>
+
+#include "mi/mi_priv.h"
+
 #include "misc.h"
 #include "gcstruct.h"
 #include "scrnintstr.h"
 #include "pixmapstr.h"
 #include "windowstr.h"
 #include "mifpoly.h"
-#include "mi.h"
 #include "mifillarc.h"
-#include <X11/Xfuncproto.h>
 
 #define EPSILON	0.000001
 #define ISEQUAL(a,b) (fabs((a) - (b)) <= EPSILON)
@@ -747,13 +747,12 @@ tailX(double K,
 static miArcSpanData *
 miComputeWideEllipse(int lw, xArc * parc)
 {
-    miArcSpanData *spdata = NULL;
     int k;
 
     if (!lw)
         lw = 1;
     k = (parc->height >> 1) + ((lw - 1) >> 1);
-    spdata = malloc(sizeof(miArcSpanData) + sizeof(miArcSpan) * (k + 2));
+    miArcSpanData *spdata = calloc(1, sizeof(miArcSpanData) + sizeof(miArcSpan) * (k + 2));
     if (!spdata)
         return NULL;
     spdata->spans = (miArcSpan *) (spdata + 1);
@@ -772,7 +771,6 @@ miFillWideEllipse(DrawablePtr pDraw, GCPtr pGC, xArc * parc)
 {
     DDXPointPtr points;
     DDXPointPtr pts;
-    int *widths;
     int *wids;
     miArcSpanData *spdata;
     miArcSpan *span;
@@ -781,7 +779,7 @@ miFillWideEllipse(DrawablePtr pDraw, GCPtr pGC, xArc * parc)
 
     yorgu = parc->height + pGC->lineWidth;
     n = (sizeof(int) * 2) * yorgu;
-    widths = malloc(n + (sizeof(DDXPointRec) * 2) * yorgu);
+    int *widths = calloc(1, n + (sizeof(DDXPointRec) * 2) * yorgu);
     if (!widths)
         return;
     points = (DDXPointPtr) ((char *) widths + n);
@@ -1112,7 +1110,7 @@ miWideArc(DrawablePtr pDraw, GCPtr pGC, int narcs, xArc * parcs)
 
 out:
     if (fTricky) {
-        (*pGCTo->pScreen->DestroyPixmap) ((PixmapPtr) pDrawTo);
+        dixDestroyPixmap((PixmapPtr) pDrawTo, 0);
         FreeScratchGC(pGCTo);
     }
 }
@@ -1193,9 +1191,9 @@ miFillSppPoly(DrawablePtr dst, GCPtr pgc, int count,    /* number of points */
     y = ymax - ymin + 1;
     if ((count < 3) || (y <= 0))
         return;
-    ptsOut = FirstPoint = xallocarray(y, sizeof(DDXPointRec));
-    width = FirstWidth = xallocarray(y, sizeof(int));
-    Marked = xallocarray(count, sizeof(int));
+    ptsOut = FirstPoint = calloc(y, sizeof(DDXPointRec));
+    width = FirstWidth = calloc(y, sizeof(int));
+    Marked = calloc(count, sizeof(int));
 
     if (!ptsOut || !width || !Marked) {
         free(Marked);
@@ -1395,7 +1393,7 @@ miArcJoin(DrawablePtr pDraw, GCPtr pGC, miArcFacePtr pLeft,
         arc.height = width;
         arc.angle1 = -miDatan2(corner.y - center.y, corner.x - center.x);
         arc.angle2 = a;
-        pArcPts = malloc(3 * sizeof(SppPointRec));
+        pArcPts = calloc(3, sizeof(SppPointRec));
         if (!pArcPts)
             return;
         pArcPts[0].x = otherCorner.x;
@@ -1637,7 +1635,7 @@ miDatan2(double dy, double dx)
  * This procedure allocates the space necessary to fit the arc points.
  * Sometimes it's convenient for those points to be at the end of an existing
  * array. (For example, if we want to leave a spare point to make sectors
- * instead of segments.)  So we pass in the malloc()ed chunk that contains the
+ * instead of segments.)  So we pass in the calloc()ed chunk that contains the
  * array and an index saying where we should start stashing the points.
  * If there isn't an array already, we just pass in a null pointer and
  * count on realloc() to handle the null pointer correctly.
@@ -1895,10 +1893,10 @@ miComputeArcs(xArc * parcs, int narcs, GCPtr pGC)
     isDoubleDash = (pGC->lineStyle == LineDoubleDash);
     dashOffset = pGC->dashOffset;
 
-    data = xallocarray(narcs, sizeof(struct arcData));
+    data = calloc(narcs, sizeof(struct arcData));
     if (!data)
         return NULL;
-    arcs = xallocarray(isDoubleDash ? 2 : 1, sizeof(*arcs));
+    arcs = calloc(isDoubleDash ? 2 : 1, sizeof(*arcs));
     if (!arcs) {
         free(data);
         return NULL;
@@ -3037,11 +3035,10 @@ static struct finalSpanChunk *chunks;
 static struct finalSpan *
 realAllocSpan(void)
 {
-    struct finalSpanChunk *newChunk;
     struct finalSpan *span;
     int i;
 
-    newChunk = malloc(sizeof(struct finalSpanChunk));
+    struct finalSpanChunk *newChunk = calloc(1, sizeof(struct finalSpanChunk));
     if (!newChunk)
         return (struct finalSpan *) NULL;
     newChunk->next = chunks;
@@ -3086,8 +3083,8 @@ fillSpans(DrawablePtr pDrawable, GCPtr pGC)
 
     if (nspans == 0)
         return;
-    xSpan = xSpans = xallocarray(nspans, sizeof(DDXPointRec));
-    xWidth = xWidths = xallocarray(nspans, sizeof(int));
+    xSpan = xSpans = calloc(nspans, sizeof(DDXPointRec));
+    xWidth = xWidths = calloc(nspans, sizeof(int));
     if (xSpans && xWidths) {
         i = 0;
         f = finalSpans;
@@ -3141,7 +3138,7 @@ realFindSpan(int y)
         else
             change = SPAN_REALLOC;
         newSize = finalSize + change;
-        newSpans = xallocarray(newSize, sizeof(struct finalSpan *));
+        newSpans = calloc(newSize, sizeof(struct finalSpan *));
         if (!newSpans)
             return NULL;
         newMiny = finalMiny;
@@ -3151,10 +3148,10 @@ realFindSpan(int y)
         else
             newMaxy = finalMaxy + change;
         if (finalSpans) {
-            memmove(((char *) newSpans) +
+            memcpy(((char *) newSpans) +
                     (finalMiny - newMiny) * sizeof(struct finalSpan *),
-                    (char *) finalSpans,
-                    finalSize * sizeof(struct finalSpan *));
+                   finalSpans,
+                   finalSize * sizeof(struct finalSpan *));
             free(finalSpans);
         }
         if ((i = finalMiny - newMiny) > 0)
