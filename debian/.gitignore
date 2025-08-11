@@ -1,7 +1,8 @@
-autoconf.after
-autoconf.before
+autoreconf.after
+autoreconf.before
 debhelper-build-stamp
 files
+*.debhelper
 *.log
 *.substvars
 */
