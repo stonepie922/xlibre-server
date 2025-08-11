@@ -2,6 +2,7 @@
 *.swp
 *.patch
 tags
+build-source/
 debian/tmp
 debian/debhelper-build-stamp
 debian/*.log
