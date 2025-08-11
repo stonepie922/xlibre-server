@@ -2,3 +2,13 @@
 *.swp
 *.patch
 tags
+debian/tmp
+debian/debhelper-build-stamp
+debian/*.log
+debian/*/
+!debian/local/
+!debian/patches/
+!debian/po/
+!debian/source/
+!debian/tests/
+!debian/upstream/
