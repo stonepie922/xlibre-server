@@ -80,6 +80,7 @@ confflags_udeb = \
 	-D ipv6=false \
 	\
 	-D suid_wrapper=false \
+	-D systemd_notify=false \
 	-D systemd_logind=false \
 	-D screensaver=false \
 	-D xselinux=false \
@@ -106,9 +107,11 @@ endif
 
 ifneq (,$(filter systemd,$(DEB_BUILD_OPTIONS)))
 	confflags_main += \
+		-D systemd_notify=true \
 		-D systemd_logind=true
 else
 	confflags_main += \
+		-D systemd_notify=false \
 		-D systemd_logind=false
 endif
 
