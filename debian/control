@@ -66,9 +66,11 @@ Build-Depends:
  x11-utils <!nocheck>,
  x11-xkb-utils,
  libbsd-dev,
-  libdbus-1-dev (>= 1.0) [linux-any],
-  libsystemd-dev [linux-any],
-  systemd-dev [linux-any],
+# Manual installation required for systemd integration:
+# with DEB_BUILD_OPTIONS=systemd
+#  libdbus-1-dev (>= 1.0) [linux-any],
+#  libsystemd-dev [linux-any],
+#  systemd-dev [linux-any],
  meson,
 Build-Depends-Indep: xz-utils
 Standards-Version: 3.9.8

@@ -97,12 +97,18 @@ confflags_udeb = \
 ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_main += \
 		-D dri3=true \
-		-D xselinux=true \
-		-D systemd_logind=true
+		-D xselinux=true
 else
 	confflags_main += \
 		-D dri3=false \
-		-D xselinux=false \
+		-D xselinux=false
+endif
+
+ifneq (,$(filter systemd,$(DEB_BUILD_OPTIONS)))
+	confflags_main += \
+		-D systemd_logind=true
+else
+	confflags_main += \
 		-D systemd_logind=false
 endif
 
