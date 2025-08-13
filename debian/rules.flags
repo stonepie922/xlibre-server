@@ -7,8 +7,6 @@ SOURCE_NAME    :=  xlibre-server
 SOURCE_VERSION := $(shell dpkg-parsechangelog -S Version)
 SOURCE_DATE_EPOCH ?= $(shell dpkg-parsechangelog -S Timestamp)
 
-PREFIX := /usr
-
 FONT_PATH := /usr/share/fonts/X11/misc
 FONT_PATH := $(FONT_PATH),/usr/share/fonts/X11/cyrillic
 FONT_PATH := $(FONT_PATH),/usr/share/fonts/X11/100dpi/:unscaled
@@ -20,14 +18,15 @@ FONT_PATH := $(FONT_PATH),built-ins
 
 confflags = \
 	--buildtype=release \
-	--libexecdir="$(PREFIX)/lib/xorg" \
+	--prefix=/usr \
+	--libexecdir=lib/xorg \
 	\
 	-D xorg=true \
 	-D xwin=false \
 	-D xquartz=false \
 	\
-	-D module_dir="$(PREFIX)/lib/xorg/modules" \
-	-D serverconfigdir="$(PREFIX)/lib/xorg" \
+	-D module_dir=/usr/lib/xorg/modules \
+	-D serverconfigdir=/usr/lib/xorg \
 	\
 	-D xkb_dir=/usr/share/X11/xkb \
 	-D xkb_output_dir=/var/lib/xkb \
