@@ -8,6 +8,10 @@ ifeq ($(DEB_HOST_ARCH_OS), linux)
 deb_udevdir = $(shell pkg-config --variable=udevdir udev)
 endif
 
+ifeq (,$(filter noudeb, $(DEB_BUILD_PROFILES)))
+  with_udeb = yes
+endif
+
 %:
 	dh $@ --with quilt --buildsystem=meson
 
@@ -33,13 +37,17 @@ override_dh_auto_configure:
 	$(vars) dh_auto_configure --builddirectory=debian/build/main -- \
 		$(confflags) \
 		$(confflags_main)
+ifeq ($(with_udeb),yes)
 	$(vars) dh_auto_configure --builddirectory=debian/build/udeb -- \
 		$(confflags) \
 		$(confflags_udeb)
+endif
 
 override_dh_auto_build:
 	dh_auto_build --builddirectory=debian/build/main
+ifeq ($(with_udeb),yes)
 	dh_auto_build --builddirectory=debian/build/udeb
+endif
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
@@ -51,12 +59,15 @@ endif
 override_dh_auto_install:
 	dh_auto_install --builddirectory=debian/build/main \
 		--destdir=debian/tmp/main
+ifeq ($(with_udeb),yes)
 	dh_auto_install --builddirectory=debian/build/udeb \
 		--destdir=debian/tmp/udeb
+endif
 
 	# oh, yuck.
 	find debian/tmp/*/usr/lib/xorg -type f -name '*.la' -delete
 
+ifeq ($(with_udeb),yes)
 	# remove modules not needed in d-i
 	rm -rf debian/tmp/udeb/usr/lib/xorg/modules/multimedia
 	rm -f debian/tmp/udeb/usr/lib/xorg/modules/libxaa.so
@@ -72,14 +83,21 @@ override_dh_auto_install:
 	rm -rf debian/tmp/udeb/usr/share/aclocal
 	rm -rf debian/tmp/udeb/usr/share/man
 	rm -rf debian/tmp/udeb/usr/lib/*/pkgconfig
+endif
 
 	install -m 755 debian/local/xvfb-run debian/tmp/main/usr/bin
+	# Make sure Xvfb at least starts up
+	PATH=debian/tmp/main/usr/bin/:/bin:/usr/bin \
+	  debian/tmp/main/usr/bin/xvfb-run -s "-screen 0 1280x1024x24 -nolisten tcp -noreset" true
+
 	install debian/local/xvfb-run.1 debian/tmp/main/usr/share/man/man1
 ifneq ($(DEB_HOST_ARCH_OS), linux)
 	install -d debian/tmp/main/usr/share/X11/xorg.conf.d
 	install -m 644 debian/local/10-*.conf debian/tmp/main/usr/share/X11/xorg.conf.d
+  ifeq ($(with_udeb),yes)
 	install -d debian/tmp/udeb/usr/share/X11/xorg.conf.d
 	install -m 644 debian/local/10-*.conf debian/tmp/udeb/usr/share/X11/xorg.conf.d
+  endif
 endif
 
 # Only read the first line, the rest of the file is used to determine
@@ -111,7 +129,9 @@ override_dh_fixperms-arch:
 	chmod ug+s $(CURDIR)/debian/xserver-xlibre-legacy/usr/lib/xorg/Xorg.wrap
 
 override_dh_install:
+ifeq ($(with_udeb),yes)
 	dh_install -pxserver-xlibre-core-udeb --sourcedir=debian/tmp/udeb
+endif
 	dh_install --remaining-packages --sourcedir=debian/tmp/main
 	install -d $(CURDIR)/debian/xserver-xlibre-dev/usr/share/xserver-xorg
 	# Extract only the major ABI version:
@@ -124,8 +144,10 @@ override_dh_install:
 		test -n "$$abi_xinput"; echo inputabi=xorg-input-abi-$$abi_xinput >> debian/xserver-xlibre-core.substvars && \
 		echo "xorg-input-abi-$$abi_xinput, xserver-xlibre-core (>= $(serverminver))" > debian/xserver-xlibre-dev/usr/share/xserver-xorg/xinputdep
 
+ifeq ($(with_udeb),yes)
 	# The udeb uses the same substvars:
 	cp debian/xserver-xlibre-core.substvars debian/xserver-xlibre-core-udeb.substvars
+endif
 
 	# save the configure flags so that packages like vnc, tightvnc, tigervnc
 	# know how the package was built.
@@ -137,8 +159,10 @@ override_dh_install:
 ifeq ($(DEB_HOST_ARCH_OS), linux)
 	install -d debian/xserver-xlibre-core$(deb_udevdir)/rules.d
 	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xlibre-core$(deb_udevdir)/rules.d
+  ifeq ($(with_udeb),yes)
 	install -d debian/xserver-xlibre-core-udeb$(deb_udevdir)/rules.d
 	install -m 644 debian/local/64-xorg-xkb.rules debian/xserver-xlibre-core-udeb$(deb_udevdir)/rules.d
+  endif
 endif
 
 override_dh_missing-indep:
@@ -151,3 +175,9 @@ override_dh_clean:
 	dh_clean
 	rm -rf debian/build
 	rm -rf build-source
+
+override_dh_builddeb:
+	dh_builddeb $(skip_packages)
+
+override_dh_gencontrol:
+	dh_gencontrol $(skip_packages)
