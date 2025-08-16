@@ -258,7 +258,7 @@ Package: xserver-xlibre-common
 Architecture: all
 Multi-Arch: foreign
 Depends:
- x11-common,
+ xlibre-x11-common,
  xkb-data,
  x11-xkb-utils,
  ${misc:Depends},
