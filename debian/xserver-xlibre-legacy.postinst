@@ -9,7 +9,7 @@ set -e
 
 . /usr/share/debconf/confmodule
 
-THIS_PACKAGE=xserver-xorg-legacy
+THIS_PACKAGE=xserver-xlibre-legacy
 THIS_SCRIPT=postinst
 CONFIG_DIR=/etc/X11
 XWRAPPER_CONFIG="$CONFIG_DIR/Xwrapper.config"
