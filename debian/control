@@ -106,7 +106,7 @@ Conflicts:
  xserver-xlibre-input-evtouch,
  xserver-xlibre-video-modesetting,
 Provides:
- xserver-xorg-core,
+ xserver-xorg-core (= ${binary:Version}),
  ${videoabi},
  ${inputabi},
  xserver-xlibre-video-modesetting,
@@ -134,7 +134,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Provides:
- xserver-xorg-core-udeb,
+ xserver-xorg-core-udeb (= ${binary:Version}),
  ${videoabi},
  ${inputabi},
 Description: XLibre X server - core server
@@ -168,7 +168,7 @@ Description: XLibre X server - development files
  .
  This package is built from the XLibre xserver module.
 Provides:
- xserver-xorg-dev,
+ xserver-xorg-dev (= ${binary:Version}),
 Conflicts:
  xserver-xorg-dev,
 
@@ -180,7 +180,7 @@ Depends:
  ${misc:Depends},
 Recommends: libgl1-mesa-dri (>= 7.1~rc1)
 Provides:
- xnest,
+ xnest (= ${binary:Version}),
  xserver
 Description: Nested X server
  Xnest is a nested X server that simply relays all its requests to another
@@ -205,7 +205,7 @@ Depends:
  ${misc:Depends},
 Recommends: xauth
 Provides:
- xvfb,
+ xvfb (= ${binary:Version}),
  xserver
 Multi-Arch: foreign
 Description: Virtual Framebuffer 'fake' X server
@@ -239,7 +239,7 @@ Depends:
  ${misc:Depends},
 Recommends: libgl1-mesa-dri (>= 7.1~rc1)
 Provides:
- xserver-xephyr,
+ xserver-xephyr (= ${binary:Version}),
  xserver
 Description: nested X server
  Xephyr is an X server that can be run inside another X server,
@@ -269,7 +269,7 @@ Replaces: xserver-xorg-core (<< 2:1.5.2)
 Description: common files used by various X servers
  This package provides files necessary for all XLibre based X servers.
 Provides:
- xserver-common,
+ xserver-common (= ${binary:Version}),
 Conflicts:
  xserver-common,
 
@@ -287,7 +287,7 @@ Description: XLibre X server - source files
  Unless you are building a software product using X server sources,
  you probably want xserver-xlibre and/or xserver-xlibre-core instead.
 Provides:
- xorg-server-source,
+ xorg-server-source (= ${binary:Version}),
 Conflicts:
  xorg-server-source,
 
@@ -307,6 +307,6 @@ Description: setuid root XLibre server wrapper
  This package provides a wrapper for the XLibre X server, which is
  necessary for legacy drivers and non-Linux kernels.
 Provides:
- xserver-xorg-legacy,
+ xserver-xorg-legacy (= ${binary:Version}),
 Conflicts:
  xserver-xorg-legacy,
