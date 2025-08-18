@@ -1,3 +1,13 @@
+xlibre-server (2:25.0.0.8-2) unstable; urgency=medium
+
+  * Update THIS_PACKAGE in debian/xserver-xlibre-legacy.*
+  * d/control: Replace x11-common with xlibre version
+  * debian/control: Pin versions in Provides fields
+  * debian/gbp.conf: Use DEP-14 style branches
+  * d/copyright: Add 2025 copyright for Enrico Weigelt
+
+ -- apebl <a@pebl.cc>  Mon, 18 Aug 2025 07:12:47 +0000
+
 xlibre-server (2:25.0.0.8-1) unstable; urgency=low
 
   * First xlibre-server release.
