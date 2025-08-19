@@ -1,3 +1,9 @@
+xlibre-server (2:25.0.0.8-3) unstable; urgency=medium
+
+  * debian/not-installed: Add Xserver-DTrace docs
+
+ -- apebl <a@pebl.cc>  Tue, 19 Aug 2025 11:53:50 +0000
+
 xlibre-server (2:25.0.0.8-2) unstable; urgency=medium
 
   * Update THIS_PACKAGE in debian/xserver-xlibre-legacy.*
