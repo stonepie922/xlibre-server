@@ -1,3 +1,9 @@
+xlibre-server (2:25.0.0.9-1) unstable; urgency=medium
+
+  * New upstream version 25.0.0.9
+
+ -- apebl <a@pebl.cc>  Wed, 20 Aug 2025 14:53:55 +0000
+
 xlibre-server (2:25.0.0.8-3) unstable; urgency=medium
 
   * debian/not-installed: Add Xserver-DTrace docs
