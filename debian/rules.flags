@@ -65,7 +65,6 @@ confflags_main = \
 	$(void)
 
 # sha1=libnettle because nettlestatic is missing
-# TODO: Set xinerama=false after upstream fixed
 confflags_udeb = \
 	-D xephyr=false \
 	-D xnest=false \
@@ -84,7 +83,7 @@ confflags_udeb = \
 	-D screensaver=false \
 	-D xselinux=false \
 	-D namespace=false \
-	-D xinerama=true \
+	-D xinerama=false \
 	-D xcsecurity=false \
 	-D xv=false \
 	-D xvmc=false \
