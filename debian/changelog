@@ -1,3 +1,9 @@
+xlibre-server (2:25.0.0.9-2) unstable; urgency=medium
+
+  * debian/rules: Disable xinerama in udeb build
+
+ -- apebl <a@pebl.cc>  Fri, 22 Aug 2025 23:49:39 +0000
+
 xlibre-server (2:25.0.0.9-1) unstable; urgency=medium
 
   * New upstream version 25.0.0.9
