@@ -103,14 +103,14 @@ else
 		-D xselinux=false
 endif
 
-ifneq (,$(filter systemd,$(DEB_BUILD_OPTIONS)))
-	confflags_main += \
-		-D systemd_notify=true \
-		-D systemd_logind=true
-else
+ifneq (,$(filter nosystemd,$(DEB_BUILD_PROFILES)))
 	confflags_main += \
 		-D systemd_notify=false \
 		-D systemd_logind=false
+else
+	confflags_main += \
+		-D systemd_notify=true \
+		-D systemd_logind=true
 endif
 
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
