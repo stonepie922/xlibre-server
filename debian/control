@@ -68,7 +68,8 @@ Build-Depends:
  libbsd-dev,
   libdbus-1-dev (>= 1.0) [linux-any] <!nosystemd>,
   libsystemd-dev [linux-any] <!nosystemd>,
-  systemd-dev [linux-any] <!nosystemd>,
+# nosystemd build still requires this for udev.pc:
+  systemd-dev [linux-any],
  meson,
 Build-Depends-Indep: xz-utils
 Standards-Version: 3.9.8
