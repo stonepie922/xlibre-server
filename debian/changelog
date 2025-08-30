@@ -1,3 +1,10 @@
+xlibre-server (2:25.0.0.9-4) unstable; urgency=medium
+
+  * control: Update conflicts/provides for xserver-xlibre-core
+  * Keep systemd-dev build-dep even on nosystemd build
+
+ -- apebl <a@pebl.cc>  Sat, 30 Aug 2025 09:24:54 +0000
+
 xlibre-server (2:25.0.0.9-3) unstable; urgency=medium
 
   * Use nosystemd profile for optional systemd
