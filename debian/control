@@ -105,7 +105,7 @@ Conflicts:
  xserver-xorg-input-evtouch,
  xserver-xorg-video-modesetting,
 Provides:
- xserver-xorg-core (= ${binary:Version}),
+ xserver-xorg-core (= 2:21.98),
  ${videoabi},
  ${inputabi},
  xserver-xorg-video-modesetting,
