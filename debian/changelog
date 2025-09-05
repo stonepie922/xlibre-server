@@ -1,3 +1,9 @@
+xlibre-server (2:25.0.0.11-2) unstable; urgency=medium
+
+  * control: Pin Provides xserver-xorg-core to 2:21.98
+
+ -- apebl <a@pebl.cc>  Fri, 05 Sep 2025 08:20:56 +0000
+
 xlibre-server (2:25.0.0.11-1) unstable; urgency=medium
 
   * New upstream version 25.0.0.11
