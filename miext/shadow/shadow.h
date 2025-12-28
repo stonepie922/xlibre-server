@@ -53,7 +53,7 @@ typedef struct _shadowBuf {
 
     /* screen wrappers */
     GetImageProcPtr GetImage;
-    CloseScreenProcPtr CloseScreen;
+    void *_dummy1; // required in place of a removed field for ABI compatibility
     ScreenBlockHandlerProcPtr BlockHandler;
 } shadowBufRec;
 

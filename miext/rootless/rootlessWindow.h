@@ -27,22 +27,24 @@
  * use or other dealings in this Software without prior written authorization.
  */
 
+#ifndef _ROOTLESSWINDOW_H
+#define _ROOTLESSWINDOW_H
+
 #ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
 #endif
 
-#ifndef _ROOTLESSWINDOW_H
-#define _ROOTLESSWINDOW_H
+#include "dix/screen_hooks_priv.h"
 
 #include "rootlessCommon.h"
 
 Bool RootlessCreateWindow(WindowPtr pWin);
-Bool RootlessDestroyWindow(WindowPtr pWin);
+void RootlessWindowDestroy(CallbackListPtr *pcbl, ScreenPtr pScreen, WindowPtr pWin);
 
 void RootlessSetShape(WindowPtr pWin, int kind);
 
 Bool RootlessChangeWindowAttributes(WindowPtr pWin, unsigned long vmask);
-Bool RootlessPositionWindow(WindowPtr pWin, int x, int y);
+void RootlessWindowPosition(CallbackListPtr *pcbl, ScreenPtr pScreen, XorgScreenWindowPositionParamRec *param);
 Bool RootlessRealizeWindow(WindowPtr pWin);
 Bool RootlessUnrealizeWindow(WindowPtr pWin);
 void RootlessRestackWindow(WindowPtr pWin, WindowPtr pOldNextSib);

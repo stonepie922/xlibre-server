@@ -19,8 +19,11 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "present_priv.h"
+#include "dix/dix_priv.h"
+#include "present/present_priv.h"
+#include "Xext/geext_priv.h"
 
 static RESTYPE present_event_type;
 
@@ -52,7 +55,7 @@ present_free_events(WindowPtr window)
         return;
 
     while ((event = window_priv->events))
-        FreeResource(event->id, RT_NONE);
+        FreeResource(event->id, X11_RESTYPE_NONE);
 }
 
 static void
@@ -102,7 +105,8 @@ present_event_swap(xGenericEvent *from, xGenericEvent *to)
 }
 
 void
-present_send_config_notify(WindowPtr window, int x, int y, int w, int h, int bw, WindowPtr sibling)
+present_send_config_notify(WindowPtr window, int x, int y, int w, int h,
+                           int bw, WindowPtr sibling, CARD32 flags)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
 
@@ -122,7 +126,7 @@ present_send_config_notify(WindowPtr window, int x, int y, int w, int h, int bw,
             .off_y = 0,
             .pixmap_width = w,
             .pixmap_height = h,
-            .pixmap_flags = 0
+            .pixmap_flags = flags
         };
         present_event_ptr event;
 
@@ -223,7 +227,7 @@ present_select_input(ClientPtr client, XID eid, WindowPtr window, CARD32 mask)
         if (mask)
             event->mask = mask;
         else
-            FreeResource(eid, RT_NONE);
+            FreeResource(eid, X11_RESTYPE_NONE);
         return Success;
     }
     if (ret != BadValue)

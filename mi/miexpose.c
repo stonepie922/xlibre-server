@@ -71,13 +71,20 @@ Equipment Corporation.
 
 ******************************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
+#include <X11/Xmd.h>
 #include <X11/Xproto.h>
 #include <X11/Xprotostr.h>
+
+#include "dix/dix_priv.h"
+#include "dix/screenint_priv.h"
+#include "dix/window_priv.h"
+#include "include/extinit.h"
+#include "mi/mi_priv.h"
+#include "Xext/panoramiX.h"
+#include "Xext/panoramiXsrv.h"
 
 #include "misc.h"
 #include "regionstr.h"
@@ -86,17 +93,8 @@ Equipment Corporation.
 #include "windowstr.h"
 #include "pixmap.h"
 #include "input.h"
-
 #include "dixstruct.h"
-#include "mi.h"
-#include <X11/Xmd.h>
-
 #include "globals.h"
-
-#ifdef PANORAMIX
-#include "panoramiX.h"
-#include "panoramiXsrv.h"
-#endif
 
 /*
     machine-independent graphics exposure code.  any device that uses
@@ -323,7 +321,7 @@ miSendExposures(WindowPtr pWin, RegionPtr pRgn, int dx, int dy)
         pe->u.expose.count = i;
     }
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension) {
         int scrnum = pWin->drawable.pScreen->myNum;
         int x = 0, y = 0;
@@ -332,7 +330,7 @@ miSendExposures(WindowPtr pWin, RegionPtr pRgn, int dx, int dy)
         if (!pWin->parent) {
             x = screenInfo.screens[scrnum]->x;
             y = screenInfo.screens[scrnum]->y;
-            pWin = screenInfo.screens[0]->root;
+            pWin = dixGetMasterScreen()->root;
             realWin = pWin->drawable.id;
         }
         else if (scrnum) {
@@ -354,7 +352,7 @@ miSendExposures(WindowPtr pWin, RegionPtr pRgn, int dx, int dy)
                 pEvent[i].u.expose.y += y;
             }
     }
-#endif
+#endif /* XINERAMA */
 
     DeliverEvents(pWin, pEvent, numRects, NullWindow);
 
@@ -431,10 +429,8 @@ miPaintWindow(WindowPtr pWin, RegionPtr prgn, int what)
         tile_x_off = pWin->drawable.x - draw_x_off;
         tile_y_off = pWin->drawable.y - draw_y_off;
         fill = pWin->background;
-#ifdef COMPOSITE
         if (pWin->inhibitBGPaint)
             return;
-#endif
         switch (pWin->backgroundState) {
         case None:
             return;
@@ -461,15 +457,10 @@ miPaintWindow(WindowPtr pWin, RegionPtr prgn, int what)
         tile_x_off = pWin->drawable.x;
         tile_y_off = pWin->drawable.y;
 
-#ifdef COMPOSITE
         draw_x_off = pixmap->screen_x;
         draw_y_off = pixmap->screen_y;
         tile_x_off -= draw_x_off;
         tile_y_off -= draw_y_off;
-#else
-        draw_x_off = 0;
-        draw_y_off = 0;
-#endif
     }
 
     gcval[0].val = GXcopy;
@@ -488,6 +479,26 @@ miPaintWindow(WindowPtr pWin, RegionPtr prgn, int what)
         gcval[1].val =
             fill.pixel | RootlessAlphaMask(pWin->drawable.bitsPerPixel);
 #else
+        /* Make sure alpha will sample as 1.0 for opaque windows */
+        if (drawable->depth == 32) {
+            WindowPtr orig_pWin = pWin;
+            int effective_depth = orig_pWin->drawable.depth;
+
+            if (effective_depth == 32) {
+                orig_pWin = orig_pWin->parent;
+                while (orig_pWin && orig_pWin->parent) {
+                    if (orig_pWin->drawable.depth == 24) {
+                        effective_depth = 24;
+                        break;
+                    }
+
+                    orig_pWin = orig_pWin->parent;
+                }
+            }
+
+            if (effective_depth == 24)
+                fill.pixel |= 0xff000000;
+        }
         gcval[1].val = fill.pixel;
 #endif
         gcval[2].val = FillSolid;
@@ -511,7 +522,7 @@ miPaintWindow(WindowPtr pWin, RegionPtr prgn, int what)
     regionnumrects = RegionNumRects(prgn);
     if (regionnumrects == 0)
         return;
-    prect = xallocarray(regionnumrects, sizeof(xRectangle));
+    prect = calloc(regionnumrects, sizeof(xRectangle));
     if (!prect)
         return;
 
@@ -521,7 +532,7 @@ miPaintWindow(WindowPtr pWin, RegionPtr prgn, int what)
         return;
     }
 
-    ChangeGC(NullClient, pGC, gcmask, gcval);
+    ChangeGC(NULL, pGC, gcmask, gcval);
     ValidateGC(drawable, pGC);
 
     numRects = RegionNumRects(prgn);
@@ -554,9 +565,9 @@ miClearDrawable(DrawablePtr pDraw, GCPtr pGC)
     rect.y = 0;
     rect.width = pDraw->width;
     rect.height = pDraw->height;
-    ChangeGC(NullClient, pGC, GCForeground, &bg);
+    ChangeGC(NULL, pGC, GCForeground, &bg);
     ValidateGC(pDraw, pGC);
     (*pGC->ops->PolyFillRect) (pDraw, pGC, 1, &rect);
-    ChangeGC(NullClient, pGC, GCForeground, &fg);
+    ChangeGC(NULL, pGC, GCForeground, &fg);
     ValidateGC(pDraw, pGC);
 }

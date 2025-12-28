@@ -35,7 +35,6 @@
 
 /* INCLUDES */
 
-#define NEED_DBE_PROTOCOL
 #include <X11/extensions/dbeproto.h>
 #include "windowstr.h"
 #include "privates.h"
@@ -54,7 +53,7 @@ typedef struct {
 /* DEFINES */
 
 #define DBE_SCREEN_PRIV(pScreen) ((DbeScreenPrivPtr) \
-    dixLookupPrivate(&(pScreen)->devPrivates, dbeScreenPrivKey))
+    dixLookupPrivate(&(pScreen)->devPrivates, &dbeScreenPrivKeyRec))
 
 #define DBE_SCREEN_PRIV_FROM_DRAWABLE(pDrawable) \
     DBE_SCREEN_PRIV((pDrawable)->pScreen)
@@ -72,7 +71,7 @@ typedef struct {
     DBE_SCREEN_PRIV((pGC)->pScreen)
 
 #define DBE_WINDOW_PRIV(pWin) ((DbeWindowPrivPtr) \
-    dixLookupPrivate(&(pWin)->devPrivates, dbeWindowPrivKey))
+    dixLookupPrivate(&(pWin)->devPrivates, &dbeWindowPrivKeyRec))
 
 /* Initial size of the buffer ID array in the window priv. */
 #define DBE_INIT_MAX_IDS	2
@@ -170,13 +169,6 @@ typedef struct _DbeWindowPrivRec {
  */
 
 typedef struct _DbeScreenPrivRec {
-    /* Wrapped functions
-     * It is the responsibility of the DDX layer to wrap PositionWindow().
-     * DbeExtensionInit wraps DestroyWindow().
-     */
-    PositionWindowProcPtr PositionWindow;
-    DestroyWindowProcPtr DestroyWindow;
-
     /* Per-screen DIX routines */
     Bool (*SetupBackgroundPainter) (WindowPtr /*pWin */ ,
                                     GCPtr       /*pGC */

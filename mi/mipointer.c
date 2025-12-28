@@ -46,23 +46,29 @@ in this Software without prior written authorization from The Open Group.
  * DIX, DDX and some drivers.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include   <X11/X.h>
 #include   <X11/Xmd.h>
 #include   <X11/Xproto.h>
+
+#include   "dix/cursor_priv.h"
+#include   "dix/dix_priv.h"
+#include   "dix/input_priv.h"
+#include   "dix/inpututils_priv.h"
+#include   "dix/screen_hooks_priv.h"
+#include   "include/extinit.h"
+#include   "mi/mi_priv.h"
+#include   "mi/mipointer_priv.h"
+
 #include   "misc.h"
 #include   "windowstr.h"
 #include   "pixmapstr.h"
-#include   "mi.h"
 #include   "scrnintstr.h"
 #include   "mipointrst.h"
 #include   "cursorstr.h"
 #include   "dixstruct.h"
 #include   "inputstr.h"
-#include   "inpututils.h"
 #include   "eventstr.h"
 
 typedef struct {
@@ -86,7 +92,7 @@ DevPrivateKeyRec miPointerScreenKeyRec;
 DevPrivateKeyRec miPointerPrivKeyRec;
 
 #define MIPOINTER(dev) \
-    (IsFloating(dev) ? \
+    (InputDevIsFloating(dev) ? \
         (miPointerPtr)dixLookupPrivate(&(dev)->devPrivates, miPointerPrivKey): \
         (miPointerPtr)dixLookupPrivate(&(GetMaster(dev, MASTER_POINTER))->devPrivates, miPointerPrivKey))
 
@@ -103,7 +109,7 @@ static void miPointerCursorLimits(DeviceIntPtr pDev, ScreenPtr pScreen,
                                   BoxPtr pTopLeftBox);
 static Bool miPointerSetCursorPosition(DeviceIntPtr pDev, ScreenPtr pScreen,
                                        int x, int y, Bool generateEvent);
-static Bool miPointerCloseScreen(ScreenPtr pScreen);
+static void miPointerCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused);
 static void miPointerMove(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y);
 static Bool miPointerDeviceInitialize(DeviceIntPtr pDev, ScreenPtr pScreen);
 static void miPointerDeviceCleanup(DeviceIntPtr pDev, ScreenPtr pScreen);
@@ -111,6 +117,10 @@ static void miPointerMoveNoEvent(DeviceIntPtr pDev, ScreenPtr pScreen, int x,
                                  int y);
 
 static InternalEvent *mipointermove_events;   /* for WarpPointer MotionNotifies */
+
+static void
+miRecolorCursor(DeviceIntPtr pDev, ScreenPtr pScr,
+                CursorPtr pCurs, Bool displayed);
 
 Bool
 miPointerInitialize(ScreenPtr pScreen,
@@ -125,15 +135,14 @@ miPointerInitialize(ScreenPtr pScreen,
     if (!dixRegisterPrivateKey(&miPointerPrivKeyRec, PRIVATE_DEVICE, 0))
         return FALSE;
 
-    pScreenPriv = malloc(sizeof(miPointerScreenRec));
+    pScreenPriv = calloc(1, sizeof(miPointerScreenRec));
     if (!pScreenPriv)
         return FALSE;
     pScreenPriv->spriteFuncs = spriteFuncs;
     pScreenPriv->screenFuncs = screenFuncs;
     pScreenPriv->waitForUpdate = waitForUpdate;
     pScreenPriv->showTransparent = FALSE;
-    pScreenPriv->CloseScreen = pScreen->CloseScreen;
-    pScreen->CloseScreen = miPointerCloseScreen;
+    dixScreenHookPostClose(pScreen, miPointerCloseScreen);
     dixSetPrivate(&pScreen->devPrivates, miPointerScreenKey, pScreenPriv);
     /*
      * set up screen cursor method table
@@ -155,19 +164,17 @@ miPointerInitialize(ScreenPtr pScreen,
 /**
  * Destroy screen-specific information.
  *
- * @param index Screen index of the screen in screenInfo.screens[]
  * @param pScreen The actual screen pointer
  */
-static Bool
-miPointerCloseScreen(ScreenPtr pScreen)
+static void miPointerCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
     SetupScreen(pScreen);
 
-    pScreen->CloseScreen = pScreenPriv->CloseScreen;
+    dixScreenUnhookPostClose(pScreen, miPointerCloseScreen);
     free((void *) pScreenPriv);
+    dixSetPrivate(&pScreen->devPrivates, miPointerScreenKey, NULL);
     FreeEventList(mipointermove_events, GetMaximumEventsNum());
     mipointermove_events = NULL;
-    return (*pScreen->CloseScreen) (pScreen);
 }
 
 /*
@@ -200,6 +207,8 @@ miPointerDisplayCursor(DeviceIntPtr pDev, ScreenPtr pScreen, CursorPtr pCursor)
         return FALSE;
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return FALSE;
 
     pPointer->pCursor = pCursor;
     pPointer->pScreen = pScreen;
@@ -222,6 +231,8 @@ miPointerConstrainCursor(DeviceIntPtr pDev, ScreenPtr pScreen, BoxPtr pBox)
     miPointerPtr pPointer;
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return;
 
     pPointer->limits = *pBox;
     pPointer->confined = PointerConfinedToScreen(pDev);
@@ -251,7 +262,7 @@ miPointerCursorLimits(DeviceIntPtr pDev, ScreenPtr pScreen, CursorPtr pCursor,
  *
  * This function is called from:
  *    - sprite init code to place onto initial position
- *    - the various WarpPointer implementations (core, XI, Xinerama, dmx,…)
+ *    - the various WarpPointer implementations (core, XI, Xinerama,…)
  *    - during the cursor update path in CheckMotion
  *    - in the Xinerama part of NewCurrentScreen
  *    - when a RandR/RandR1.2 mode was applied (it may have moved the pointer, so
@@ -273,6 +284,9 @@ miPointerSetCursorPosition(DeviceIntPtr pDev, ScreenPtr pScreen,
     SetupScreen(pScreen);
     miPointerPtr pPointer = MIPOINTER(pDev);
 
+    if (!pPointer)
+        return TRUE;
+
     pPointer->generateEvent = generateEvent;
 
     if (pScreen->ConstrainCursorHarder)
@@ -285,7 +299,7 @@ miPointerSetCursorPosition(DeviceIntPtr pDev, ScreenPtr pScreen,
     return TRUE;
 }
 
-void
+static void
 miRecolorCursor(DeviceIntPtr pDev, ScreenPtr pScr,
                 CursorPtr pCurs, Bool displayed)
 {
@@ -310,11 +324,9 @@ miRecolorCursor(DeviceIntPtr pDev, ScreenPtr pScr,
 static Bool
 miPointerDeviceInitialize(DeviceIntPtr pDev, ScreenPtr pScreen)
 {
-    miPointerPtr pPointer;
-
     SetupScreen(pScreen);
 
-    pPointer = malloc(sizeof(miPointerRec));
+    miPointerPtr pPointer = calloc(1, sizeof(miPointerRec));
     if (!pPointer)
         return FALSE;
 
@@ -352,7 +364,7 @@ miPointerDeviceCleanup(DeviceIntPtr pDev, ScreenPtr pScreen)
 {
     SetupScreen(pScreen);
 
-    if (!IsMaster(pDev) && !IsFloating(pDev))
+    if (!InputDevIsMaster(pDev) && !InputDevIsFloating(pDev))
         return;
 
     (*pScreenPriv->spriteFuncs->DeviceCursorCleanup) (pDev, pScreen);
@@ -379,6 +391,8 @@ miPointerWarpCursor(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
     BOOL changedScreen = FALSE;
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return;
 
     if (pPointer->pScreen != pScreen) {
         mieqSwitchScreen(pDev, pScreen, TRUE);
@@ -394,11 +408,24 @@ miPointerWarpCursor(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
      * updated to the second screen, and we never receive any events.
      * (FDO bug #18668) */
     if (changedScreen
-#ifdef PANORAMIX
+#ifdef XINERAMA
         && noPanoramiXExtension
-#endif
-        )
-        UpdateSpriteForScreen(pDev, pScreen);
+#endif /* XINERAMA */
+        ) {
+            DeviceIntPtr master = GetMaster(pDev, MASTER_POINTER);
+            /* Hack for CVE-2023-5380: if we're moving
+             * screens PointerWindows[] keeps referring to the
+             * old window. If that gets destroyed we have a UAF
+             * bug later. Only happens when jumping from a window
+             * to the root window on the other screen.
+             * Enter/Leave events are incorrect for that case but
+             * too niche to fix.
+             */
+            LeaveWindow(pDev);
+            if (master)
+                LeaveWindow(master);
+            UpdateSpriteForScreen(pDev, pScreen);
+    }
 }
 
 /**
@@ -491,6 +518,9 @@ miPointerInvalidateSprite(DeviceIntPtr pDev)
     miPointerPtr pPointer;
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return;
+
     pPointer->pSpriteCursor = (CursorPtr) 1;
 }
 
@@ -509,6 +539,8 @@ miPointerSetScreen(DeviceIntPtr pDev, int screen_no, int x, int y)
     miPointerPtr pPointer;
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return;
 
     pScreen = screenInfo.screens[screen_no];
     mieqSwitchScreen(pDev, pScreen, FALSE);
@@ -553,6 +585,8 @@ miPointerMoveNoEvent(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
     SetupScreen(pScreen);
 
     pPointer = MIPOINTER(pDev);
+    if (!pPointer)
+        return;
 
     /* Hack: We mustn't call into ->MoveCursor for anything but the
      * VCP, as this may cause a non-HW rendered cursor to be rendered while
@@ -609,8 +643,8 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
     pPointer = MIPOINTER(pDev);
     pScreen = pPointer->pScreen;
 
-    x = trunc(*screenx);
-    y = trunc(*screeny);
+    x = floor(*screenx);
+    y = floor(*screeny);
 
     switch_screen = !point_on_screen(pScreen, x, y);
 
@@ -688,9 +722,9 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
      * drop the float component on the floor
      * FIXME: only drop remainder for ConstrainCursorHarder, not for screen
      * crossings */
-    if (x != trunc(*screenx))
+    if (x != floor(*screenx))
         *screenx = x;
-    if (y != trunc(*screeny))
+    if (y != floor(*screeny))
         *screeny = y;
 
     return pScreen;
@@ -705,8 +739,15 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
 void
 miPointerGetPosition(DeviceIntPtr pDev, int *x, int *y)
 {
-    *x = MIPOINTER(pDev)->x;
-    *y = MIPOINTER(pDev)->y;
+    miPointerPtr pPointer = MIPOINTER(pDev);
+    if (pPointer) {
+        *x = pPointer->x;
+        *y = pPointer->y;
+    }
+    else {
+        *x = 0;
+        *y = 0;
+    }
 }
 
 /**

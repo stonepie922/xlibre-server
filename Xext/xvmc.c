@@ -1,40 +1,36 @@
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <string.h>
-
 #include <X11/X.h>
+#include <X11/Xfuncproto.h>
 #include <X11/Xproto.h>
+#include <X11/extensions/XvMC.h>
+#include <X11/extensions/Xvproto.h>
+#include <X11/extensions/XvMCproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/request_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "miext/extinit_priv.h"
+#include "Xext/xvdix_priv.h"
+
 #include "misc.h"
 #include "os.h"
 #include "dixstruct.h"
 #include "resource.h"
 #include "scrnintstr.h"
 #include "extnsionst.h"
-#include "extinit.h"
 #include "servermd.h"
-#include <X11/Xfuncproto.h>
-#include "xvdix.h"
-#include <X11/extensions/XvMC.h>
-#include <X11/extensions/Xvproto.h>
-#include <X11/extensions/XvMCproto.h>
 #include "xvmcext.h"
-#include "protocol-versions.h"
 
-#ifdef HAS_XVMCSHM
-#include <sys/ipc.h>
-#include <sys/types.h>
-#include <sys/shm.h>
-#endif                          /* HAS_XVMCSHM */
+#define SERVER_XVMC_MAJOR_VERSION               1
+#define SERVER_XVMC_MINOR_VERSION               1
 
 #define DR_CLIENT_DRIVER_NAME_SIZE 48
 #define DR_BUSID_SIZE 48
 
 static DevPrivateKeyRec XvMCScreenKeyRec;
-
-#define XvMCScreenKey (&XvMCScreenKeyRec)
 static Bool XvMCInUse;
 
 int XvMCReqCode;
@@ -44,12 +40,9 @@ static RESTYPE XvMCRTContext;
 static RESTYPE XvMCRTSurface;
 static RESTYPE XvMCRTSubpicture;
 
-int (*XvMCScreenInitProc)(ScreenPtr, int, XvMCAdaptorPtr) = NULL;
-
 typedef struct {
     int num_adaptors;
     XvMCAdaptorPtr adaptors;
-    CloseScreenProcPtr CloseScreen;
     char clientDriverName[DR_CLIENT_DRIVER_NAME_SIZE];
     char busID[DR_BUSID_SIZE];
     int major;
@@ -58,7 +51,7 @@ typedef struct {
 } XvMCScreenRec, *XvMCScreenPtr;
 
 #define XVMC_GET_PRIVATE(pScreen) \
-    (XvMCScreenPtr)(dixLookupPrivate(&(pScreen)->devPrivates, XvMCScreenKey))
+    (XvMCScreenPtr)(dixLookupPrivate(&(pScreen)->devPrivates, &XvMCScreenKeyRec))
 
 static int
 XvMCDestroyContextRes(void *data, XID id)
@@ -110,10 +103,7 @@ XvMCDestroySubpictureRes(void *data, XID id)
 static int
 ProcXvMCQueryVersion(ClientPtr client)
 {
-    xvmcQueryVersionReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = 0,
+    xvmcQueryVersionReply reply = {
         .major = SERVER_XVMC_MAJOR_VERSION,
         .minor = SERVER_XVMC_MINOR_VERSION
     };
@@ -121,21 +111,20 @@ ProcXvMCQueryVersion(ClientPtr client)
     /* REQUEST(xvmcQueryVersionReq); */
     REQUEST_SIZE_MATCH(xvmcQueryVersionReq);
 
-    WriteToClient(client, sizeof(xvmcQueryVersionReply), &rep);
-    return Success;
+    if (client->swapped) {
+        swapl(&reply.major);
+        swapl(&reply.minor);
+    }
+
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 static int
 ProcXvMCListSurfaceTypes(ClientPtr client)
 {
     XvPortPtr pPort;
-    int i;
     XvMCScreenPtr pScreenPriv;
-    xvmcListSurfaceTypesReply rep;
-    xvmcSurfaceInfo info;
     XvMCAdaptorPtr adaptor = NULL;
-    XvMCSurfaceInfoPtr surface;
-    int num_surfaces;
 
     REQUEST(xvmcListSurfaceTypesReq);
     REQUEST_SIZE_MATCH(xvmcListSurfaceTypesReq);
@@ -146,7 +135,7 @@ ProcXvMCListSurfaceTypes(ClientPtr client)
         ScreenPtr pScreen = pPort->pAdaptor->pScreen;
 
         if ((pScreenPriv = XVMC_GET_PRIVATE(pScreen))) {        /* any this screen */
-            for (i = 0; i < pScreenPriv->num_adaptors; i++) {
+            for (int i = 0; i < pScreenPriv->num_adaptors; i++) {
                 if (pPort->pAdaptor == pScreenPriv->adaptors[i].xv_adaptor) {
                     adaptor = &(pScreenPriv->adaptors[i]);
                     break;
@@ -155,30 +144,33 @@ ProcXvMCListSurfaceTypes(ClientPtr client)
         }
     }
 
-    num_surfaces = (adaptor) ? adaptor->num_surfaces : 0;
-    rep = (xvmcListSurfaceTypesReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .num = num_surfaces,
-        .length = bytes_to_int32(num_surfaces * sizeof(xvmcSurfaceInfo)),
-    };
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
 
-    WriteToClient(client, sizeof(xvmcListSurfaceTypesReply), &rep);
+    int num_surfaces = (adaptor) ? adaptor->num_surfaces : 0;
+    for (int i = 0; i < num_surfaces; i++) {
+        XvMCSurfaceInfoPtr surface = adaptor->surfaces[i];
 
-    for (i = 0; i < num_surfaces; i++) {
-        surface = adaptor->surfaces[i];
-        info.surface_type_id = surface->surface_type_id;
-        info.chroma_format = surface->chroma_format;
-        info.max_width = surface->max_width;
-        info.max_height = surface->max_height;
-        info.subpicture_max_width = surface->subpicture_max_width;
-        info.subpicture_max_height = surface->subpicture_max_height;
-        info.mc_type = surface->mc_type;
-        info.flags = surface->flags;
-        WriteToClient(client, sizeof(xvmcSurfaceInfo), &info);
+        /* write xvmcSurfaceInfo */
+        x_rpcbuf_write_CARD32(&rpcbuf, surface->surface_type_id);
+        x_rpcbuf_write_CARD16(&rpcbuf, surface->chroma_format);
+        x_rpcbuf_write_CARD16(&rpcbuf, 0);
+        x_rpcbuf_write_CARD16(&rpcbuf, surface->max_width);
+        x_rpcbuf_write_CARD16(&rpcbuf, surface->max_height);
+        x_rpcbuf_write_CARD16(&rpcbuf, surface->subpicture_max_width);
+        x_rpcbuf_write_CARD16(&rpcbuf, surface->subpicture_max_height);
+        x_rpcbuf_write_CARD32(&rpcbuf, surface->mc_type);
+        x_rpcbuf_write_CARD32(&rpcbuf, surface->flags);
     }
 
-    return Success;
+    xvmcListSurfaceTypesReply reply = {
+        .num = num_surfaces,
+    };
+
+    if (client->swapped) {
+        swapl(&reply.num);
+    }
+
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
@@ -187,13 +179,12 @@ ProcXvMCCreateContext(ClientPtr client)
     XvPortPtr pPort;
     CARD32 *data = NULL;
     int dwords = 0;
-    int i, result, adapt_num = -1;
+    int result, adapt_num = -1;
     ScreenPtr pScreen;
     XvMCContextPtr pContext;
     XvMCScreenPtr pScreenPriv;
     XvMCAdaptorPtr adaptor = NULL;
     XvMCSurfaceInfoPtr surface = NULL;
-    xvmcCreateContextReply rep;
 
     REQUEST(xvmcCreateContextReq);
     REQUEST_SIZE_MATCH(xvmcCreateContextReq);
@@ -208,7 +199,7 @@ ProcXvMCCreateContext(ClientPtr client)
     if (!(pScreenPriv = XVMC_GET_PRIVATE(pScreen)))     /* none this screen */
         return BadMatch;
 
-    for (i = 0; i < pScreenPriv->num_adaptors; i++) {
+    for (int i = 0; i < pScreenPriv->num_adaptors; i++) {
         if (pPort->pAdaptor == pScreenPriv->adaptors[i].xv_adaptor) {
             adaptor = &(pScreenPriv->adaptors[i]);
             adapt_num = i;
@@ -219,7 +210,7 @@ ProcXvMCCreateContext(ClientPtr client)
     if (adapt_num < 0)          /* none this port */
         return BadMatch;
 
-    for (i = 0; i < adaptor->num_surfaces; i++) {
+    for (int i = 0; i < adaptor->num_surfaces; i++) {
         if (adaptor->surfaces[i]->surface_type_id == stuff->surface_type_id) {
             surface = adaptor->surfaces[i];
             break;
@@ -234,7 +225,7 @@ ProcXvMCCreateContext(ClientPtr client)
         (stuff->height > surface->max_height))
         return BadValue;
 
-    if (!(pContext = malloc(sizeof(XvMCContextRec)))) {
+    if (!(pContext = calloc(1, sizeof(XvMCContextRec)))) {
         return BadAlloc;
     }
 
@@ -258,22 +249,23 @@ ProcXvMCCreateContext(ClientPtr client)
         return BadAlloc;
     }
 
-    rep = (xvmcCreateContextReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = dwords,
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD32s(&rpcbuf, data, dwords);
+    free(data);
+
+    xvmcCreateContextReply reply = {
         .width_actual = pContext->width,
         .height_actual = pContext->height,
         .flags_return = pContext->flags
     };
 
-    WriteToClient(client, sizeof(xvmcCreateContextReply), &rep);
-    if (dwords)
-        WriteToClient(client, dwords << 2, data);
+    if (client->swapped) {
+        swaps(&reply.width_actual);
+        swaps(&reply.height_actual);
+        swapl(&reply.flags_return);
+    }
 
-    free(data);
-
-    return Success;
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
@@ -290,7 +282,7 @@ ProcXvMCDestroyContext(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    FreeResource(stuff->context_id, RT_NONE);
+    FreeResource(stuff->context_id, X11_RESTYPE_NONE);
 
     return Success;
 }
@@ -304,7 +296,6 @@ ProcXvMCCreateSurface(ClientPtr client)
     XvMCContextPtr pContext;
     XvMCSurfacePtr pSurface;
     XvMCScreenPtr pScreenPriv;
-    xvmcCreateSurfaceReply rep;
 
     REQUEST(xvmcCreateSurfaceReq);
     REQUEST_SIZE_MATCH(xvmcCreateSurfaceReq);
@@ -316,7 +307,7 @@ ProcXvMCCreateSurface(ClientPtr client)
 
     pScreenPriv = XVMC_GET_PRIVATE(pContext->pScreen);
 
-    if (!(pSurface = malloc(sizeof(XvMCSurfaceRec))))
+    if (!(pSurface = calloc(1, sizeof(XvMCSurfaceRec))))
         return BadAlloc;
 
     pSurface->surface_id = stuff->surface_id;
@@ -337,21 +328,15 @@ ProcXvMCCreateSurface(ClientPtr client)
         return BadAlloc;
     }
 
-    rep = (xvmcCreateSurfaceReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = dwords
-    };
-
-    WriteToClient(client, sizeof(xvmcCreateSurfaceReply), &rep);
-    if (dwords)
-        WriteToClient(client, dwords << 2, data);
-
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD32s(&rpcbuf, data, dwords);
     free(data);
+
+    xvmcCreateSurfaceReply reply = { 0 };
 
     pContext->refcnt++;
 
-    return Success;
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
@@ -368,7 +353,7 @@ ProcXvMCDestroySurface(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    FreeResource(stuff->surface_id, RT_NONE);
+    FreeResource(stuff->surface_id, X11_RESTYPE_NONE);
 
     return Success;
 }
@@ -378,11 +363,10 @@ ProcXvMCCreateSubpicture(ClientPtr client)
 {
     Bool image_supported = FALSE;
     CARD32 *data = NULL;
-    int i, result, dwords = 0;
+    int result, dwords = 0;
     XvMCContextPtr pContext;
     XvMCSubpicturePtr pSubpicture;
     XvMCScreenPtr pScreenPriv;
-    xvmcCreateSubpictureReply rep;
     XvMCAdaptorPtr adaptor;
     XvMCSurfaceInfoPtr surface = NULL;
 
@@ -399,7 +383,7 @@ ProcXvMCCreateSubpicture(ClientPtr client)
     adaptor = &(pScreenPriv->adaptors[pContext->adapt_num]);
 
     /* find which surface this context supports */
-    for (i = 0; i < adaptor->num_surfaces; i++) {
+    for (int i = 0; i < adaptor->num_surfaces; i++) {
         if (adaptor->surfaces[i]->surface_type_id == pContext->surface_type_id) {
             surface = adaptor->surfaces[i];
             break;
@@ -413,7 +397,7 @@ ProcXvMCCreateSubpicture(ClientPtr client)
     if (!surface->compatible_subpictures)
         return BadMatch;
 
-    for (i = 0; i < surface->compatible_subpictures->num_xvimages; i++) {
+    for (int i = 0; i < surface->compatible_subpictures->num_xvimages; i++) {
         if (surface->compatible_subpictures->xvimage_ids[i] ==
             stuff->xvimage_id) {
             image_supported = TRUE;
@@ -429,7 +413,7 @@ ProcXvMCCreateSubpicture(ClientPtr client)
         (stuff->height > surface->subpicture_max_height))
         return BadValue;
 
-    if (!(pSubpicture = malloc(sizeof(XvMCSubpictureRec))))
+    if (!(pSubpicture = calloc(1, sizeof(XvMCSubpictureRec))))
         return BadAlloc;
 
     pSubpicture->subpicture_id = stuff->subpicture_id;
@@ -457,10 +441,11 @@ ProcXvMCCreateSubpicture(ClientPtr client)
         return BadAlloc;
     }
 
-    rep = (xvmcCreateSubpictureReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = dwords,
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD32s(&rpcbuf, data, dwords);
+    free(data);
+
+    xvmcCreateSubpictureReply reply = {
         .width_actual = pSubpicture->width,
         .height_actual = pSubpicture->height,
         .num_palette_entries = pSubpicture->num_palette_entries,
@@ -471,15 +456,16 @@ ProcXvMCCreateSubpicture(ClientPtr client)
         .component_order[3] = pSubpicture->component_order[3]
     };
 
-    WriteToClient(client, sizeof(xvmcCreateSubpictureReply), &rep);
-    if (dwords)
-        WriteToClient(client, dwords << 2, data);
-
-    free(data);
+    if (client->swapped) {
+        swaps(&reply.width_actual);
+        swaps(&reply.height_actual);
+        swaps(&reply.num_palette_entries);
+        swaps(&reply.entry_bytes);
+    }
 
     pContext->refcnt++;
 
-    return Success;
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
@@ -496,7 +482,7 @@ ProcXvMCDestroySubpicture(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    FreeResource(stuff->subpicture_id, RT_NONE);
+    FreeResource(stuff->subpicture_id, X11_RESTYPE_NONE);
 
     return Success;
 }
@@ -505,14 +491,11 @@ static int
 ProcXvMCListSubpictureTypes(ClientPtr client)
 {
     XvPortPtr pPort;
-    xvmcListSubpictureTypesReply rep;
     XvMCScreenPtr pScreenPriv;
     ScreenPtr pScreen;
     XvMCAdaptorPtr adaptor = NULL;
     XvMCSurfaceInfoPtr surface = NULL;
-    xvImageFormatInfo info;
     XvImagePtr pImage;
-    int i, j;
 
     REQUEST(xvmcListSubpictureTypesReq);
     REQUEST_SIZE_MATCH(xvmcListSubpictureTypesReq);
@@ -521,13 +504,13 @@ ProcXvMCListSubpictureTypes(ClientPtr client)
 
     pScreen = pPort->pAdaptor->pScreen;
 
-    if (!dixPrivateKeyRegistered(XvMCScreenKey))
+    if (!dixPrivateKeyRegistered(&XvMCScreenKeyRec))
         return BadMatch;        /* No XvMC adaptors */
 
     if (!(pScreenPriv = XVMC_GET_PRIVATE(pScreen)))
         return BadMatch;        /* None this screen */
 
-    for (i = 0; i < pScreenPriv->num_adaptors; i++) {
+    for (int i = 0; i < pScreenPriv->num_adaptors; i++) {
         if (pPort->pAdaptor == pScreenPriv->adaptors[i].xv_adaptor) {
             adaptor = &(pScreenPriv->adaptors[i]);
             break;
@@ -537,7 +520,7 @@ ProcXvMCListSubpictureTypes(ClientPtr client)
     if (!adaptor)
         return BadMatch;
 
-    for (i = 0; i < adaptor->num_surfaces; i++) {
+    for (int i = 0; i < adaptor->num_surfaces; i++) {
         if (adaptor->surfaces[i]->surface_type_id == stuff->surface_type_id) {
             surface = adaptor->surfaces[i];
             break;
@@ -547,69 +530,78 @@ ProcXvMCListSubpictureTypes(ClientPtr client)
     if (!surface)
         return BadMatch;
 
-    rep = (xvmcListSubpictureTypesReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .num = 0
-    };
-    if (surface->compatible_subpictures)
-        rep.num = surface->compatible_subpictures->num_xvimages;
+    int num = (surface->compatible_subpictures ?
+               surface->compatible_subpictures->num_xvimages : 0);
 
-    rep.length = bytes_to_int32(rep.num * sizeof(xvImageFormatInfo));
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
 
-    WriteToClient(client, sizeof(xvmcListSubpictureTypesReply), &rep);
-
-    for (i = 0; i < rep.num; i++) {
-        pImage = NULL;
-        for (j = 0; j < adaptor->num_subpictures; j++) {
-            if (surface->compatible_subpictures->xvimage_ids[i] ==
-                adaptor->subpictures[j]->id) {
-                pImage = adaptor->subpictures[j];
-                break;
+    if (num) {
+        for (int i = 0; i < num; i++) {
+            pImage = NULL;
+            for (int j = 0; j < adaptor->num_subpictures; j++) {
+                if (surface->compatible_subpictures->xvimage_ids[i] ==
+                    adaptor->subpictures[j]->id) {
+                    pImage = adaptor->subpictures[j];
+                    break;
+                }
             }
-        }
-        if (!pImage)
-            return BadImplementation;
+            if (!pImage) {
+                return BadImplementation;
+            }
 
-        info.id = pImage->id;
-        info.type = pImage->type;
-        info.byte_order = pImage->byte_order;
-        memcpy(&info.guid, pImage->guid, 16);
-        info.bpp = pImage->bits_per_pixel;
-        info.num_planes = pImage->num_planes;
-        info.depth = pImage->depth;
-        info.red_mask = pImage->red_mask;
-        info.green_mask = pImage->green_mask;
-        info.blue_mask = pImage->blue_mask;
-        info.format = pImage->format;
-        info.y_sample_bits = pImage->y_sample_bits;
-        info.u_sample_bits = pImage->u_sample_bits;
-        info.v_sample_bits = pImage->v_sample_bits;
-        info.horz_y_period = pImage->horz_y_period;
-        info.horz_u_period = pImage->horz_u_period;
-        info.horz_v_period = pImage->horz_v_period;
-        info.vert_y_period = pImage->vert_y_period;
-        info.vert_u_period = pImage->vert_u_period;
-        info.vert_v_period = pImage->vert_v_period;
-        memcpy(&info.comp_order, pImage->component_order, 32);
-        info.scanline_order = pImage->scanline_order;
-        WriteToClient(client, sizeof(xvImageFormatInfo), &info);
+            /* xvImageFormatInfo */
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->id);
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->type);
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->byte_order);
+            x_rpcbuf_write_CARD16(&rpcbuf, 0); /* pad1 */
+            x_rpcbuf_write_CARD8s(&rpcbuf, (CARD8*)pImage->guid, 16);
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->bits_per_pixel);
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->num_planes);
+            x_rpcbuf_write_CARD16(&rpcbuf, 0); /* pad2 */
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->depth);
+            x_rpcbuf_write_CARD8(&rpcbuf, 0); /* pad3 */
+            x_rpcbuf_write_CARD16(&rpcbuf, 0); /* pad4 */
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->red_mask);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->green_mask);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->blue_mask);
+            x_rpcbuf_write_CARD8(&rpcbuf, pImage->format);
+            x_rpcbuf_write_CARD8(&rpcbuf, 0); /* pad5 */
+            x_rpcbuf_write_CARD16(&rpcbuf, 0); /* pad6 */
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->y_sample_bits);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->u_sample_bits);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->v_sample_bits);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->horz_y_period);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->horz_u_period);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->horz_v_period);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->vert_y_period);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->vert_u_period);
+            x_rpcbuf_write_CARD32(&rpcbuf, pImage->vert_v_period);
+            x_rpcbuf_write_CARD8s(&rpcbuf, (CARD8*)pImage->component_order, 32);
+            x_rpcbuf_write_CARD8(&rpcbuf,  pImage->scanline_order);
+            x_rpcbuf_write_CARD8(&rpcbuf, 0); /* pad7 */
+            x_rpcbuf_write_CARD16(&rpcbuf, 0); /* pad8 */
+            x_rpcbuf_write_CARD32(&rpcbuf, 0); /* pad9 */
+            x_rpcbuf_write_CARD32(&rpcbuf, 0); /* pad10 */
+        }
     }
 
-    return Success;
+    xvmcListSubpictureTypesReply reply = {
+        .num = num,
+    };
+
+    if (client->swapped) {
+        swapl(&reply.num);
+    }
+
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
 ProcXvMCGetDRInfo(ClientPtr client)
 {
-    xvmcGetDRInfoReply rep;
     XvPortPtr pPort;
     ScreenPtr pScreen;
     XvMCScreenPtr pScreenPriv;
-
-#ifdef HAS_XVMCSHM
-    volatile CARD32 *patternP;
-#endif
 
     REQUEST(xvmcGetDRInfoReq);
     REQUEST_SIZE_MATCH(xvmcGetDRInfoReq);
@@ -619,82 +611,70 @@ ProcXvMCGetDRInfo(ClientPtr client)
     pScreen = pPort->pAdaptor->pScreen;
     pScreenPriv = XVMC_GET_PRIVATE(pScreen);
 
-    rep = (xvmcGetDRInfoReply) {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
+    int nameLen = strlen(pScreenPriv->clientDriverName) + 1;
+    int busIDLen = strlen(pScreenPriv->busID) + 1;
+
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD8s(&rpcbuf, (CARD8*)pScreenPriv->clientDriverName, nameLen);
+    x_rpcbuf_write_CARD8s(&rpcbuf, (CARD8*)pScreenPriv->busID, busIDLen);
+
+    xvmcGetDRInfoReply reply = {
         .major = pScreenPriv->major,
         .minor = pScreenPriv->minor,
         .patchLevel = pScreenPriv->patchLevel,
-        .nameLen = bytes_to_int32(strlen(pScreenPriv->clientDriverName) + 1),
-        .busIDLen = bytes_to_int32(strlen(pScreenPriv->busID) + 1),
+        .nameLen = nameLen,
+        .busIDLen = busIDLen,
         .isLocal = 1
     };
-
-    rep.length = rep.nameLen + rep.busIDLen;
-    rep.nameLen <<= 2;
-    rep.busIDLen <<= 2;
 
     /*
      * Read back to the client what she has put in the shared memory
      * segment she prepared for us.
      */
-
-#ifdef HAS_XVMCSHM
-    patternP = (CARD32 *) shmat(stuff->shmKey, NULL, SHM_RDONLY);
-    if (-1 != (long) patternP) {
-        volatile CARD32 *patternC = patternP;
-        int i;
-        CARD32 magic = stuff->magic;
-
-        rep.isLocal = 1;
-        i = 1024 / sizeof(CARD32);
-
-        while (i--) {
-            if (*patternC++ != magic) {
-                rep.isLocal = 0;
-                break;
-            }
-            magic = ~magic;
-        }
-        shmdt((char *) patternP);
+    if (client->swapped) {
+        swapl(&reply.major);
+        swapl(&reply.minor);
+        swapl(&reply.patchLevel);
+        swapl(&reply.nameLen);
+        swapl(&reply.busIDLen);
+        swapl(&reply.isLocal);
     }
-#endif                          /* HAS_XVMCSHM */
 
-    WriteToClient(client, sizeof(xvmcGetDRInfoReply), &rep);
-    if (rep.length) {
-        WriteToClient(client, rep.nameLen, pScreenPriv->clientDriverName);
-        WriteToClient(client, rep.busIDLen, pScreenPriv->busID);
-    }
-    return Success;
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
-
-int (*ProcXvMCVector[xvmcNumRequest]) (ClientPtr) = {
-ProcXvMCQueryVersion,
-        ProcXvMCListSurfaceTypes,
-        ProcXvMCCreateContext,
-        ProcXvMCDestroyContext,
-        ProcXvMCCreateSurface,
-        ProcXvMCDestroySurface,
-        ProcXvMCCreateSubpicture,
-        ProcXvMCDestroySubpicture,
-        ProcXvMCListSubpictureTypes, ProcXvMCGetDRInfo};
 
 static int
 ProcXvMCDispatch(ClientPtr client)
 {
+    if (!(client->local))
+        return BadImplementation;
+
     REQUEST(xReq);
-
-    if (stuff->data < xvmcNumRequest)
-        return (*ProcXvMCVector[stuff->data]) (client);
-    else
-        return BadRequest;
-}
-
-static int _X_COLD
-SProcXvMCDispatch(ClientPtr client)
-{
-    /* We only support local */
-    return BadImplementation;
+    switch (stuff->data)
+    {
+        case xvmc_QueryVersion:
+            return ProcXvMCQueryVersion(client);
+        case xvmc_ListSurfaceTypes:
+            return ProcXvMCListSurfaceTypes(client);
+        case xvmc_CreateContext:
+            return ProcXvMCCreateContext(client);
+        case xvmc_DestroyContext:
+            return ProcXvMCDestroyContext(client);
+        case xvmc_CreateSurface:
+            return ProcXvMCCreateSurface(client);
+        case xvmc_DestroySurface:
+            return ProcXvMCDestroySurface(client);
+        case xvmc_CreateSubpicture:
+            return ProcXvMCCreateSubpicture(client);
+        case xvmc_DestroySubpicture:
+            return ProcXvMCDestroySubpicture(client);
+        case xvmc_ListSubpictureTypes:
+            return ProcXvMCListSubpictureTypes(client);
+        case xvmc_GetDRInfo:
+            return ProcXvMCGetDRInfo(client);
+        default:
+            return BadRequest;
+    }
 }
 
 void
@@ -702,7 +682,7 @@ XvMCExtensionInit(void)
 {
     ExtensionEntry *extEntry;
 
-    if (!dixPrivateKeyRegistered(XvMCScreenKey))
+    if (!dixPrivateKeyRegistered(&XvMCScreenKeyRec))
         return;
 
     if (!(XvMCRTContext = CreateNewResourceType(XvMCDestroyContextRes,
@@ -718,7 +698,7 @@ XvMCExtensionInit(void)
         return;
 
     extEntry = AddExtension(XvMCName, XvMCNumEvents, XvMCNumErrors,
-                            ProcXvMCDispatch, SProcXvMCDispatch,
+                            ProcXvMCDispatch, ProcXvMCDispatch,
                             NULL, StandardMinorOpcode);
 
     if (!extEntry)
@@ -734,16 +714,12 @@ XvMCExtensionInit(void)
                               extEntry->errorBase + XvMCBadSubpicture);
 }
 
-static Bool
-XvMCCloseScreen(ScreenPtr pScreen)
+static void XvMCScreenClose(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
     XvMCScreenPtr pScreenPriv = XVMC_GET_PRIVATE(pScreen);
-
-    pScreen->CloseScreen = pScreenPriv->CloseScreen;
-
     free(pScreenPriv);
-
-    return (*pScreen->CloseScreen) (pScreen);
+    dixSetPrivate(&pScreen->devPrivates, &XvMCScreenKeyRec, NULL);
+    dixScreenUnhookClose(pScreen, XvMCScreenClose);
 }
 
 int
@@ -754,13 +730,12 @@ XvMCScreenInit(ScreenPtr pScreen, int num, XvMCAdaptorPtr pAdapt)
     if (!dixRegisterPrivateKey(&XvMCScreenKeyRec, PRIVATE_SCREEN, 0))
         return BadAlloc;
 
-    if (!(pScreenPriv = malloc(sizeof(XvMCScreenRec))))
+    if (!(pScreenPriv = calloc(1, sizeof(XvMCScreenRec))))
         return BadAlloc;
 
-    dixSetPrivate(&pScreen->devPrivates, XvMCScreenKey, pScreenPriv);
+    dixSetPrivate(&pScreen->devPrivates, &XvMCScreenKeyRec, pScreenPriv);
 
-    pScreenPriv->CloseScreen = pScreen->CloseScreen;
-    pScreen->CloseScreen = XvMCCloseScreen;
+    dixScreenHookClose(pScreen, XvMCScreenClose);
 
     pScreenPriv->num_adaptors = num;
     pScreenPriv->adaptors = pAdapt;
@@ -782,15 +757,14 @@ XvMCFindXvImage(XvPortPtr pPort, CARD32 id)
     ScreenPtr pScreen = pPort->pAdaptor->pScreen;
     XvMCScreenPtr pScreenPriv;
     XvMCAdaptorPtr adaptor = NULL;
-    int i;
 
-    if (!dixPrivateKeyRegistered(XvMCScreenKey))
+    if (!dixPrivateKeyRegistered(&XvMCScreenKeyRec))
         return NULL;
 
     if (!(pScreenPriv = XVMC_GET_PRIVATE(pScreen)))
         return NULL;
 
-    for (i = 0; i < pScreenPriv->num_adaptors; i++) {
+    for (int i = 0; i < pScreenPriv->num_adaptors; i++) {
         if (pPort->pAdaptor == pScreenPriv->adaptors[i].xv_adaptor) {
             adaptor = &(pScreenPriv->adaptors[i]);
             break;
@@ -800,7 +774,7 @@ XvMCFindXvImage(XvPortPtr pPort, CARD32 id)
     if (!adaptor)
         return NULL;
 
-    for (i = 0; i < adaptor->num_subpictures; i++) {
+    for (int i = 0; i < adaptor->num_subpictures; i++) {
         if (adaptor->subpictures[i]->id == id) {
             pImage = adaptor->subpictures[i];
             break;

@@ -15,10 +15,13 @@ is" without express or implied warranty.
 #ifndef XNESTGC_H
 #define XNESTGC_H
 
-/* This file uses the GC definition form Xlib.h as XlibGC. */
+#include <X11/Xdefs.h>
+
+#include "include/gcstruct.h"
+#include "include/privates.h"
 
 typedef struct {
-    XlibGC gc;
+    uint32_t gc;
 } xnestPrivGC;
 
 extern DevPrivateKeyRec xnestGCPrivateKeyRec;

@@ -38,13 +38,13 @@
 
 #include <X11/Xfuncproto.h>
 
-#if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#if defined(__GNUC__)
 #define PURE __attribute__((pure))
 #else
 #define PURE
 #endif
 
-#if defined(__i386__) && defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
+#if defined(__i386__) && defined(__GNUC__) && !defined(__MINGW32__)
 #define FASTCALL __attribute__((fastcall))
 #else
 #define FASTCALL

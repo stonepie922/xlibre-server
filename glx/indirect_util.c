@@ -22,26 +22,27 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
+#include <inttypes.h>
 #include <string.h>
-
-#include <X11/Xmd.h>
+#include <X11/Xmd.h> // needs to be before glxproto.h
 #include <GL/gl.h>
 #include <GL/glxproto.h>
-#include <inttypes.h>
+
+#include "dix/dix_priv.h"
+#include "dix/request_priv.h"
+#include "dix/rpcbuf_priv.h"
+
 #include "indirect_size.h"
 #include "indirect_size_get.h"
 #include "indirect_dispatch.h"
 #include "glxserver.h"
-#include "glxbyteorder.h"
 #include "singlesize.h"
 #include "glxext.h"
 #include "indirect_table.h"
 #include "indirect_util.h"
+#include "misc.h"
 
 #define __GLX_PAD(a) (((a)+3)&~3)
 
@@ -115,7 +116,6 @@ __glXSendReply(ClientPtr client, const void *data, size_t elements,
                size_t element_size, GLboolean always_array, CARD32 retval)
 {
     size_t reply_ints = 0;
-    xGLXSingleReply reply = { 0, };
 
     if (__glXErrorOccured()) {
         elements = 0;
@@ -124,24 +124,21 @@ __glXSendReply(ClientPtr client, const void *data, size_t elements,
         reply_ints = bytes_to_int32(elements * element_size);
     }
 
-    reply.length = reply_ints;
-    reply.type = X_Reply;
-    reply.sequenceNumber = client->sequence;
-    reply.size = elements;
-    reply.retval = retval;
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    /* data should already be padded */
+    x_rpcbuf_write_CARD8s(&rpcbuf, data, reply_ints * 4);
 
-    /* It is faster on almost always every architecture to just copy the 8
-     * bytes, even when not necessary, than check to see of the value of
-     * elements requires it.  Copying the data when not needed will do no
-     * harm.
-     */
+    xGLXSingleReply reply = {
+        .size = elements,
+        .retval = retval,
+    };
 
-    (void) memcpy(&reply.pad3, data, 8);
-    WriteToClient(client, sz_xGLXSingleReply, &reply);
-
-    if (reply_ints != 0) {
-        WriteToClient(client, reply_ints * 4, data);
+    /* Single element goes in reply padding; don't leak uninitialized data. */
+    if (elements == 1) {
+        (void) memcpy(&reply.pad3, data, element_size);
     }
+
+    X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 /**
@@ -162,7 +159,6 @@ __glXSendReplySwap(ClientPtr client, const void *data, size_t elements,
                    size_t element_size, GLboolean always_array, CARD32 retval)
 {
     size_t reply_ints = 0;
-    xGLXSingleReply reply = { 0, };
 
     if (__glXErrorOccured()) {
         elements = 0;
@@ -171,20 +167,19 @@ __glXSendReplySwap(ClientPtr client, const void *data, size_t elements,
         reply_ints = bytes_to_int32(elements * element_size);
     }
 
-    reply.length = bswap_32(reply_ints);
-    reply.type = X_Reply;
-    reply.sequenceNumber = bswap_16(client->sequence);
-    reply.size = bswap_32(elements);
-    reply.retval = bswap_32(retval);
+    xGLXSingleReply reply = {
+        .length = bswap_32(reply_ints),
+        .type = X_Reply,
+        .sequenceNumber = bswap_16(client->sequence),
+        .size = bswap_32(elements),
+        .retval = bswap_32(retval),
+    };
 
-    /* It is faster on almost always every architecture to just copy the 8
-     * bytes, even when not necessary, than check to see of the value of
-     * elements requires it.  Copying the data when not needed will do no
-     * harm.
-     */
-
-    (void) memcpy(&reply.pad3, data, 8);
-    WriteToClient(client, sz_xGLXSingleReply, &reply);
+    /* Single element goes in reply padding; don't leak uninitialized data. */
+    if (elements == 1) {
+        (void) memcpy(&reply.pad3, data, element_size);
+    }
+    WriteToClient(client, sizeof(xGLXSingleReply), &reply);
 
     if (reply_ints != 0) {
         WriteToClient(client, reply_ints * 4, data);

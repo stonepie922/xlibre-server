@@ -24,31 +24,32 @@
 
  ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
-
 #include <X11/Xos.h>
 #include <X11/Xfuncs.h>
-
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XKMformat.h>
+
+#include "os/log_priv.h"
+#include "xkb/xkbfile_priv.h"
+#include "xkb/xkbfmisc_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
 #include "xkbstr.h"
-#include "xkbsrv.h"
 #include "xkbgeom.h"
 
-Atom
+static Atom
 XkbInternAtom(char *str, Bool only_if_exists)
 {
     if (str == NULL)
         return None;
-    return MakeAtom(str, strlen(str), !only_if_exists);
+    return MakeAtom(str, (unsigned int)strlen(str), !only_if_exists);
 }
 
 /***====================================================================***/
@@ -1168,23 +1169,6 @@ ReadXkmGeometry(FILE * file, XkbDescPtr xkb)
     return nRead;
 }
 
-Bool
-XkmProbe(FILE * file)
-{
-    unsigned hdr, tmp;
-    int nRead = 0;
-
-    hdr = (('x' << 24) | ('k' << 16) | ('m' << 8) | XkmFileVersion);
-    tmp = XkmGetCARD32(file, &nRead);
-    if (tmp != hdr) {
-        if ((tmp & (~0xff)) == (hdr & (~0xff))) {
-            _XkbLibError(_XkbErrBadFileVersion, "XkmProbe", tmp & 0xff);
-        }
-        return 0;
-    }
-    return 1;
-}
-
 static Bool
 XkmReadTOC(FILE * file, xkmFileInfo * file_info, int max_toc,
            xkmSectionInfo * toc)
@@ -1226,7 +1210,7 @@ unsigned
 XkmReadFile(FILE * file, unsigned need, unsigned want, XkbDescPtr *xkb)
 {
     register unsigned i;
-    xkmSectionInfo toc[MAX_TOC], tmpTOC;
+    xkmSectionInfo toc[MAX_TOC] = { 0 }, tmpTOC = { 0 };
     xkmFileInfo fileInfo;
     unsigned tmp, nRead = 0;
     unsigned which = need | want;

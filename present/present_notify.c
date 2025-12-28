@@ -19,8 +19,10 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "present_priv.h"
+#include "dix/dix_priv.h"
+#include "present/present_priv.h"
 
 /*
  * Mark all pending notifies for 'window' as invalid when
@@ -90,7 +92,7 @@ present_create_notifies(ClientPtr client, int num_notifies, xPresentNotify *x_no
         if (status != Success)
             goto bail;
 
-        added = i;
+        added++;
     }
     return Success;
 

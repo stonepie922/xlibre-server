@@ -33,9 +33,7 @@
 
 #include "sanitizedCarbon.h"
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #define HACK_MISSING   1
 #define HACK_KEYPAD    1
@@ -46,6 +44,10 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <assert.h>
+#include <pthread.h>
+
+#include "xkb/xkbsrv_priv.h"
 
 #include "quartz.h"
 #include "darwin.h"
@@ -54,9 +56,6 @@
 #include "quartzKeyboard.h"
 
 #include "X11Application.h"
-
-#include <assert.h>
-#include <pthread.h>
 
 #include "xkbsrv.h"
 #include "exevents.h"

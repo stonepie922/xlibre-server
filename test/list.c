@@ -24,9 +24,7 @@
 /* Test relies on assert() */
 #undef NDEBUG
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/Xlib.h>
 #include <list.h>
@@ -94,7 +92,7 @@ test_xorg_list_add(void)
     c = xorg_list_first_entry(&parent.children, struct child, node);
 
     assert(memcmp(c, &child[2], sizeof(struct child)) == 0);
-};
+}
 
 static void
 test_xorg_list_append(void)
@@ -136,7 +134,7 @@ test_xorg_list_append(void)
     xorg_list_for_each_entry(c, &parent.children, node) {
         assert(memcmp(c, &child[i++], sizeof(struct child)) == 0);
     }
-};
+}
 
 static void
 test_xorg_list_del(void)
@@ -244,6 +242,7 @@ test_nt_list_append(void)
     struct foo *item;
 
     for (item = foo, i = 1; i <= 10; i++, item++) {
+        assert(item);
         item->a = i;
         item->b = i * 2;
         nt_list_init(item, next);
@@ -266,6 +265,8 @@ test_nt_list_append(void)
         i++;
     }
     assert(i == 11);
+
+    free(foo);
 }
 
 static void
@@ -273,6 +274,7 @@ test_nt_list_insert(void)
 {
     int i;
     struct foo *foo = calloc(10, sizeof(struct foo));
+    assert(foo);
     struct foo *item;
 
     foo->a = 1;
@@ -300,6 +302,8 @@ test_nt_list_insert(void)
         i++;
     }
     assert(i == 11);
+
+    free(foo);
 }
 
 static void
@@ -307,6 +311,8 @@ test_nt_list_delete(void)
 {
     int i = 1;
     struct foo *list = calloc(10, sizeof(struct foo));
+    assert(list);
+
     struct foo *foo = list;
     struct foo *item, *tmp;
     struct foo *empty_list = foo;
@@ -373,19 +379,21 @@ test_nt_list_delete(void)
     free(list);
 }
 
-int
+const testfunc_t*
 list_test(void)
 {
-    test_xorg_list_init();
-    test_xorg_list_add();
-    test_xorg_list_append();
-    test_xorg_list_del();
-    test_xorg_list_for_each();
+    static const testfunc_t testfuncs[] = {
+        test_xorg_list_init,
+        test_xorg_list_add,
+        test_xorg_list_append,
+        test_xorg_list_del,
+        test_xorg_list_for_each,
 
-    test_nt_list_init();
-    test_nt_list_append();
-    test_nt_list_insert();
-    test_nt_list_delete();
-
-    return 0;
+        test_nt_list_init,
+        test_nt_list_append,
+        test_nt_list_insert,
+        test_nt_list_delete,
+        NULL,
+    };
+    return testfuncs;
 }

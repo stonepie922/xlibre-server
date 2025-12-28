@@ -98,6 +98,8 @@ xf86parseVendorSubSection(void)
         switch (token) {
         case COMMENT:
             ptr->vs_comment = xf86addComment(ptr->vs_comment, xf86_lex_val.str);
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
             break;
         case IDENTIFIER:
             if (xf86getSubToken(&(ptr->vs_comment)))
@@ -151,9 +153,11 @@ xf86parseVendorSection(void)
         switch (token) {
         case COMMENT:
             ptr->vnd_comment = xf86addComment(ptr->vnd_comment, xf86_lex_val.str);
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
             break;
         case IDENTIFIER:
-            if (xf86getSubToken(&(ptr->vnd_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->vnd_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Identifier");
             if (has_ident == TRUE)
                 Error(MULTIPLE_MSG, "Identifier");
@@ -164,7 +168,7 @@ xf86parseVendorSection(void)
             ptr->vnd_option_lst = xf86parseOption(ptr->vnd_option_lst);
             break;
         case SUBSECTION:
-            if (xf86getSubToken(&(ptr->vnd_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->vnd_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "SubSection");
             {
                 HANDLE_LIST(vnd_sub_lst, xf86parseVendorSubSection,

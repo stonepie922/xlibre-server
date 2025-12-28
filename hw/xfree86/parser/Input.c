@@ -84,9 +84,11 @@ xf86parseInputSection(void)
         switch (token) {
         case COMMENT:
             ptr->inp_comment = xf86addComment(ptr->inp_comment, xf86_lex_val.str);
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
             break;
         case IDENTIFIER:
-            if (xf86getSubToken(&(ptr->inp_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->inp_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Identifier");
             if (has_ident == TRUE)
                 Error(MULTIPLE_MSG, "Identifier");
@@ -94,7 +96,7 @@ xf86parseInputSection(void)
             has_ident = TRUE;
             break;
         case DRIVER:
-            if (xf86getSubToken(&(ptr->inp_comment)) != STRING)
+            if (xf86getSubToken(&(ptr->inp_comment)) != XF86_TOKEN_STRING)
                 Error(QUOTE_MSG, "Driver");
             if (strcmp(xf86_lex_val.str, "keyboard") == 0) {
                 ptr->inp_driver = strdup("kbd");

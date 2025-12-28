@@ -28,9 +28,7 @@
  * Silicon Graphics, Inc.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <GL/gl.h>
 #include "glxserver.h"
@@ -107,7 +105,7 @@ __glGetMap_size(GLenum target, GLenum query)
         }
         break;
     }
-    return -1;
+    return 0;
 }
 
 GLint
@@ -166,7 +164,7 @@ __glGetPixelMap_size(GLenum map)
         query = GL_PIXEL_MAP_A_TO_A_SIZE;
         break;
     default:
-        return -1;
+        return 0;
     }
     glGetIntegerv(query, &size);
     return size;

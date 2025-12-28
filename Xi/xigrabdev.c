@@ -29,45 +29,37 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
-#include "windowstr.h"          /* window structure  */
 #include <X11/extensions/XI2.h>
 #include <X11/extensions/XI2proto.h>
 
+#include "dix/dix_priv.h"
+#include "dix/exevents_priv.h"
+#include "dix/inpututils_priv.h"
+#include "dix/request_priv.h"
+#include "dix/resource_priv.h"
+#include "Xi/handlers.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
+#include "windowstr.h"          /* window structure  */
 #include "exglobals.h"          /* BadDevice */
-#include "exevents.h"
-#include "xigrabdev.h"
-#include "inpututils.h"
-
-int _X_COLD
-SProcXIGrabDevice(ClientPtr client)
-{
-    REQUEST(xXIGrabDeviceReq);
-    /*
-     * Check here for at least the length of the struct we swap, then
-     * let ProcXIGrabDevice check the full size after we swap mask_len.
-     */
-    REQUEST_AT_LEAST_SIZE(xXIGrabDeviceReq);
-
-    swaps(&stuff->length);
-    swaps(&stuff->deviceid);
-    swapl(&stuff->grab_window);
-    swapl(&stuff->cursor);
-    swapl(&stuff->time);
-    swaps(&stuff->mask_len);
-
-    return ProcXIGrabDevice(client);
-}
 
 int
 ProcXIGrabDevice(ClientPtr client)
 {
+    REQUEST(xXIGrabDeviceReq);
+    REQUEST_AT_LEAST_SIZE(xXIGrabDeviceReq);
+
+    if (client->swapped) {
+        swaps(&stuff->deviceid);
+        swapl(&stuff->grab_window);
+        swapl(&stuff->cursor);
+        swapl(&stuff->time);
+        swaps(&stuff->mask_len);
+    }
+
     DeviceIntPtr dev;
-    xXIGrabDeviceReply rep;
     int ret = Success;
     uint8_t status;
     GrabMask mask = { 0 };
@@ -75,14 +67,16 @@ ProcXIGrabDevice(ClientPtr client)
     unsigned int keyboard_mode;
     unsigned int pointer_mode;
 
-    REQUEST(xXIGrabDeviceReq);
     REQUEST_FIXED_SIZE(xXIGrabDeviceReq, ((size_t) stuff->mask_len) * 4);
 
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixGrabAccess);
     if (ret != Success)
         return ret;
 
-    if (!IsMaster(dev))
+    if (!dev->enabled)
+        return AlreadyGrabbed;
+
+    if (!InputDevIsMaster(dev))
         stuff->paired_device_mode = GrabModeAsync;
 
     if (IsKeyboardDevice(dev)) {
@@ -120,41 +114,29 @@ ProcXIGrabDevice(ClientPtr client)
     if (ret != Success)
         return ret;
 
-    rep = (xXIGrabDeviceReply) {
-        .repType = X_Reply,
+    xXIGrabDeviceReply reply = {
         .RepType = X_XIGrabDevice,
-        .sequenceNumber = client->sequence,
-        .length = 0,
         .status = status
     };
 
-    WriteReplyToClient(client, sizeof(rep), &rep);
-    return ret;
-}
-
-int _X_COLD
-SProcXIUngrabDevice(ClientPtr client)
-{
-    REQUEST(xXIUngrabDeviceReq);
-    REQUEST_SIZE_MATCH(xXIUngrabDeviceReq);
-
-    swaps(&stuff->length);
-    swaps(&stuff->deviceid);
-    swapl(&stuff->time);
-
-    return ProcXIUngrabDevice(client);
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 int
 ProcXIUngrabDevice(ClientPtr client)
 {
+    REQUEST(xXIUngrabDeviceReq);
+    REQUEST_SIZE_MATCH(xXIUngrabDeviceReq);
+
+    if (client->swapped) {
+        swaps(&stuff->deviceid);
+        swapl(&stuff->time);
+    }
+
     DeviceIntPtr dev;
     GrabPtr grab;
     int ret = Success;
     TimeStamp time;
-
-    REQUEST(xXIUngrabDeviceReq);
-    REQUEST_SIZE_MATCH(xXIUngrabDeviceReq);
 
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixGetAttrAccess);
     if (ret != Success)
@@ -169,12 +151,4 @@ ProcXIUngrabDevice(ClientPtr client)
         (*dev->deviceGrab.DeactivateGrab) (dev);
 
     return Success;
-}
-
-void _X_COLD
-SRepXIGrabDevice(ClientPtr client, int size, xXIGrabDeviceReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
 }

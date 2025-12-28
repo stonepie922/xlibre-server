@@ -4,8 +4,11 @@ libdir=@libdir@
 includedir=@includedir@
 datarootdir=@datarootdir@
 moduledir=@moduledir@
+input_drivers_dir=@moduledir@/drivers/input
+video_drivers_dir=@moduledir@/drivers/video
 sdkdir=@sdkdir@
-sysconfigdir=@sysconfigdir@
+sysconfigdir=@xserverconfigdir@
+xserverconfigdir=@xserverconfigdir@
 
 abi_ansic=@abi_ansic@
 abi_videodrv=@abi_videodrv@
@@ -13,7 +16,8 @@ abi_xinput=@abi_xinput@
 abi_extension=@abi_extension@
 
 Name: xorg-server
-Description: Modular X.Org X Server
+Description: Modular XLibre X Server
+URL: https://github.com/X11Libre/xserver/
 Version: @PACKAGE_VERSION@
 Requires.private: @SDK_REQUIRED_MODULES@
 Cflags: -I${sdkdir} @symbol_visibility@

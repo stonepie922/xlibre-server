@@ -85,12 +85,16 @@
 #endif
 
 #include <X11/X.h>
+
+#include "include/extinit.h"
+#include "os/log_priv.h"
+
 #include "xf86Modes.h"
 #include "xf86Crtc.h"
 #include "os.h"
 #include "servermd.h"
 #include "globals.h"
-#include "xf86.h"
+#include "xf86_priv.h"
 #include "xf86Priv.h"
 #include "edid.h"
 
@@ -230,6 +234,8 @@ xf86ModeStatusToString(ModeStatus status)
         return "monitor doesn't support reduced blanking";
     case MODE_BANDWIDTH:
         return "mode requires too much memory bandwidth";
+    case MODE_DUPLICATE:
+        return "the same mode has been added";
     case MODE_BAD:
         return "unknown reason";
     case MODE_ERROR:
@@ -243,7 +249,7 @@ xf86ModeStatusToString(ModeStatus status)
  * xf86ShowClockRanges() -- Print the clock ranges allowed
  * and the clock values scaled by ClockMulFactor and ClockDivFactor
  */
-void
+static void
 xf86ShowClockRanges(ScrnInfoPtr scrp, ClockRangePtr clockRanges)
 {
     ClockRangePtr cp;
@@ -506,6 +512,8 @@ xf86LookupMode(ScrnInfoPtr scrp, DisplayModePtr modep,
 
             /* scan through the modes in the sort order above */
             if ((p->type & type) != type)
+                continue;
+            if (p->name == NULL)
                 continue;
 
             if (strcmp(p->name, modep->name) == 0) {
@@ -1352,9 +1360,6 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
     int saveType;
     PixmapFormatRec *BankFormat;
     ClockRangePtr cp;
-    int numTimings = 0;
-    range hsync[MAX_HSYNC];
-    range vrefresh[MAX_VREFRESH];
     Bool inferred_virtual = FALSE;
 
     DebugF
@@ -1394,18 +1399,9 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
         Bool specified = FALSE;
 
         if (scrp->monitor->nHsync <= 0) {
-            if (numTimings > 0) {
-                scrp->monitor->nHsync = numTimings;
-                for (i = 0; i < numTimings; i++) {
-                    scrp->monitor->hsync[i].lo = hsync[i].lo;
-                    scrp->monitor->hsync[i].hi = hsync[i].hi;
-                }
-            }
-            else {
-                scrp->monitor->hsync[0].lo = 31.5;
-                scrp->monitor->hsync[0].hi = 48.0;
-                scrp->monitor->nHsync = 1;
-            }
+            scrp->monitor->hsync[0].lo = 31.5;
+            scrp->monitor->hsync[0].hi = 48.0;
+            scrp->monitor->nHsync = 1;
             type = "default ";
         }
         else {
@@ -1426,18 +1422,9 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
 
         type = "";
         if (scrp->monitor->nVrefresh <= 0) {
-            if (numTimings > 0) {
-                scrp->monitor->nVrefresh = numTimings;
-                for (i = 0; i < numTimings; i++) {
-                    scrp->monitor->vrefresh[i].lo = vrefresh[i].lo;
-                    scrp->monitor->vrefresh[i].hi = vrefresh[i].hi;
-                }
-            }
-            else {
-                scrp->monitor->vrefresh[0].lo = 50;
-                scrp->monitor->vrefresh[0].hi = 70;
-                scrp->monitor->nVrefresh = 1;
-            }
+            scrp->monitor->vrefresh[0].lo = 50;
+            scrp->monitor->vrefresh[0].hi = 70;
+            scrp->monitor->nVrefresh = 1;
             type = "default ";
         }
         else {
@@ -1474,7 +1461,7 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
      * Store the clockRanges for later use by the VidMode extension.
      */
     nt_list_for_each_entry(cp, clockRanges, next) {
-        ClockRangePtr newCR = xnfalloc(sizeof(ClockRange));
+        ClockRangePtr newCR = XNFalloc(sizeof(ClockRange));
         memcpy(newCR, cp, sizeof(ClockRange));
         newCR->next = NULL;
         if (scrp->clockRanges == NULL)
@@ -1591,7 +1578,7 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
             }
 
             if (status == MODE_OK) {
-                new = xnfalloc(sizeof(DisplayModeRec));
+                new = XNFalloc(sizeof(DisplayModeRec));
                 *new = *p;
                 new->next = NULL;
                 if (!q) {
@@ -1602,7 +1589,7 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
                 }
                 new->prev = NULL;
                 q = new;
-                q->name = xnfstrdup(p->name);
+                q->name = XNFstrdup(p->name);
                 q->status = MODE_OK;
             }
             else {
@@ -1632,10 +1619,10 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
     if (modeNames != NULL) {
         for (i = 0; modeNames[i] != NULL; i++) {
             userModes = TRUE;
-            new = xnfcalloc(1, sizeof(DisplayModeRec));
+            new = XNFcallocarray(1, sizeof(DisplayModeRec));
             new->prev = last;
             new->type = M_T_USERDEF;
-            new->name = xnfstrdup(modeNames[i]);
+            new->name = XNFstrdup(modeNames[i]);
             if (new->prev)
                 new->prev->next = new;
             *endp = last = new;
@@ -1644,10 +1631,10 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
     }
 
     /* Lookup each mode */
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (noPanoramiXExtension)
         validateAllDefaultModes = TRUE;
-#endif
+#endif /* XINERAMA */
 
     for (p = scrp->modes;; p = p->next) {
         Bool repeat;
@@ -1700,9 +1687,9 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
             if (r == NULL)
                 break;
 
-            p = xnfcalloc(1, sizeof(DisplayModeRec));
+            p = XNFcallocarray(1, sizeof(DisplayModeRec));
             p->prev = last;
-            p->name = xnfstrdup(r->name);
+            p->name = XNFstrdup(r->name);
             if (!userModes)
                 p->type = M_T_USERDEF;
             if (p->prev)

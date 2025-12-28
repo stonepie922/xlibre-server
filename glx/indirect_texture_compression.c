@@ -22,14 +22,13 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/request_priv.h"
 
 #include "glxserver.h"
-#include "glxbyteorder.h"
 #include "glxext.h"
+#include "misc.h"
 #include "singlesize.h"
 #include "unpack.h"
 #include "indirect_size_get.h"

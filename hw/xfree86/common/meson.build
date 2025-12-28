@@ -22,6 +22,7 @@ srcs_xorg_common = [
     'xf86Mode.c',
     'xorgHelper.c',
     'xf86Extensions.c',
+    '../../stubs/ddxBeforeReset.c',
 ]
 
 xorg_sdk_headers = [
@@ -39,10 +40,8 @@ xorg_sdk_headers = [
     'xisb.h',
     'xorgVersion.h',
     'xf86sbusBus.h',
-    'xf86VGAarbiter.h',
     'xf86Optionstr.h',
     'xf86platformBus.h',
-    'xf86MatchDrivers.h',
     'xaarop.h',
 ]
 
@@ -62,7 +61,7 @@ endif
 
 if build_xv
     srcs_xorg_common += ['xf86xv.c', 'xf86xvmc.c']
-    xorg_sdk_headers += ['xf86xv.h', 'xf86xvmc.h', 'xf86xvpriv.h']
+    xorg_sdk_headers += ['xf86xv.h', 'xf86xvmc.h']
 endif
 
 if build_udev
@@ -72,7 +71,7 @@ endif
 if get_option('pciaccess')
     srcs_xorg_common += ['xf86pciBus.c', 'xf86VGAarbiter.c']
 
-    if host_machine.cpu() == 'sparc' or host_machine.cpu() == 'sparc64'
+    if host_machine.cpu_family() in ['sparc', 'sparc64']
         srcs_xorg_common += 'xf86sbusBus.c'
     endif
 endif

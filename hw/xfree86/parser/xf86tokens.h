@@ -52,15 +52,12 @@
  * authorization from the copyright holder(s) and author(s).
  */
 
-#ifdef HAVE_XORG_CONFIG_H
-#include <xorg-config.h>
-#endif
-
 #ifndef _xf86_tokens_h
 #define _xf86_tokens_h
 
-/* Undefine symbols that some OSs might define */
-#undef IOBASE
+#ifdef HAVE_XORG_CONFIG_H
+#include <xorg-config.h>
+#endif
 
 /*
  * Each token should have a unique value regardless of the section
@@ -76,7 +73,7 @@ typedef enum {
 
     /* value type tokens */
     NUMBER = 1,
-    STRING,
+    XF86_TOKEN_STRING,
 
     /* Tokens that can appear in many sections */
     SECTION,
@@ -90,11 +87,6 @@ typedef enum {
     MATCHSEAT,
     OPTION,
     COMMENT,
-
-    /* Frequency units */
-    HRZ,
-    KHZ,
-    MHZ,
 
     /* File tokens */
     FONTPATH,
@@ -125,9 +117,6 @@ typedef enum {
     MODE,
     GAMMA,
     USEMODES,
-
-    /* Modes tokens */
-    /* no new ones */
 
     /* Mode tokens */
     DOTCLOCK,
@@ -177,7 +166,7 @@ typedef enum {
     CLOCKS,
     VIDEORAM,
     BOARD,
-    IOBASE,
+    XF86_TOKEN_IOBASE,
     RAMDAC,
     DACSPEED,
     BIOSBASE,
@@ -188,37 +177,6 @@ typedef enum {
     CARD,
     BUSID,
     IRQ,
-
-    /* Keyboard tokens */
-    AUTOREPEAT,
-    XLEDS,
-    KPROTOCOL,
-    XKBKEYMAP,
-    XKBCOMPAT,
-    XKBTYPES,
-    XKBKEYCODES,
-    XKBGEOMETRY,
-    XKBSYMBOLS,
-    XKBDISABLE,
-    PANIX106,
-    XKBRULES,
-    XKBMODEL,
-    XKBLAYOUT,
-    XKBVARIANT,
-    XKBOPTIONS,
-    /* Obsolete keyboard tokens */
-    SERVERNUM,
-    LEFTALT,
-    RIGHTALT,
-    SCROLLLOCK_TOK,
-    RIGHTCTL,
-    /* arguments for the above obsolete tokens */
-    CONF_KM_META,
-    CONF_KM_COMPOSE,
-    CONF_KM_MODESHIFT,
-    CONF_KM_MODELOCK,
-    CONF_KM_SCROLLLOCK,
-    CONF_KM_CONTROL,
 
     /* Pointer tokens */
     EMULATE3,
@@ -297,6 +255,9 @@ typedef enum {
     NOMATCH_DRIVER,
     NOMATCH_TAG,
     NOMATCH_LAYOUT,
+
+    /* OutputClass Tokens */
+    MODULE,
 } ParserTokens;
 
 #endif                          /* _xf86_tokens_h */

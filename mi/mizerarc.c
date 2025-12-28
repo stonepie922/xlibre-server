@@ -32,17 +32,17 @@ Author:  Bob Scheifler, MIT X Consortium
  * The Computer Journal, November 1967, Volume 10, Number 3, pp. 282-289
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <math.h>
 #include <X11/X.h>
 #include <X11/Xprotostr.h>
+
+#include "mi/mi_priv.h"
+
 #include "regionstr.h"
 #include "gcstruct.h"
 #include "pixmapstr.h"
-#include "mi.h"
 #include "mizerarc.h"
 
 #define FULLCIRCLE (360 * 64)
@@ -671,7 +671,7 @@ miZeroPolyArc(DrawablePtr pDraw, GCPtr pGC, int narcs, xArc * parcs)
     numPts = maxPts << 2;
     dospans = (pGC->fillStyle != FillSolid);
     if (dospans) {
-        widths = xallocarray(numPts, sizeof(int));
+        widths = calloc(numPts, sizeof(int));
         if (!widths)
             return;
         maxw = 0;
@@ -687,7 +687,7 @@ miZeroPolyArc(DrawablePtr pDraw, GCPtr pGC, int narcs, xArc * parcs)
                    (unsigned char *) pGC->dash, (int) pGC->numInDashList,
                    &dinfo.dashOffsetInit);
     }
-    points = xallocarray(numPts, sizeof(DDXPointRec));
+    points = calloc(numPts, sizeof(DDXPointRec));
     if (!points) {
         if (dospans) {
             free(widths);
@@ -729,7 +729,7 @@ miZeroPolyArc(DrawablePtr pDraw, GCPtr pGC, int narcs, xArc * parcs)
                 ChangeGCVal gcval;
 
                 gcval.val = pGC->bgPixel;
-                ChangeGC(NullClient, pGC, GCForeground, &gcval);
+                ChangeGC(NULL, pGC, GCForeground, &gcval);
                 ValidateGC(pDraw, pGC);
             }
             pts = &points[numPts >> 1];
@@ -755,7 +755,7 @@ miZeroPolyArc(DrawablePtr pDraw, GCPtr pGC, int narcs, xArc * parcs)
                 ChangeGCVal gcval;
 
                 gcval.val = fgPixel;
-                ChangeGC(NullClient, pGC, GCForeground, &gcval);
+                ChangeGC(NULL, pGC, GCForeground, &gcval);
                 ValidateGC(pDraw, pGC);
             }
         }

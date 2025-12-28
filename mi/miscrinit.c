@@ -26,22 +26,22 @@ from The Open Group.
 
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
+
+#include "mi/mi_priv.h"
+
 #include "servermd.h"
 #include "misc.h"
-#include "mi.h"
 #include "scrnintstr.h"
 #include "pixmapstr.h"
 #include "dix.h"
 #include "miline.h"
-#ifdef MITSHM
+#ifdef CONFIG_MITSHM
 #include <X11/extensions/shm.h>
 #include "shmint.h"
-#endif
+#endif /* CONFIG_MITSHM */
 
 /* We use this structure to propagate some information from miScreenInit to
  * miCreateScreenResources.  miScreenInit allocates the structure, fills it
@@ -55,7 +55,11 @@ from The Open Group.
 typedef struct {
     void *pbits;                /* pointer to framebuffer */
     int width;                  /* delta to add to a framebuffer addr to move one row down */
+    int xsize;
+    int ysize;
 } miScreenInitParmsRec, *miScreenInitParmsPtr;
+
+#define DEFAULTZEROLINEBIAS (OCTANT2 | OCTANT3 | OCTANT4 | OCTANT5)
 
 /* this plugs into pScreen->ModifyPixmapHeader */
 Bool
@@ -121,7 +125,8 @@ miModifyPixmapHeader(PixmapPtr pPixmap, int width, int height, int depth,
 static Bool
 miCloseScreen(ScreenPtr pScreen)
 {
-    return ((*pScreen->DestroyPixmap) ((PixmapPtr) pScreen->devPrivate));
+    dixDestroyPixmap((PixmapPtr) pScreen->devPrivate, 0);
+    return TRUE;
 }
 
 static Bool
@@ -166,8 +171,8 @@ miCreateScreenResources(ScreenPtr pScreen)
         if (!pPixmap)
             return FALSE;
 
-        if (!(*pScreen->ModifyPixmapHeader) (pPixmap, pScreen->width,
-                                             pScreen->height,
+        if (!(*pScreen->ModifyPixmapHeader) (pPixmap, pScrInitParms->xsize,
+                                             pScrInitParms->ysize,
                                              pScreen->rootDepth,
                                              BitsPerPixel(pScreen->rootDepth),
                                              PixmapBytePad(pScrInitParms->width,
@@ -184,20 +189,20 @@ miCreateScreenResources(ScreenPtr pScreen)
     return TRUE;
 }
 
-Bool
-miScreenDevPrivateInit(ScreenPtr pScreen, int width, void *pbits)
+static Bool
+miScreenDevPrivateInit(ScreenPtr pScreen, int width, void *pbits, int xsize, int ysize)
 {
-    miScreenInitParmsPtr pScrInitParms;
-
     /* Stash pbits and width in a short-lived miScreenInitParmsRec attached
      * to the screen, until CreateScreenResources can put them in the
      * screen pixmap.
      */
-    pScrInitParms = malloc(sizeof(miScreenInitParmsRec));
+    miScreenInitParmsPtr pScrInitParms = calloc(1, sizeof(miScreenInitParmsRec));
     if (!pScrInitParms)
         return FALSE;
     pScrInitParms->pbits = pbits;
     pScrInitParms->width = width;
+    pScrInitParms->xsize = xsize;
+    pScrInitParms->ysize = ysize;
     pScreen->devPrivate = (void *) pScrInitParms;
     return TRUE;
 }
@@ -249,9 +254,9 @@ miScreenInit(ScreenPtr pScreen, void *pbits,  /* pointer to screen bits */
     pScreen->numVisuals = numVisuals;
     pScreen->visuals = visuals;
     if (width) {
-#ifdef MITSHM
+#ifdef CONFIG_MITSHM
         ShmRegisterFbFuncs(pScreen);
-#endif
+#endif /* CONFIG_MITSHM */
         pScreen->CloseScreen = miCloseScreen;
     }
     /* else CloseScreen */
@@ -291,7 +296,7 @@ miScreenInit(ScreenPtr pScreen, void *pbits,  /* pointer to screen bits */
 
     miSetZeroLineBias(pScreen, DEFAULTZEROLINEBIAS);
 
-    return miScreenDevPrivateInit(pScreen, width, pbits);
+    return miScreenDevPrivateInit(pScreen, width, pbits, xsize, ysize);
 }
 
 DevPrivateKeyRec miZeroLineScreenKeyRec;
@@ -304,4 +309,12 @@ miSetZeroLineBias(ScreenPtr pScreen, unsigned int bias)
 
     dixSetPrivate(&pScreen->devPrivates, miZeroLineScreenKey,
                   (unsigned long *) (unsigned long) bias);
+}
+
+void miScreenClose(ScreenPtr pScreen)
+{
+    if (pScreen->devPrivate) {
+        free(pScreen->devPrivate);
+        pScreen->devPrivate = NULL;
+    }
 }

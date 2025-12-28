@@ -19,19 +19,21 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
 
-#include "present_priv.h"
-#include "randrstr.h"
+#include "dix/dix_priv.h"
+#include "dix/request_priv.h"
+#include "dri3/dri3_priv.h"
+#include "present/present_priv.h"
+
+#include "randrstr_priv.h"
 #include <protocol-versions.h>
 
 static int
 proc_present_query_version(ClientPtr client)
 {
     REQUEST(xPresentQueryVersionReq);
-    xPresentQueryVersionReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = 0,
+    xPresentQueryVersionReply reply = {
         .majorVersion = SERVER_PRESENT_MAJOR_VERSION,
         .minorVersion = SERVER_PRESENT_MINOR_VERSION
     };
@@ -44,20 +46,18 @@ proc_present_query_version(ClientPtr client)
      * higher than the requested version.
      */
 
-    if (rep.majorVersion > stuff->majorVersion ||
-        rep.minorVersion > stuff->minorVersion) {
-        rep.majorVersion = stuff->majorVersion;
-        rep.minorVersion = stuff->minorVersion;
+    if (reply.majorVersion > stuff->majorVersion ||
+        reply.minorVersion > stuff->minorVersion) {
+        reply.majorVersion = stuff->majorVersion;
+        reply.minorVersion = stuff->minorVersion;
     }
 
     if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swapl(&rep.majorVersion);
-        swapl(&rep.minorVersion);
+        swapl(&reply.majorVersion);
+        swapl(&reply.minorVersion);
     }
-    WriteToClient(client, sizeof(rep), &rep);
-    return Success;
+
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 #define VERIFY_FENCE_OR_NONE(fence_ptr, fence_id, client, access) do {  \
@@ -79,77 +79,121 @@ proc_present_query_version(ClientPtr client)
     } while (0)
 
 static int
-proc_present_pixmap(ClientPtr client)
+proc_present_pixmap_common(ClientPtr client,
+                           Window req_window,
+                           Pixmap req_pixmap,
+                           CARD32 req_serial,
+                           CARD32 req_valid,
+                           CARD32 req_update,
+                           INT16 req_x_off,
+                           INT16 req_y_off,
+                           CARD32 req_target_crtc,
+                           XSyncFence req_wait_fence,
+                           XSyncFence req_idle_fence,
+#ifdef DRI3
+                           struct dri3_syncobj *acquire_syncobj,
+                           struct dri3_syncobj *release_syncobj,
+                           CARD64 req_acquire_point,
+                           CARD64 req_release_point,
+#endif /* DRI3 */
+                           CARD32 req_options,
+                           CARD64 req_target_msc,
+                           CARD64 req_divisor,
+                           CARD64 req_remainder,
+                           size_t base_req_size,
+                           xPresentNotify *req_notifies)
 {
-    REQUEST(xPresentPixmapReq);
-    WindowPtr           window;
-    PixmapPtr           pixmap;
-    RegionPtr           valid = NULL;
-    RegionPtr           update = NULL;
-    SyncFence           *wait_fence;
-    SyncFence           *idle_fence;
-    RRCrtcPtr           target_crtc;
-    int                 ret;
-    int                 nnotifies;
-    present_notify_ptr  notifies = NULL;
+    WindowPtr window;
+    PixmapPtr pixmap;
+    RegionPtr valid = NULL;
+    RegionPtr update = NULL;
+    RRCrtcPtr target_crtc;
+    SyncFence *wait_fence;
+    SyncFence *idle_fence;
+    int nnotifies;
+    present_notify_ptr notifies = NULL;
+    int ret;
 
-    REQUEST_AT_LEAST_SIZE(xPresentPixmapReq);
-    ret = dixLookupWindow(&window, stuff->window, client, DixWriteAccess);
+    ret = dixLookupWindow(&window, req_window, client, DixWriteAccess);
     if (ret != Success)
         return ret;
-    ret = dixLookupResourceByType((void **) &pixmap, stuff->pixmap, RT_PIXMAP, client, DixReadAccess);
+    ret = dixLookupResourceByType((void **) &pixmap, req_pixmap, X11_RESTYPE_PIXMAP, client, DixReadAccess);
     if (ret != Success)
         return ret;
 
     if (window->drawable.depth != pixmap->drawable.depth)
         return BadMatch;
 
-    VERIFY_REGION_OR_NONE(valid, stuff->valid, client, DixReadAccess);
-    VERIFY_REGION_OR_NONE(update, stuff->update, client, DixReadAccess);
+    VERIFY_REGION_OR_NONE(valid, req_valid, client, DixReadAccess);
+    VERIFY_REGION_OR_NONE(update, req_update, client, DixReadAccess);
 
-    VERIFY_CRTC_OR_NONE(target_crtc, stuff->target_crtc, client, DixReadAccess);
+    VERIFY_CRTC_OR_NONE(target_crtc, req_target_crtc, client, DixReadAccess);
 
-    VERIFY_FENCE_OR_NONE(wait_fence, stuff->wait_fence, client, DixReadAccess);
-    VERIFY_FENCE_OR_NONE(idle_fence, stuff->idle_fence, client, DixWriteAccess);
+    VERIFY_FENCE_OR_NONE(wait_fence, req_wait_fence, client, DixReadAccess);
+    VERIFY_FENCE_OR_NONE(idle_fence, req_idle_fence, client, DixWriteAccess);
 
-    if (stuff->options & ~(PresentAllOptions)) {
-        client->errorValue = stuff->options;
+    if (req_options & ~(PresentAllOptions)) {
+        client->errorValue = req_options;
         return BadValue;
     }
 
     /*
      * Check to see if remainder is sane
      */
-    if (stuff->divisor == 0) {
-        if (stuff->remainder != 0) {
-            client->errorValue = (CARD32) stuff->remainder;
+    if (req_divisor == 0) {
+        if (req_remainder != 0) {
+            client->errorValue = (CARD32)req_remainder;
             return BadValue;
         }
     } else {
-        if (stuff->remainder >= stuff->divisor) {
-            client->errorValue = (CARD32) stuff->remainder;
+        if (req_remainder >= req_divisor) {
+            client->errorValue = (CARD32)req_remainder;
             return BadValue;
         }
     }
 
-    nnotifies = (client->req_len << 2) - sizeof (xPresentPixmapReq);
+    nnotifies = (client->req_len << 2) - base_req_size;
     if (nnotifies % sizeof (xPresentNotify))
         return BadLength;
 
     nnotifies /= sizeof (xPresentNotify);
     if (nnotifies) {
-        ret = present_create_notifies(client, nnotifies, (xPresentNotify *) (stuff + 1), &notifies);
+        ret = present_create_notifies(client, nnotifies, req_notifies, &notifies);
         if (ret != Success)
             return ret;
     }
 
-    ret = present_pixmap(window, pixmap, stuff->serial, valid, update,
-                         stuff->x_off, stuff->y_off, target_crtc,
-                         wait_fence, idle_fence, stuff->options,
-                         stuff->target_msc, stuff->divisor, stuff->remainder, notifies, nnotifies);
+    ret = present_pixmap(window, pixmap, req_serial,
+                         valid, update, req_x_off, req_y_off, target_crtc,
+                         wait_fence, idle_fence,
+#ifdef DRI3
+                         acquire_syncobj, release_syncobj,
+                         req_acquire_point, req_release_point,
+#endif /* DRI3 */
+                         req_options, req_target_msc, req_divisor, req_remainder,
+                         notifies, nnotifies);
+
     if (ret != Success)
         present_destroy_notifies(notifies, nnotifies);
     return ret;
+}
+
+static int
+proc_present_pixmap(ClientPtr client)
+{
+    REQUEST(xPresentPixmapReq);
+    REQUEST_AT_LEAST_SIZE(xPresentPixmapReq);
+    return proc_present_pixmap_common(client, stuff->window, stuff->pixmap, stuff->serial,
+                                      stuff->valid, stuff->update, stuff->x_off, stuff->y_off,
+                                      stuff->target_crtc,
+                                      stuff->wait_fence, stuff->idle_fence,
+#ifdef DRI3
+                                      None, None, 0, 0,
+#endif /* DRI3 */
+                                      stuff->options, stuff->target_msc,
+                                      stuff->divisor, stuff->remainder,
+                                      sizeof (xPresentPixmapReq),
+                                      (xPresentNotify *)(stuff + 1));
 }
 
 static int
@@ -207,11 +251,6 @@ static int
 proc_present_query_capabilities (ClientPtr client)
 {
     REQUEST(xPresentQueryCapabilitiesReq);
-    xPresentQueryCapabilitiesReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = 0,
-    };
     WindowPtr   window;
     RRCrtcPtr   crtc = NULL;
     int         r;
@@ -229,32 +268,69 @@ proc_present_query_capabilities (ClientPtr client)
         return r;
     }
 
-    rep.capabilities = present_query_capabilities(crtc);
+    xPresentQueryCapabilitiesReply reply = {
+        .capabilities = present_query_capabilities(crtc)
+    };
 
     if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swapl(&rep.capabilities);
+        swapl(&reply.capabilities);
     }
-    WriteToClient(client, sizeof(rep), &rep);
-    return Success;
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
-static int (*proc_present_vector[PresentNumberRequests]) (ClientPtr) = {
-    proc_present_query_version,            /* 0 */
-    proc_present_pixmap,                   /* 1 */
-    proc_present_notify_msc,               /* 2 */
-    proc_present_select_input,             /* 3 */
-    proc_present_query_capabilities,       /* 4 */
-};
+#ifdef DRI3
+static int
+proc_present_pixmap_synced (ClientPtr client)
+{
+    REQUEST(xPresentPixmapSyncedReq);
+    struct dri3_syncobj *acquire_syncobj;
+    struct dri3_syncobj *release_syncobj;
+
+    REQUEST_AT_LEAST_SIZE(xPresentPixmapSyncedReq);
+    VERIFY_DRI3_SYNCOBJ(stuff->acquire_syncobj, acquire_syncobj, DixWriteAccess);
+    VERIFY_DRI3_SYNCOBJ(stuff->release_syncobj, release_syncobj, DixWriteAccess);
+
+    if (stuff->acquire_point == 0 || stuff->release_point == 0 ||
+        (stuff->acquire_syncobj == stuff->release_syncobj &&
+         stuff->acquire_point >= stuff->release_point))
+        return BadValue;
+
+    return proc_present_pixmap_common(client, stuff->window, stuff->pixmap, stuff->serial,
+                                      stuff->valid, stuff->update, stuff->x_off, stuff->y_off,
+                                      stuff->target_crtc,
+                                      None, None,
+                                      acquire_syncobj, release_syncobj,
+                                      stuff->acquire_point, stuff->release_point,
+                                      stuff->options, stuff->target_msc,
+                                      stuff->divisor, stuff->remainder,
+                                      sizeof (xPresentPixmapSyncedReq),
+                                      (xPresentNotify *)(stuff + 1));
+}
+#endif /* DRI3 */
 
 int
 proc_present_dispatch(ClientPtr client)
 {
     REQUEST(xReq);
-    if (stuff->data >= PresentNumberRequests || !proc_present_vector[stuff->data])
-        return BadRequest;
-    return (*proc_present_vector[stuff->data]) (client);
+
+    switch (stuff->data) {
+        case X_PresentQueryVersion:
+            return proc_present_query_version(client);
+        case X_PresentPixmap:
+            return proc_present_pixmap(client);
+        case X_PresentNotifyMSC:
+            return proc_present_notify_msc(client);
+        case X_PresentSelectInput:
+            return proc_present_select_input(client);
+        case X_PresentQueryCapabilities:
+            return proc_present_query_capabilities(client);
+#ifdef DRI3
+        case X_PresentPixmapSynced:
+            return proc_present_pixmap_synced(client);
+#endif
+    }
+
+    return BadRequest;
 }
 
 static int _X_COLD
@@ -263,10 +339,9 @@ sproc_present_query_version(ClientPtr client)
     REQUEST(xPresentQueryVersionReq);
     REQUEST_SIZE_MATCH(xPresentQueryVersionReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->majorVersion);
     swapl(&stuff->minorVersion);
-    return (*proc_present_vector[stuff->presentReqType]) (client);
+    return proc_present_query_version(client);
 }
 
 static int _X_COLD
@@ -275,7 +350,6 @@ sproc_present_pixmap(ClientPtr client)
     REQUEST(xPresentPixmapReq);
     REQUEST_AT_LEAST_SIZE(xPresentPixmapReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->window);
     swapl(&stuff->pixmap);
     swapl(&stuff->valid);
@@ -286,7 +360,7 @@ sproc_present_pixmap(ClientPtr client)
     swapll(&stuff->divisor);
     swapll(&stuff->remainder);
     swapl(&stuff->idle_fence);
-    return (*proc_present_vector[stuff->presentReqType]) (client);
+    return proc_present_pixmap(client);
 }
 
 static int _X_COLD
@@ -295,12 +369,11 @@ sproc_present_notify_msc(ClientPtr client)
     REQUEST(xPresentNotifyMSCReq);
     REQUEST_SIZE_MATCH(xPresentNotifyMSCReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->window);
     swapll(&stuff->target_msc);
     swapll(&stuff->divisor);
     swapll(&stuff->remainder);
-    return (*proc_present_vector[stuff->presentReqType]) (client);
+    return proc_present_notify_msc(client);
 }
 
 static int _X_COLD
@@ -309,10 +382,9 @@ sproc_present_select_input (ClientPtr client)
     REQUEST(xPresentSelectInputReq);
     REQUEST_SIZE_MATCH(xPresentSelectInputReq);
 
-    swaps(&stuff->length);
     swapl(&stuff->window);
     swapl(&stuff->eventMask);
-    return (*proc_present_vector[stuff->presentReqType]) (client);
+    return proc_present_select_input(client);
 }
 
 static int _X_COLD
@@ -320,24 +392,65 @@ sproc_present_query_capabilities (ClientPtr client)
 {
     REQUEST(xPresentQueryCapabilitiesReq);
     REQUEST_SIZE_MATCH(xPresentQueryCapabilitiesReq);
-    swaps(&stuff->length);
     swapl(&stuff->target);
-    return (*proc_present_vector[stuff->presentReqType]) (client);
+    return proc_present_query_capabilities(client);
 }
 
-static int (*sproc_present_vector[PresentNumberRequests]) (ClientPtr) = {
-    sproc_present_query_version,           /* 0 */
-    sproc_present_pixmap,                  /* 1 */
-    sproc_present_notify_msc,              /* 2 */
-    sproc_present_select_input,            /* 3 */
-    sproc_present_query_capabilities,      /* 4 */
-};
+
+#ifdef DRI3
+static int _X_COLD
+sproc_present_pixmap_synced(ClientPtr client)
+{
+    REQUEST(xPresentPixmapSyncedReq);
+    REQUEST_AT_LEAST_SIZE(xPresentPixmapSyncedReq);
+
+    swapl(&stuff->window);
+
+    swapl(&stuff->pixmap);
+    swapl(&stuff->serial);
+
+    swapl(&stuff->valid);
+    swapl(&stuff->update);
+
+    swaps(&stuff->x_off);
+    swaps(&stuff->y_off);
+    swapl(&stuff->target_crtc);
+
+    swapl(&stuff->acquire_syncobj);
+    swapl(&stuff->release_syncobj);
+    swapll(&stuff->acquire_point);
+    swapll(&stuff->release_point);
+
+    swapl(&stuff->options);
+
+    swapll(&stuff->target_msc);
+    swapll(&stuff->divisor);
+    swapll(&stuff->remainder);
+    return proc_present_pixmap_synced(client);
+}
+#endif /* DRI3 */
 
 int _X_COLD
 sproc_present_dispatch(ClientPtr client)
 {
     REQUEST(xReq);
-    if (stuff->data >= PresentNumberRequests || !sproc_present_vector[stuff->data])
-        return BadRequest;
-    return (*sproc_present_vector[stuff->data]) (client);
+
+    switch (stuff->data) {
+        case X_PresentQueryVersion:
+            return sproc_present_query_version(client);
+        case X_PresentPixmap:
+            return sproc_present_pixmap(client);
+        case X_PresentNotifyMSC:
+            return sproc_present_notify_msc(client);
+        case X_PresentSelectInput:
+            return sproc_present_select_input(client);
+        case X_PresentQueryCapabilities:
+            return sproc_present_query_capabilities(client);
+#ifdef DRI3
+        case X_PresentPixmapSynced:
+            return sproc_present_pixmap_synced(client);
+#endif
+    }
+
+    return BadRequest;
 }

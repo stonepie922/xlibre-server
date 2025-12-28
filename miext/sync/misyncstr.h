@@ -21,12 +21,12 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#ifndef _MISYNCSTR_H_
+#define _MISYNCSTR_H_
+
 #ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
 #endif
-
-#ifndef _MISYNCSTR_H_
-#define _MISYNCSTR_H_
 
 #include <stdint.h>
 #include "dix.h"
@@ -77,19 +77,5 @@ typedef struct _SyncTriggerList {
     SyncTrigger *pTrigger;
     struct _SyncTriggerList *next;
 } SyncTriggerList;
-
-extern DevPrivateKeyRec miSyncScreenPrivateKey;
-
-#define SYNC_SCREEN_PRIV(pScreen) 				\
-    (SyncScreenPrivPtr) dixLookupPrivate(&pScreen->devPrivates,	\
-					 &miSyncScreenPrivateKey)
-
-typedef struct _syncScreenPriv {
-    /* Wrappable sync-specific screen functions */
-    SyncScreenFuncsRec funcs;
-
-    /* Wrapped screen functions */
-    CloseScreenProcPtr CloseScreen;
-} SyncScreenPrivRec, *SyncScreenPrivPtr;
 
 #endif                          /* _MISYNCSTR_H_ */

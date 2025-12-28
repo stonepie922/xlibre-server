@@ -35,6 +35,10 @@ from The Open Group.
 #include <sys/utsname.h>
 #endif
 
+#include "os/cmdline.h"
+#include "os/osdep.h"
+#include "os/ddx_priv.h"
+
 #include <../xfree86/common/xorgVersion.h>
 #include "win.h"
 #include "winconfig.h"
@@ -221,14 +225,6 @@ ddxProcessArgument(int argc, char *argv[], int i)
 
     /* Initialize once */
     if (!s_fBeenHere) {
-#ifdef DDXOSVERRORF
-        /*
-         * This initialises our hook into VErrorF () for catching log messages
-         * that are generated before OsInit () is called.
-         */
-        OsVendorVErrorFProc = OsVendorVErrorF;
-#endif
-
         s_fBeenHere = TRUE;
 
         /* Initialize only if option is not -help */
@@ -252,7 +248,7 @@ ddxProcessArgument(int argc, char *argv[], int i)
         }
     }
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("ddxProcessArgument - arg: %s\n", argv[i]);
 #endif
 
@@ -285,7 +281,7 @@ ddxProcessArgument(int argc, char *argv[], int i)
         int iWidth, iHeight, iX, iY;
         int iMonitor;
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
         winDebug("ddxProcessArgument - screen - argc: %d i: %d\n", argc, i);
 #endif
 
@@ -1127,7 +1123,7 @@ winLogCommandLine(int argc, char *argv[])
         }
 
     /* Allocate memory for concatenated command line */
-    g_pszCommandLine = malloc(iSize + 1);
+    g_pszCommandLine = calloc(1, iSize + 1);
     if (!g_pszCommandLine)
         FatalError("winLogCommandLine - Could not allocate memory for "
                    "command line string.  Exiting.\n");
@@ -1171,8 +1167,7 @@ winLogVersionInfo(void)
         return;
     s_fBeenHere = TRUE;
 
-    ErrorF("Welcome to the XWin X Server\n");
-    ErrorF("Vendor: %s\n", XVENDORNAME);
+    ErrorF("Welcome to the XLibre XWin X Server\n");
     ErrorF("Release: %d.%d.%d.%d\n", XORG_VERSION_MAJOR,
            XORG_VERSION_MINOR, XORG_VERSION_PATCH, XORG_VERSION_SNAP);
 #ifdef HAVE_SYS_UTSNAME_H
@@ -1186,8 +1181,5 @@ winLogVersionInfo(void)
     }
 #endif
     winOS();
-    if (strlen(BUILDERSTRING))
-        ErrorF("%s\n", BUILDERSTRING);
-    ErrorF("Contact: %s\n", BUILDERADDR);
     ErrorF("\n");
 }

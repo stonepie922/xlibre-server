@@ -19,25 +19,25 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
+
+#include "dix/screen_hooks_priv.h"
+#include "dix/screenint_priv.h"
+#include "miext/extinit_priv.h"
 
 #include "dri3_priv.h"
-
 #include <drm_fourcc.h>
 
 static int dri3_request;
 DevPrivateKeyRec dri3_screen_private_key;
 
-static int dri3_screen_generation;
+static x_server_generation_t dri3_screen_generation;
 
-static Bool
-dri3_close_screen(ScreenPtr screen)
+static void dri3_screen_close(CallbackListPtr *pcbl, ScreenPtr screen, void *unused)
 {
     dri3_screen_priv_ptr screen_priv = dri3_screen_priv(screen);
-
-    unwrap(screen_priv, screen, CloseScreen);
-
+    dixScreenUnhookClose(screen, dri3_screen_close);
     free(screen_priv);
-    return (*screen->CloseScreen) (screen);
 }
 
 Bool
@@ -53,7 +53,7 @@ dri3_screen_init(ScreenPtr screen, const dri3_screen_info_rec *info)
         if (!screen_priv)
             return FALSE;
 
-        wrap(screen_priv, screen, CloseScreen, dri3_close_screen);
+        dixScreenHookClose(screen, dri3_screen_close);
 
         screen_priv->info = info;
 
@@ -63,11 +63,20 @@ dri3_screen_init(ScreenPtr screen, const dri3_screen_info_rec *info)
     return TRUE;
 }
 
+RESTYPE dri3_syncobj_type;
+
+static int dri3_syncobj_free(void *data, XID id)
+{
+    struct dri3_syncobj *syncobj = data;
+    if (--syncobj->refcount == 0)
+        syncobj->free(syncobj);
+    return 0;
+}
+
 void
 dri3_extension_init(void)
 {
     ExtensionEntry *extension;
-    int i;
 
     /* If no screens support DRI3, there's no point offering the
      * extension at all
@@ -75,10 +84,10 @@ dri3_extension_init(void)
     if (dri3_screen_generation != serverGeneration)
         return;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     if (!noPanoramiXExtension)
         return;
-#endif
+#endif /* XINERAMA */
 
     extension = AddExtension(DRI3_NAME, DRI3NumberEvents, DRI3NumberErrors,
                              proc_dri3_dispatch, sproc_dri3_dispatch,
@@ -88,10 +97,15 @@ dri3_extension_init(void)
 
     dri3_request = extension->base;
 
-    for (i = 0; i < screenInfo.numScreens; i++) {
-        if (!dri3_screen_init(screenInfo.screens[i], NULL))
+    DIX_FOR_EACH_SCREEN({
+        if (!dri3_screen_init(walkScreen, NULL))
             goto bail;
-    }
+    });
+
+    dri3_syncobj_type = CreateNewResourceType(dri3_syncobj_free, "DRI3Syncobj");
+    if (!dri3_syncobj_type)
+        goto bail;
+
     return;
 
 bail:

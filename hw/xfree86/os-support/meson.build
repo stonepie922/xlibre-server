@@ -16,10 +16,7 @@ os_c_args = []
 
 if get_option('pciaccess')
     srcs_xorg_os_support += 'bus/Pci.c'
-    if host_machine.system() != 'linux'
-        srcs_xorg_os_support += 'bus/bsd_pci.c'
-    endif
-    if host_machine.cpu() == 'sparc' or host_machine.cpu() == 'sparc64'
+    if host_machine.cpu_family() in ['sparc', 'sparc64']
         srcs_xorg_os_support += 'bus/Sbus.c'
         install_data('bus/xf86Sbus.h', install_dir: xorgsdkdir)
     endif
@@ -36,11 +33,15 @@ if host_machine.system() == 'linux'
         'linux/lnx_bell.c',
         'linux/lnx_init.c',
         'linux/lnx_kmod.c',
-        'linux/lnx_platform.c',
         'linux/lnx_video.c',
         'misc/SlowBcopy.c',
         'shared/VTsw_usl.c',
     ]
+    if libdrm_dep.found()
+        srcs_xorg_os_support += 'shared/drm_platform.c'
+    else
+        srcs_xorg_os_support += 'shared/platform_noop.c'
+    endif
     if build_agp
         srcs_xorg_os_support += 'linux/lnx_agp.c'
     else
@@ -49,6 +50,7 @@ if host_machine.system() == 'linux'
     if build_systemd_logind
         srcs_xorg_os_support += 'linux/systemd-logind.c'
     endif
+
 
     # this is ugly because the code is also
     if build_apm or build_acpi
@@ -81,7 +83,7 @@ elif host_machine.system() == 'sunos'
         srcs_xorg_os_support += 'shared/agp_noop.c'
     endif
 
-    if host_machine.cpu_family() == 'sparc'
+    if host_machine.cpu_family() in ['sparc', 'sparc64']
         srcs_xorg_os_support += 'solaris/solaris-sparcv8plus.S'
     elif host_machine.cpu_family() == 'x86_64'
         srcs_xorg_os_support += 'solaris/solaris-amd64.S'
@@ -91,11 +93,12 @@ elif host_machine.system() == 'sunos'
         error('Unknown CPU family for Solaris build')
     endif
 
-elif host_machine.system().endswith('bsd')
+elif host_machine.system().endswith('bsd') or host_machine.system() == 'dragonfly'
     srcs_xorg_os_support += [
         'bsd/bsd_VTsw.c',
         'bsd/bsd_bell.c',
         'bsd/bsd_init.c',
+        'shared/drm_platform.c',
 	'shared/pm_noop.c'
     ]
 
@@ -111,9 +114,9 @@ elif host_machine.system().endswith('bsd')
         if host_machine.system() == 'netbsd' or host_machine.system() == 'openbsd'
             os_dep += cc.find_library('i386')
         endif
-    elif host_machine.cpu_family() == 'arm'
+    elif host_machine.cpu_family() == 'arm' or host_machine.cpu_family() == 'aarch64'
         srcs_xorg_os_support += 'bsd/arm_video.c'
-    elif host_machine.cpu_family() == 'powerpc'
+    elif host_machine.cpu_family() == 'ppc' or host_machine.cpu_family() == 'ppc64'
         srcs_xorg_os_support += 'bsd/ppc_video.c'
     elif host_machine.cpu_family() == 'sparc64'
         srcs_xorg_os_support += 'bsd/sparc64_video.c'
@@ -127,7 +130,7 @@ elif host_machine.system().endswith('bsd')
         endif
     endif
 
-    if host_machine.system() == 'freebsd'
+    if host_machine.system() == 'freebsd' or host_machine.system() == 'dragonfly'
         srcs_xorg_os_support += 'bsd/bsd_kmod.c'
     else
         srcs_xorg_os_support += 'shared/kmod_noop.c'
@@ -153,6 +156,15 @@ else
         'stub/stub_init.c',
         'stub/stub_video.c',
     ]
+endif
+
+if host_machine.system() == 'linux' or host_machine.system() == 'dragonfly' or host_machine.system().endswith('bsd')
+
+    if build_seatd_libseat
+       srcs_xorg_os_support  += 'shared/seatd-libseat.c'
+       os_dep += seat_libseat_dep
+    endif
+
 endif
 
 xorg_os_support = static_library('xorg_os_support',

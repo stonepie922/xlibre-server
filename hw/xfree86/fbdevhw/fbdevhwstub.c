@@ -9,26 +9,15 @@
 /* Stubs for the static server on platforms that don't support fbdev */
 
 Bool
-fbdevHWGetRec(ScrnInfoPtr pScrn)
-{
-    return FALSE;
-}
-
-void
-fbdevHWFreeRec(ScrnInfoPtr pScrn)
-{
-}
-
-Bool
-fbdevHWProbe(struct pci_device *pPci, char *device, char **namep)
+fbdevHWProbe(struct pci_device *pPci, const char *device, char **namep)
 {
     return FALSE;
 }
 
 Bool
-fbdevHWInit(ScrnInfoPtr pScrn, struct pci_device *pPci, char *device)
+fbdevHWInit(ScrnInfoPtr pScrn, struct pci_device *pPci, const char *device)
 {
-    xf86Msg(X_ERROR, "fbdevhw is not available on this platform\n");
+    LogMessageVerb(X_ERROR, 1, "fbdevhw is not available on this platform\n");
     return FALSE;
 }
 
@@ -65,12 +54,6 @@ fbdevHWGetVidmem(ScrnInfoPtr pScrn)
 void
 fbdevHWSetVideoModes(ScrnInfoPtr pScrn)
 {
-}
-
-DisplayModePtr
-fbdevHWGetBuildinMode(ScrnInfoPtr pScrn)
-{
-    return NULL;
 }
 
 void
@@ -181,12 +164,6 @@ fbdevHWAdjustFrameWeak(void)
     return fbdevHWAdjustFrame;
 }
 
-xf86EnterVTProc *
-fbdevHWEnterVTWeak(void)
-{
-    return fbdevHWEnterVT;
-}
-
 xf86LeaveVTProc *
 fbdevHWLeaveVTWeak(void)
 {
@@ -209,10 +186,4 @@ xf86LoadPaletteProc *
 fbdevHWLoadPaletteWeak(void)
 {
     return fbdevHWLoadPalette;
-}
-
-SaveScreenProcPtr
-fbdevHWSaveScreenWeak(void)
-{
-    return fbdevHWSaveScreen;
 }

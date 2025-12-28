@@ -28,12 +28,12 @@
  * use or other dealings in this Software without prior written authorization.
  */
 
+#ifndef _ROOTLESS_H
+#define _ROOTLESS_H
+
 #ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
 #endif
-
-#ifndef _ROOTLESS_H
-#define _ROOTLESS_H
 
 #include "rootlessConfig.h"
 #include "mi.h"
@@ -140,8 +140,7 @@ typedef void (*RootlessMoveFrameProc)
  *  pScreen     Screen to move the new frame to
  *  newX, newY  New position of the frame
  *  newW, newH  New size of the frame
- *  gravity     Gravity for window contents (rl_gravity_enum). This is always
- *              RL_GRAVITY_NONE unless ROOTLESS_RESIZE_GRAVITY is set.
+ *  gravity     Gravity for window contents (rl_gravity_enum).
  */
 typedef void (*RootlessResizeFrameProc)
  (RootlessFrameID wid, ScreenPtr pScreen,

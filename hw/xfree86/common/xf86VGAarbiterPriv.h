@@ -24,6 +24,9 @@
  *
  */
 
+#ifndef XSERVER_XFREE86_XF86VGAARBITERPRIV_H
+#define XSERVER_XFREE86_XF86VGAARBITERPRIV_H
+
 #ifdef HAVE_XORG_CONFIG_H
 #include <xorg-config.h>
 #endif
@@ -32,7 +35,6 @@
 #include "xf86.h"
 #include "xf86_OSproc.h"
 #include <X11/X.h>
-#include "colormapst.h"
 #include "scrnintstr.h"
 #include "screenint.h"
 #include "gcstruct.h"
@@ -49,7 +51,7 @@
 
 #define UNWRAP_SCREEN(x) pScreen->x = pScreenPriv->x
 
-#define SCREEN_PRIV()   ((VGAarbiterScreenPtr) dixLookupPrivate(&(pScreen)->devPrivates, VGAarbiterScreenKey))
+#define SCREEN_PRIV()   ((VGAarbiterScreenPtr) dixLookupPrivate(&(pScreen)->devPrivates, &VGAarbiterScreenKeyRec))
 
 #define SCREEN_PROLOG(x) (pScreen->x = SCREEN_PRIV()->x)
 
@@ -65,7 +67,7 @@
 
 #define PICTURE_PROLOGUE(field) ps->field = \
     ((VGAarbiterScreenPtr)dixLookupPrivate(&(pScreen)->devPrivates, \
-    VGAarbiterScreenKey))->field
+    &VGAarbiterScreenKeyRec))->field
 
 #define PICTURE_EPILOGUE(field, wrap) ps->field = wrap
 
@@ -80,7 +82,7 @@
     PointPriv = dixLookupPrivate(&pScreen->devPrivates,         \
                                  miPointerScreenKey);           \
     pScreenPriv = dixLookupPrivate(&(pScreen)->devPrivates,     \
-                                   VGAarbiterScreenKey);        \
+                                   &VGAarbiterScreenKeyRec);    \
     PointPriv->spriteFuncs = pScreenPriv->miSprite;             \
 
 #define SPRITE_EPILOG                                   \
@@ -99,7 +101,7 @@
     (x)->funcs = &VGAarbiterGCFuncs;
 
 #define GC_UNWRAP(x) VGAarbiterGCPtr  pGCPriv = \
-    (VGAarbiterGCPtr)dixLookupPrivate(&(x)->devPrivates, VGAarbiterGCKey);\
+    (VGAarbiterGCPtr)dixLookupPrivate(&(x)->devPrivates, &VGAarbiterGCKeyRec);\
     (x)->ops = pGCPriv->wrapOps; (x)->funcs = pGCPriv->wrapFuncs;
 
 static inline void
@@ -202,7 +204,7 @@ static void VGAarbiterDestroyClip(GCPtr pGC);
 static void VGAarbiterCopyClip(GCPtr pgcDst, GCPtr pgcSrc);
 
 /* GC ops */
-static void VGAarbiterFillSpans(DrawablePtr pDraw, GC * pGC, int nInit,
+static void VGAarbiterFillSpans(DrawablePtr pDraw, GCPtr pGC, int nInit,
                                 DDXPointPtr pptInit, int *pwidthInit,
                                 int fSorted);
 static void VGAarbiterSetSpans(DrawablePtr pDraw, GCPtr pGC, char *pcharsrc,
@@ -212,7 +214,7 @@ static void VGAarbiterPutImage(DrawablePtr pDraw, GCPtr pGC, int depth, int x,
                                int y, int w, int h, int leftPad, int format,
                                char *pImage);
 static RegionPtr VGAarbiterCopyArea(DrawablePtr pSrc, DrawablePtr pDst,
-                                    GC * pGC, int srcx, int srcy, int width,
+                                    GCPtr pGC, int srcx, int srcy, int width,
                                     int height, int dstx, int dsty);
 static RegionPtr VGAarbiterCopyPlane(DrawablePtr pSrc, DrawablePtr pDst,
                                      GCPtr pGC, int srcx, int srcy, int width,
@@ -274,3 +276,5 @@ static void VGAarbiterGlyphs(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
 static void VGAarbiterCompositeRects(CARD8 op, PicturePtr pDst,
                                      xRenderColor * color, int nRect,
                                      xRectangle *rects);
+
+#endif /* XSERVER_XFREE86_XF86VGAARBITERPRIV_H */

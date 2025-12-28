@@ -26,22 +26,17 @@
 #ifndef EXAPRIV_H
 #define EXAPRIV_H
 
-#ifdef HAVE_DIX_CONFIG_H
-#include <dix-config.h>
-#endif
-
 #include "exa.h"
 
 #include <X11/X.h>
 #include <X11/Xproto.h>
-#ifdef MITSHM
+#ifdef CONFIG_MITSHM
 #include "shmint.h"
-#endif
+#endif /* CONFIG_MITSHM */
 #include "scrnintstr.h"
 #include "pixmapstr.h"
 #include "windowstr.h"
 #include "servermd.h"
-#include "colormapst.h"
 #include "gcstruct.h"
 #include "input.h"
 #include "mipointer.h"
@@ -62,7 +57,7 @@
 #if DEBUG_TRACE_FALL
 #define EXA_FALLBACK(x)     					\
 do {								\
-	ErrorF("EXA fallback at %s: ", __FUNCTION__);		\
+	ErrorF("EXA fallback at %s: ", __func__);		\
 	ErrorF x;						\
 } while (0)
 
@@ -152,15 +147,12 @@ typedef struct {
     ScreenBlockHandlerProcPtr SavedBlockHandler;
     ScreenWakeupHandlerProcPtr SavedWakeupHandler;
     CreateGCProcPtr SavedCreateGC;
-    CloseScreenProcPtr SavedCloseScreen;
     GetImageProcPtr SavedGetImage;
     GetSpansProcPtr SavedGetSpans;
     CreatePixmapProcPtr SavedCreatePixmap;
-    DestroyPixmapProcPtr SavedDestroyPixmap;
     CopyWindowProcPtr SavedCopyWindow;
     ChangeWindowAttributesProcPtr SavedChangeWindowAttributes;
     BitmapToRegionProcPtr SavedBitmapToRegion;
-    CreateScreenResourcesProcPtr SavedCreateScreenResources;
     ModifyPixmapHeaderProcPtr SavedModifyPixmapHeader;
     SharePixmapBackingProcPtr SavedSharePixmapBacking;
     SetSharedPixmapBackingProcPtr SavedSetSharedPixmapBacking;
@@ -236,19 +228,11 @@ extern DevPrivateKeyRec exaScreenPrivateKeyRec;
     real->mem = priv->Saved##mem; \
 }
 
-#ifdef HAVE_TYPEOF
 #define swap(priv, real, mem) {\
     typeof(real->mem) tmp = priv->Saved##mem; \
     priv->Saved##mem = real->mem; \
     real->mem = tmp; \
 }
-#else
-#define swap(priv, real, mem) {\
-    const void *tmp = priv->Saved##mem; \
-    priv->Saved##mem = real->mem; \
-    real->mem = tmp; \
-}
-#endif
 
 #define EXA_PRE_FALLBACK(_screen_) \
     ExaScreenPriv(_screen_); \
@@ -452,7 +436,7 @@ ExaCheckAddTraps(PicturePtr pPicture,
 
 /* exa_accel.c */
 
-static _X_INLINE Bool
+static inline Bool
 exaGCReadsDestination(DrawablePtr pDrawable, unsigned long planemask,
                       unsigned int fillStyle, unsigned char alu,
                       Bool clientClip)
@@ -598,8 +582,7 @@ exaModifyPixmapHeader_classic(PixmapPtr pPixmap, int width, int height,
                               int depth, int bitsPerPixel, int devKind,
                               void *pPixData);
 
-Bool
- exaDestroyPixmap_classic(PixmapPtr pPixmap);
+void exaPixmapDestroy_classic(CallbackListPtr *pcbl, ScreenPtr pScreen, PixmapPtr pPixmap);
 
 Bool
  exaPixmapHasGpuCopy_classic(PixmapPtr pPixmap);
@@ -616,8 +599,7 @@ exaModifyPixmapHeader_driver(PixmapPtr pPixmap, int width, int height,
                              int depth, int bitsPerPixel, int devKind,
                              void *pPixData);
 
-Bool
- exaDestroyPixmap_driver(PixmapPtr pPixmap);
+void exaPixmapDestroy_driver(CallbackListPtr *pcbl, ScreenPtr pScreen, PixmapPtr pPixmap);
 
 Bool
  exaPixmapHasGpuCopy_driver(PixmapPtr pPixmap);
@@ -633,8 +615,7 @@ Bool
 exaModifyPixmapHeader_mixed(PixmapPtr pPixmap, int width, int height, int depth,
                             int bitsPerPixel, int devKind, void *pPixData);
 
-Bool
- exaDestroyPixmap_mixed(PixmapPtr pPixmap);
+void exaPixmapDestroy_mixed(CallbackListPtr *pcbl, ScreenPtr pScreen, PixmapPtr pPixmap);
 
 Bool
  exaPixmapHasGpuCopy_mixed(PixmapPtr pPixmap);
@@ -731,5 +712,9 @@ void
 
 void
  exaPrepareAccessReg_classic(PixmapPtr pPixmap, int index, RegionPtr pReg);
+
+void exaMoveOutPixmap(PixmapPtr pPixmap);
+
+void ExaOffscreenMarkUsed(PixmapPtr pPixmap);
 
 #endif                          /* EXAPRIV_H */

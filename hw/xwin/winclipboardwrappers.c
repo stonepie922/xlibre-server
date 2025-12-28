@@ -35,7 +35,7 @@
 #endif
 
 #include "win.h"
-#include "dixstruct.h"
+#include "dixstruct_priv.h"
 
 /*
  * Local function prototypes
@@ -54,7 +54,7 @@ winProcEstablishConnection(ClientPtr client)
 {
     int iReturn;
     static int s_iCallCount = 0;
-    static unsigned long s_ulServerGeneration = 0;
+    static x_server_generation_t s_ulServerGeneration = 0;
 
     if (s_iCallCount == 0)
         winDebug("winProcEstablishConnection - Hello\n");

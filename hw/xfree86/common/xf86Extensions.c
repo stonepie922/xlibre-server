@@ -28,14 +28,13 @@
 #endif
 
 #include "extension.h"
-#include "extinit.h"
 #include "globals.h"
 
-#include "xf86.h"
+#include "xf86_priv.h"
 #include "xf86Config.h"
 #include "xf86Module.h"
 #include "xf86Extensions.h"
-#include "xf86Opt.h"
+#include "xf86Opt_priv.h"
 #include "optionstr.h"
 
 #ifdef XSELINUX
@@ -50,6 +49,11 @@
 #include <X11/extensions/xf86vmproto.h>
 #include "vidmodestr.h"
 #endif
+
+Bool noXFree86VidModeExtension = FALSE;
+Bool noXFree86DGAExtension = FALSE;
+Bool noXFree86DRIExtension = FALSE;
+Bool noDRI2Extension = FALSE;
 
 /*
  * DDX-specific extensions.

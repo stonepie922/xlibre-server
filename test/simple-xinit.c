@@ -21,9 +21,9 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/Xfuncproto.h>
 
 #include <errno.h>
 #include <signal.h>
@@ -53,7 +53,7 @@ kill_server(int server_pid)
     }
 }
 
-static void
+_X_NORETURN static void
 usage(int argc, char **argv)
 {
     fprintf(stderr, "%s <client command> -- <server command>\n", argv[0]);
@@ -66,7 +66,10 @@ static const char *server_dead = "server_dead";
 static void
 handle_sigchld(int sig)
 {
-    write(server_displayfd, server_dead, strlen(server_dead));
+    /* nasty trick to silence compiler warning on unused result.
+       we really have no practical use for it here */
+    if (write(server_displayfd, server_dead, strlen(server_dead)) == -1)
+        fprintf(stderr, "writing to server_displayfd failed: %s\n", strerror(errno));
 }
 
 /* Starts the X server, returning its pid. */

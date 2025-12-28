@@ -18,7 +18,7 @@
 #if 0
 #include "int10Defines.h"
 #endif
-#include "xf86int10.h"
+#include "xf86int10_priv.h"
 
 #define REG pInt
 
@@ -207,7 +207,7 @@ xf86HandleInt10Options(ScrnInfoPtr pScrn, int entityIndex)
             configOptions = pEnt->device->options;
 
         if (configOptions) {
-            if (!(options = (OptionInfoPtr) malloc(sizeof(INT10Options))))
+            if (!(options = (OptionInfoPtr) calloc(1, sizeof(INT10Options))))
                 return NULL;
 
             (void) memcpy(options, INT10Options, sizeof(INT10Options));

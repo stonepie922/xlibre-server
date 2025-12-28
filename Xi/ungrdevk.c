@@ -50,41 +50,24 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include <X11/extensions/XI.h>
+#include <X11/extensions/XIproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/dixgrabs_priv.h"
+#include "Xi/handlers.h"
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include "windowstr.h"          /* window structure  */
-#include <X11/extensions/XI.h>
-#include <X11/extensions/XIproto.h>
 #include "exglobals.h"
-#include "dixgrabs.h"
 #include "xkbsrv.h"
 #include "xkbstr.h"
-
-#include "ungrdevk.h"
 
 #define AllModifiersMask ( \
 	ShiftMask | LockMask | ControlMask | Mod1Mask | Mod2Mask | \
 	Mod3Mask | Mod4Mask | Mod5Mask )
-
-/***********************************************************************
- *
- * Handle requests from a client with a different byte order.
- *
- */
-
-int _X_COLD
-SProcXUngrabDeviceKey(ClientPtr client)
-{
-    REQUEST(xUngrabDeviceKeyReq);
-    swaps(&stuff->length);
-    REQUEST_SIZE_MATCH(xUngrabDeviceKeyReq);
-    swapl(&stuff->grabWindow);
-    swaps(&stuff->modifiers);
-    return (ProcXUngrabDeviceKey(client));
-}
 
 /***********************************************************************
  *
@@ -95,14 +78,19 @@ SProcXUngrabDeviceKey(ClientPtr client)
 int
 ProcXUngrabDeviceKey(ClientPtr client)
 {
+    REQUEST(xUngrabDeviceKeyReq);
+    REQUEST_SIZE_MATCH(xUngrabDeviceKeyReq);
+
+    if (client->swapped) {
+        swapl(&stuff->grabWindow);
+        swaps(&stuff->modifiers);
+    }
+
     DeviceIntPtr dev;
     DeviceIntPtr mdev;
     WindowPtr pWin;
     GrabPtr temporaryGrab;
     int rc;
-
-    REQUEST(xUngrabDeviceKeyReq);
-    REQUEST_SIZE_MATCH(xUngrabDeviceKeyReq);
 
     rc = dixLookupDevice(&dev, stuff->grabbed_device, client, DixGrabAccess);
     if (rc != Success)
