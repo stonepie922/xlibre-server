@@ -44,15 +44,18 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 
 ******************************************************************/
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include <X11/extensions/shapeconst.h>
-#include "regionstr.h"
-#include "region.h"
-#include "mi.h"
+
+#include "dix/cursor_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "dix/window_priv.h"
+#include "include/regionstr.h"
+#include "mi/mi_priv.h"
+
 #include "windowstr.h"
 #include "scrnintstr.h"
 #include "pixmapstr.h"
@@ -124,7 +127,7 @@ miMarkWindow(WindowPtr pWin)
 
     if (pWin->valdata)
         return;
-    val = (ValidatePtr) xnfalloc(sizeof(ValidateRec));
+    val = (ValidatePtr) XNFalloc(sizeof(ValidateRec));
     val->before.oldAbsCorner.x = pWin->drawable.x;
     val->before.oldAbsCorner.y = pWin->drawable.y;
     val->before.borderVisible = NullRegion;
@@ -274,7 +277,7 @@ miMoveWindow(WindowPtr pWin, int x, int y, WindowPtr pNextSib, VTKind kind)
     SetWinSize(pWin);
     SetBorderSize(pWin);
 
-    (*pScreen->PositionWindow) (pWin, x, y);
+    dixScreenRaiseWindowPosition(pWin, x, y);
 
     windowToValidate = MoveWindowInStack(pWin, pNextSib);
 
@@ -313,7 +316,6 @@ miRecomputeExposures(WindowPtr pWin, void *value)
     RegionPtr pValid = (RegionPtr) value;
 
     if (pWin->valdata) {
-#ifdef COMPOSITE
         /*
          * Redirected windows are not affected by parent window
          * gravity manipulations, so don't recompute their
@@ -321,7 +323,6 @@ miRecomputeExposures(WindowPtr pWin, void *value)
          */
         if (pWin->redirectDraw != RedirectDrawNone)
             return WT_DONTWALKCHILDREN;
-#endif
         /*
          * compute exposed regions of this window
          */
@@ -444,7 +445,7 @@ miResizeWindow(WindowPtr pWin, int x, int y, unsigned int w, unsigned int h,
     ResizeChildrenWinSize(pWin, x - oldx, y - oldy, dw, dh);
 
     /* let the hardware adjust background and border pixmaps, if any */
-    (*pScreen->PositionWindow) (pWin, x, y);
+    dixScreenRaiseWindowPosition(pWin, x, y);
 
     pFirstChange = MoveWindowInStack(pWin, pSib);
 
@@ -565,11 +566,7 @@ miResizeWindow(WindowPtr pWin, int x, int y, unsigned int w, unsigned int h,
 
             /* and move those bits */
 
-            if (oldpt.x != x || oldpt.y != y
-#ifdef COMPOSITE
-                || pWin->redirectDraw
-#endif
-                ) {
+            if (oldpt.x != x || oldpt.y != y || pWin->redirectDraw) {
                 (*pWin->drawable.pScreen->CopyWindow) (pWin, oldpt,
                                                        gravitate[g]);
             }

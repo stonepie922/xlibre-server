@@ -50,31 +50,17 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>     /* Request macro     */
-#include "exglobals.h"
 
-#include "getmmap.h"
+#include "dix/dix_priv.h"
+#include "dix/rpcbuf_priv.h"
+#include "dix/request_priv.h"
+#include "Xi/handlers.h"
 
-/***********************************************************************
- *
- * This procedure gets the modifier mapping for an extension device,
- * for clients on machines with a different byte ordering than the server.
- *
- */
-
-int _X_COLD
-SProcXGetDeviceModifierMapping(ClientPtr client)
-{
-    REQUEST(xGetDeviceModifierMappingReq);
-    swaps(&stuff->length);
-    return (ProcXGetDeviceModifierMapping(client));
-}
+#include "inputstr.h"           /* DeviceIntPtr      */
 
 /***********************************************************************
  *
@@ -86,7 +72,6 @@ int
 ProcXGetDeviceModifierMapping(ClientPtr client)
 {
     DeviceIntPtr dev;
-    xGetDeviceModifierMappingReply rep;
     KeyCode *modkeymap = NULL;
     int ret, max_keys_per_mod;
 
@@ -101,35 +86,15 @@ ProcXGetDeviceModifierMapping(ClientPtr client)
     if (ret != Success)
         return ret;
 
-    rep = (xGetDeviceModifierMappingReply) {
-        .repType = X_Reply,
-        .RepType = X_GetDeviceModifierMapping,
-        .sequenceNumber = client->sequence,
-        .numKeyPerModifier = max_keys_per_mod,
-    /* length counts 4 byte quantities - there are 8 modifiers 1 byte big */
-        .length = max_keys_per_mod << 1
-    };
-
-    WriteReplyToClient(client, sizeof(xGetDeviceModifierMappingReply), &rep);
-    WriteToClient(client, max_keys_per_mod * 8, modkeymap);
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_binary_pad(&rpcbuf, modkeymap, max_keys_per_mod * 8);
 
     free(modkeymap);
 
-    return Success;
-}
+    xGetDeviceModifierMappingReply reply = {
+        .RepType = X_GetDeviceModifierMapping,
+        .numKeyPerModifier = max_keys_per_mod,
+    };
 
-/***********************************************************************
- *
- * This procedure writes the reply for the XGetDeviceModifierMapping function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXGetDeviceModifierMapping(ClientPtr client, int size,
-                              xGetDeviceModifierMappingReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }

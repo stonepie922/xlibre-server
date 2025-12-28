@@ -31,7 +31,17 @@ from The Open Group.
 #ifdef HAVE_XWIN_CONFIG_H
 #include <xwin-config.h>
 #endif
+
 #include "win.h"
+
+#include "dix/dix_priv.h"
+#include "dix/screenint_priv.h"
+#include "miext/extinit_priv.h"
+#include "os/ddx_priv.h"
+#include "os/log_priv.h"
+#include "os/osdep.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "winmsg.h"
 #include "winconfig.h"
 #include "winprefs.h"
@@ -40,9 +50,6 @@ from The Open Group.
 #endif
 #ifdef __CYGWIN__
 #include <mntent.h>
-#endif
-#if defined(WIN32)
-#include "xkbsrv.h"
 #endif
 #ifdef RELOCATE_PROJECTROOT
 #pragma push_macro("Status")
@@ -57,7 +64,6 @@ typedef WINAPI HRESULT(*SHGETFOLDERPATHPROC) (HWND hwndOwner,
 #endif
 
 #include "winmonitors.h"
-#include "nonsdk_extinit.h"
 #include "pseudoramiX/pseudoramiX.h"
 
 #include "glx_extinit.h"
@@ -80,9 +86,6 @@ void
 
 void
  winLogVersionInfo(void);
-
-Bool
- winValidateArgs(void);
 
 #ifdef RELOCATE_PROJECTROOT
 const char *winGetBaseDir(void);
@@ -111,7 +114,11 @@ static PixmapFormatRec g_PixmapFormats[] = {
     {32, 32, BITMAP_SCANLINE_PAD}
 };
 
+#ifdef GLXEXT
+#ifdef XWIN_WINDOWS_DRI
 static Bool noDriExtension;
+#endif
+#endif
 
 static const ExtensionModule xwinExtensions[] = {
 #ifdef GLXEXT
@@ -135,15 +142,15 @@ void XwinExtensionInit(void)
     }
 #endif
 
-    LoadExtensionList(xwinExtensions, ARRAY_SIZE(xwinExtensions), TRUE);
+    /* need this to prevent compiler warning */
+    if (ARRAY_SIZE(xwinExtensions) > 0)
+        LoadExtensionList(xwinExtensions, ARRAY_SIZE(xwinExtensions), TRUE);
 }
 
-#if defined(DDXBEFORERESET)
 /*
  * Called right before KillAllClients when the server is going to reset,
  * allows us to shutdown our separate threads cleanly.
  */
-
 void
 ddxBeforeReset(void)
 {
@@ -151,7 +158,6 @@ ddxBeforeReset(void)
 
     winClipboardShutdown();
 }
-#endif
 
 #if INPUTTHREAD
 /** This function is called in Xserver/os/inputthread.c when starting
@@ -187,7 +193,7 @@ ddxGiveUp(enum ExitCode error)
 {
     int i;
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("ddxGiveUp\n");
 #endif
 
@@ -449,7 +455,7 @@ winFixupPaths(void)
 
                     /* allocate memory */
                     if (fontpath == NULL)
-                        fontpath = malloc(newsize + 1);
+                        fontpath = calloc(1, newsize + 1);
                     else
                         fontpath = realloc(fontpath, newsize + 1);
 
@@ -495,7 +501,7 @@ winFixupPaths(void)
         while (ptr != NULL) {
             size_t oldfp_len = (ptr - oldptr);
             size_t newsize = oldfp_len;
-            char *newpath = malloc(newsize + 1);
+            char *newpath = calloc(1, newsize + 1);
 
             strncpy(newpath, oldptr, newsize);
             newpath[newsize] = 0;
@@ -504,7 +510,7 @@ winFixupPaths(void)
                 char *compose;
 
                 newsize = newsize - libx11dir_len + basedirlen;
-                compose = malloc(newsize + 1);
+                compose = calloc(1, newsize + 1);
                 strcpy(compose, basedir);
                 strncat(compose, newpath + libx11dir_len, newsize - basedirlen);
                 compose[newsize] = 0;
@@ -518,7 +524,7 @@ winFixupPaths(void)
             newfp_len += newsize;
 
             if (newfp == NULL)
-                newfp = malloc(newfp_len + 1);
+                newfp = calloc(1, newfp_len + 1);
             else
                 newfp = realloc(newfp, newfp_len + 1);
 
@@ -573,9 +579,9 @@ winFixupPaths(void)
         putenv(buffer);
     }
     if (getenv("HOME") == NULL) {
-        char buffer[MAX_PATH + 5];
+        char buffer[MAX_PATH + 5] = {0};
 
-        strncpy(buffer, "HOME=", 5);
+        strncpy(buffer, "HOME=", 6);
 
         /* query appdata directory */
         if (SHGetFolderPathA
@@ -619,11 +625,6 @@ OsVendorInit(void)
 
     winFixupPaths();
 
-#ifdef DDXOSVERRORF
-    if (!OsVendorVErrorFProc)
-        OsVendorVErrorFProc = OsVendorVErrorF;
-#endif
-
     if (!g_fLogInited) {
         /* keep this order. If LogInit fails it calls Abort which then calls
          * ddxGiveUp where LogInit is called again and creates an infinite
@@ -634,9 +635,8 @@ OsVendorInit(void)
         g_pszLogFile = LogInit(g_pszLogFile, ".old");
 
     }
-    LogSetParameter(XLOG_FLUSH, 1);
-    LogSetParameter(XLOG_VERBOSITY, g_iLogVerbose);
-    LogSetParameter(XLOG_FILE_VERBOSITY, g_iLogVerbose);
+    xorgLogVerbosity = g_iLogVerbose;
+    xorgLogFileVerbosity = g_iLogVerbose;
 
     /* Log the version information */
     if (serverGeneration == 1)
@@ -892,7 +892,7 @@ ddxUseMsg(void)
  */
 
 void
-InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
+InitOutput(int argc, char *argv[])
 {
     int i;
 
@@ -902,7 +902,7 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
     /* Log the command line */
     winLogCommandLine(argc, argv);
 
-#if CYGDEBUG
+#if ENABLE_DEBUG
     winDebug("InitOutput\n");
 #endif
 
@@ -927,15 +927,15 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
     LoadPreferences();
 
     /* Setup global screen info parameters */
-    pScreenInfo->imageByteOrder = IMAGE_BYTE_ORDER;
-    pScreenInfo->bitmapScanlinePad = BITMAP_SCANLINE_PAD;
-    pScreenInfo->bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
-    pScreenInfo->bitmapBitOrder = BITMAP_BIT_ORDER;
-    pScreenInfo->numPixmapFormats = ARRAY_SIZE(g_PixmapFormats);
+    screenInfo.imageByteOrder = IMAGE_BYTE_ORDER;
+    screenInfo.bitmapScanlinePad = BITMAP_SCANLINE_PAD;
+    screenInfo.bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
+    screenInfo.bitmapBitOrder = BITMAP_BIT_ORDER;
+    screenInfo.numPixmapFormats = ARRAY_SIZE(g_PixmapFormats);
 
     /* Describe how we want common pixmap formats padded */
     for (i = 0; i < ARRAY_SIZE(g_PixmapFormats); i++) {
-        pScreenInfo->formats[i] = g_PixmapFormats[i];
+        screenInfo.formats[i] = g_PixmapFormats[i];
     }
 
     /* Load pointers to DirectDraw functions */
@@ -1020,7 +1020,7 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
         winGenerateAuthorization();
 
 
-#if CYGDEBUG || YES
+#if ENABLE_DEBUG || YES
     winDebug("InitOutput - Returning.\n");
 #endif
 }

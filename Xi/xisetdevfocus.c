@@ -28,43 +28,18 @@
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
-#include "windowstr.h"          /* window structure  */
 #include <X11/extensions/XI2.h>
 #include <X11/extensions/XI2proto.h>
 
+#include "dix/dix_priv.h"
+#include "dix/request_priv.h"
+#include "Xi/handlers.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
+#include "windowstr.h"          /* window structure  */
 #include "exglobals.h"          /* BadDevice */
-#include "xisetdevfocus.h"
-
-int _X_COLD
-SProcXISetFocus(ClientPtr client)
-{
-    REQUEST(xXISetFocusReq);
-    REQUEST_AT_LEAST_SIZE(xXISetFocusReq);
-
-    swaps(&stuff->length);
-    swaps(&stuff->deviceid);
-    swapl(&stuff->focus);
-    swapl(&stuff->time);
-
-    return ProcXISetFocus(client);
-}
-
-int _X_COLD
-SProcXIGetFocus(ClientPtr client)
-{
-    REQUEST(xXIGetFocusReq);
-    REQUEST_AT_LEAST_SIZE(xXIGetFocusReq);
-
-    swaps(&stuff->length);
-    swaps(&stuff->deviceid);
-
-    return ProcXIGetFocus(client);
-}
 
 int
 ProcXISetFocus(ClientPtr client)
@@ -74,6 +49,12 @@ ProcXISetFocus(ClientPtr client)
 
     REQUEST(xXISetFocusReq);
     REQUEST_AT_LEAST_SIZE(xXISetFocusReq);
+
+    if (client->swapped) {
+        swaps(&stuff->deviceid);
+        swapl(&stuff->focus);
+        swapl(&stuff->time);
+    }
 
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixSetFocusAccess);
     if (ret != Success)
@@ -88,12 +69,14 @@ ProcXISetFocus(ClientPtr client)
 int
 ProcXIGetFocus(ClientPtr client)
 {
-    xXIGetFocusReply rep;
     DeviceIntPtr dev;
     int ret;
 
     REQUEST(xXIGetFocusReq);
     REQUEST_AT_LEAST_SIZE(xXIGetFocusReq);
+
+    if (client->swapped)
+        swaps(&stuff->deviceid);
 
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixGetFocusAccess);
     if (ret != Success)
@@ -101,31 +84,22 @@ ProcXIGetFocus(ClientPtr client)
     if (!dev->focus)
         return BadDevice;
 
-    rep = (xXIGetFocusReply) {
-        .repType = X_Reply,
+    xXIGetFocusReply reply = {
         .RepType = X_XIGetFocus,
-        .sequenceNumber = client->sequence,
-        .length = 0
     };
 
     if (dev->focus->win == NoneWin)
-        rep.focus = None;
+        reply.focus = None;
     else if (dev->focus->win == PointerRootWin)
-        rep.focus = PointerRoot;
+        reply.focus = PointerRoot;
     else if (dev->focus->win == FollowKeyboardWin)
-        rep.focus = FollowKeyboard;
+        reply.focus = FollowKeyboard;
     else
-        rep.focus = dev->focus->win->drawable.id;
+        reply.focus = dev->focus->win->drawable.id;
 
-    WriteReplyToClient(client, sizeof(xXIGetFocusReply), &rep);
-    return Success;
-}
+    if (client->swapped) {
+        swapl(&reply.focus);
+    }
 
-void
-SRepXIGetFocus(ClientPtr client, int len, xXIGetFocusReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    swapl(&rep->focus);
-    WriteToClient(client, len, rep);
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }

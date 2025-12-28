@@ -39,13 +39,12 @@
 #include "windowstr.h"
 #include "xf86.h"
 #include "xf86Priv.h"
+#include "xf86Opt_priv.h"
 #ifdef DPMSExtension
 #include <X11/extensions/dpmsconst.h>
 #include "dpmsproc.h"
 #endif
-#ifdef XSERVER_LIBPCIACCESS
-#include "xf86VGAarbiter.h"
-#endif
+#include "xf86VGAarbiter_priv.h"
 
 #ifdef DPMSExtension
 static void

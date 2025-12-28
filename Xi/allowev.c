@@ -50,34 +50,15 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
 
-#include "exglobals.h"
-
-#include "allowev.h"
-#include "dixevents.h"
-
-/***********************************************************************
- *
- * This procedure allows frozen events to be routed.
- *
- */
-
-int _X_COLD
-SProcXAllowDeviceEvents(ClientPtr client)
-{
-    REQUEST(xAllowDeviceEventsReq);
-    swaps(&stuff->length);
-    REQUEST_SIZE_MATCH(xAllowDeviceEventsReq);
-    swapl(&stuff->time);
-    return (ProcXAllowDeviceEvents(client));
-}
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "Xi/handlers.h"
 
 /***********************************************************************
  *
@@ -88,12 +69,15 @@ SProcXAllowDeviceEvents(ClientPtr client)
 int
 ProcXAllowDeviceEvents(ClientPtr client)
 {
+    REQUEST(xAllowDeviceEventsReq);
+    REQUEST_SIZE_MATCH(xAllowDeviceEventsReq);
+
+    if (client->swapped)
+        swapl(&stuff->time);
+
     TimeStamp time;
     DeviceIntPtr thisdev;
     int rc;
-
-    REQUEST(xAllowDeviceEventsReq);
-    REQUEST_SIZE_MATCH(xAllowDeviceEventsReq);
 
     rc = dixLookupDevice(&thisdev, stuff->deviceid, client, DixGetAttrAccess);
     if (rc != Success)
@@ -102,22 +86,22 @@ ProcXAllowDeviceEvents(ClientPtr client)
 
     switch (stuff->mode) {
     case ReplayThisDevice:
-        AllowSome(client, time, thisdev, NOT_GRABBED);
+        AllowSome(client, time, thisdev, GRAB_STATE_NOT_GRABBED);
         break;
     case SyncThisDevice:
-        AllowSome(client, time, thisdev, FREEZE_NEXT_EVENT);
+        AllowSome(client, time, thisdev, GRAB_STATE_FREEZE_NEXT_EVENT);
         break;
     case AsyncThisDevice:
-        AllowSome(client, time, thisdev, THAWED);
+        AllowSome(client, time, thisdev, GRAB_STATE_THAWED);
         break;
     case AsyncOtherDevices:
-        AllowSome(client, time, thisdev, THAW_OTHERS);
+        AllowSome(client, time, thisdev, GRAB_STATE_THAW_OTHERS);
         break;
     case SyncAll:
-        AllowSome(client, time, thisdev, FREEZE_BOTH_NEXT_EVENT);
+        AllowSome(client, time, thisdev, GRAB_STATE_FREEZE_BOTH_NEXT_EVENT);
         break;
     case AsyncAll:
-        AllowSome(client, time, thisdev, THAWED_BOTH);
+        AllowSome(client, time, thisdev, GRAB_STATE_THAWED_BOTH);
         break;
     default:
         client->errorValue = stuff->mode;

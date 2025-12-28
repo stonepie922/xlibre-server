@@ -50,20 +50,18 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XIproto.h>
+
+#include "Xi/handlers.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
 #include "XIstubs.h"
 #include "globals.h"
-
 #include "exevents.h"
 #include "exglobals.h"
-
-#include "chgkbd.h"
 #include "chgptr.h"
 
 /***********************************************************************
@@ -71,23 +69,6 @@ SOFTWARE.
  * This procedure changes the keyboard device.
  *
  */
-
-int _X_COLD
-SProcXChangeKeyboardDevice(ClientPtr client)
-{
-    REQUEST(xChangeKeyboardDeviceReq);
-    swaps(&stuff->length);
-    REQUEST_SIZE_MATCH(xChangeKeyboardDeviceReq);
-    return (ProcXChangeKeyboardDevice(client));
-}
-
-/***********************************************************************
- *
- * This procedure is invoked to swap the request bytes if the server and
- * client have a different byte order.
- *
- */
-
 int
 ProcXChangeKeyboardDevice(ClientPtr client)
 {

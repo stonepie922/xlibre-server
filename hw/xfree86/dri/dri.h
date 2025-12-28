@@ -31,14 +31,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
 
-/* Prototypes for DRI functions */
-
 #ifndef _DRI_H_
+#define _DRI_H_
 
 #include <pciaccess.h>
 
 #include "scrnintstr.h"
 #include "xf86dri.h"
+
+/* Prototypes for DRI functions */
 
 typedef int DRISyncType;
 
@@ -195,8 +196,6 @@ extern _X_EXPORT Bool DRIScreenInit(ScreenPtr pScreen,
 
 extern _X_EXPORT void DRICloseScreen(ScreenPtr pScreen);
 
-extern Bool DRIExtensionInit(void);
-
 extern _X_EXPORT void DRIReset(void);
 
 extern _X_EXPORT Bool DRIQueryDirectRenderingCapable(ScreenPtr pScreen,
@@ -277,8 +276,6 @@ extern _X_EXPORT void *DRIGetContextStore(DRIContextPrivPtr context);
 
 extern _X_EXPORT void DRIWindowExposures(WindowPtr pWin, RegionPtr prgn);
 
-extern _X_EXPORT Bool DRIDestroyWindow(WindowPtr pWin);
-
 extern _X_EXPORT void DRICopyWindow(WindowPtr pWin,
                                     DDXPointRec ptOldOrg, RegionPtr prgnSrc);
 
@@ -336,7 +333,5 @@ extern _X_EXPORT void DRIGetTexOffsetFuncs(ScreenPtr pScreen,
                                            texOffsetStartFunc,
                                            DRITexOffsetFinishProcPtr *
                                            texOffsetFinishFunc);
-
-#define _DRI_H_
 
 #endif

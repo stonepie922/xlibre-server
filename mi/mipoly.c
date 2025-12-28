@@ -48,9 +48,7 @@ SOFTWARE.
  *
  *  Written by Brian Kelleher; June 1986
  */
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 #include "windowstr.h"
@@ -89,7 +87,7 @@ miInsertEdgeInET(EdgeTable * ET, EdgeTableEntry * ETE, int scanline,
      */
     if ((!pSLL) || (pSLL->scanline > scanline)) {
         if (*iSLLBlock > SLLSPERBLOCK - 1) {
-            tmpSLLBlock = malloc(sizeof(ScanLineListBlock));
+            tmpSLLBlock = calloc(1, sizeof(ScanLineListBlock));
             if (!tmpSLLBlock)
                 return FALSE;
             (*SLLBlock)->next = tmpSLLBlock;
@@ -412,8 +410,8 @@ miFillConvexPoly(DrawablePtr dst, GCPtr pgc, int count, DDXPointPtr ptsIn)
     dy = ymax - ymin + 1;
     if ((count < 3) || (dy < 0))
         return TRUE;
-    ptsOut = FirstPoint = xallocarray(dy, sizeof(DDXPointRec));
-    width = FirstWidth = xallocarray(dy, sizeof(int));
+    ptsOut = FirstPoint = calloc(dy, sizeof(DDXPointRec));
+    width = FirstWidth = calloc(dy, sizeof(int));
     if (!FirstPoint || !FirstWidth) {
         free(FirstWidth);
         free(FirstPoint);
@@ -544,7 +542,7 @@ miFillGeneralPoly(DrawablePtr dst, GCPtr pgc, int count, DDXPointPtr ptsIn)
     if (count < 3)
         return TRUE;
 
-    if (!(pETEs = malloc(sizeof(EdgeTableEntry) * count)))
+    if (!(pETEs = calloc(count, sizeof(EdgeTableEntry))))
         return FALSE;
     ptsOut = FirstPoint;
     width = FirstWidth;
@@ -589,8 +587,10 @@ miFillGeneralPoly(DrawablePtr dst, GCPtr pgc, int count, DDXPointPtr ptsIn)
                     width = FirstWidth;
                     nPts = 0;
                 }
-                EVALUATEEDGEEVENODD(pAET, pPrevAET, y);
-                EVALUATEEDGEEVENODD(pAET, pPrevAET, y);
+                if (pAET != NULL) { // FIXME: somewhow analyzer still complains
+                    EVALUATEEDGEEVENODD(pAET, pPrevAET, y);
+                    EVALUATEEDGEEVENODD(pAET, pPrevAET, y);
+                }
             }
             miInsertionSort(&AET);
         }

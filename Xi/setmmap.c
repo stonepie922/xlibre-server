@@ -50,33 +50,19 @@ SOFTWARE.
  *
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "inputstr.h"           /* DeviceIntPtr      */
 #include <X11/extensions/XI.h>
 #include <X11/extensions/XI2.h>
 #include <X11/extensions/XIproto.h>
+
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "dix/request_priv.h"
+#include "Xi/handlers.h"
+
+#include "inputstr.h"           /* DeviceIntPtr      */
 #include "exevents.h"
-#include "exglobals.h"
-
-#include "setmmap.h"
-
-/***********************************************************************
- *
- * This procedure sets the modifier mapping for an extension device,
- * for clients on machines with a different byte ordering than the server.
- *
- */
-
-int _X_COLD
-SProcXSetDeviceModifierMapping(ClientPtr client)
-{
-    REQUEST(xSetDeviceModifierMappingReq);
-    swaps(&stuff->length);
-    return (ProcXSetDeviceModifierMapping(client));
-}
 
 /***********************************************************************
  *
@@ -88,22 +74,14 @@ int
 ProcXSetDeviceModifierMapping(ClientPtr client)
 {
     int ret;
-    xSetDeviceModifierMappingReply rep;
     DeviceIntPtr dev;
 
     REQUEST(xSetDeviceModifierMappingReq);
     REQUEST_AT_LEAST_SIZE(xSetDeviceModifierMappingReq);
 
-    if (stuff->length != bytes_to_int32(sizeof(xSetDeviceModifierMappingReq)) +
+    if (client->req_len != bytes_to_int32(sizeof(xSetDeviceModifierMappingReq)) +
         (stuff->numKeyPerModifier << 1))
         return BadLength;
-
-    rep = (xSetDeviceModifierMappingReply) {
-        .repType = X_Reply,
-        .RepType = X_SetDeviceModifierMapping,
-        .sequenceNumber = client->sequence,
-        .length = 0
-    };
 
     ret = dixLookupDevice(&dev, stuff->deviceid, client, DixManageAccess);
     if (ret != Success)
@@ -114,33 +92,13 @@ ProcXSetDeviceModifierMapping(ClientPtr client)
     if (ret == Success)
         ret = MappingSuccess;
 
-    if (ret == MappingSuccess || ret == MappingBusy || ret == MappingFailed) {
-        rep.success = ret;
-        WriteReplyToClient(client, sizeof(xSetDeviceModifierMappingReply),
-                           &rep);
-    }
-    else if (ret == -1) {
-        return BadValue;
-    }
-    else {
+    if (ret != MappingSuccess && ret != MappingBusy && ret != MappingFailed)
         return ret;
-    }
 
-    return Success;
-}
+    xSetDeviceModifierMappingReply reply = {
+        .RepType = X_SetDeviceModifierMapping,
+        .success = ret,
+    };
 
-/***********************************************************************
- *
- * This procedure writes the reply for the XSetDeviceModifierMapping function,
- * if the client and server have a different byte ordering.
- *
- */
-
-void _X_COLD
-SRepXSetDeviceModifierMapping(ClientPtr client, int size,
-                              xSetDeviceModifierMappingReply * rep)
-{
-    swaps(&rep->sequenceNumber);
-    swapl(&rep->length);
-    WriteToClient(client, size, rep);
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }

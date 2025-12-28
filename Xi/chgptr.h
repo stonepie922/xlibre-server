@@ -22,19 +22,10 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
-
-#ifdef HAVE_DIX_CONFIG_H
-#include <dix-config.h>
-#endif
-
 #ifndef CHGPTR_H
 #define CHGPTR_H 1
 
-int SProcXChangePointerDevice(ClientPtr /* client */
-    );
-
-int ProcXChangePointerDevice(ClientPtr  /* client */
-    );
+#include <dix-config.h>
 
 void DeleteFocusClassDeviceStruct(DeviceIntPtr  /* dev */
     );

@@ -28,6 +28,7 @@
 #include "xf86DDC.h"
 #include "xf86_OSproc.h"
 #include "dgaproc.h"
+#include "dgaproc_priv.h"
 #include "xf86Crtc.h"
 #include "xf86Modes.h"
 #include "gcstruct.h"
@@ -56,7 +57,7 @@ xf86_dga_get_modes(ScreenPtr pScreen)
     if (!num)
         return FALSE;
 
-    modes = xallocarray(num, sizeof(DGAModeRec));
+    modes = calloc(num, sizeof(DGAModeRec));
     if (!modes)
         return FALSE;
 

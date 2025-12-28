@@ -41,14 +41,19 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
+
+#include "dix/cursor_priv.h"
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "dix/resource_priv.h"
+#include "mi/mi_priv.h"
+#include "os/bug_priv.h"
+#include "Xi/handlers.h"
 
 #include "xibarriers.h"
 #include "scrnintstr.h"
 #include "cursorstr.h"
-#include "dixevents.h"
 #include "servermd.h"
 #include "mipointer.h"
 #include "inputstr.h"
@@ -57,7 +62,6 @@
 #include "list.h"
 #include "exglobals.h"
 #include "eventstr.h"
-#include "mi.h"
 
 RESTYPE PointerBarrierType;
 
@@ -101,9 +105,7 @@ typedef struct _BarrierScreen {
 
 static struct PointerBarrierDevice *AllocBarrierDevice(void)
 {
-    struct PointerBarrierDevice *pbd = NULL;
-
-    pbd = malloc(sizeof(struct PointerBarrierDevice));
+    struct PointerBarrierDevice *pbd = calloc(1, sizeof(struct PointerBarrierDevice));
     if (!pbd)
         return NULL;
 
@@ -121,22 +123,25 @@ static void FreePointerBarrierClient(struct PointerBarrierClient *c)
 {
     struct PointerBarrierDevice *pbd = NULL, *tmp = NULL;
 
-    xorg_list_for_each_entry_safe(pbd, tmp, &c->per_device, entry) {
-        free(pbd);
+    if (!xorg_list_is_empty(&c->per_device)) {
+        xorg_list_for_each_entry_safe(pbd, tmp, &c->per_device, entry) {
+            free(pbd);
+        }
     }
     free(c);
 }
 
 static struct PointerBarrierDevice *GetBarrierDevice(struct PointerBarrierClient *c, int deviceid)
 {
-    struct PointerBarrierDevice *pbd = NULL;
+    struct PointerBarrierDevice *p, *pbd = NULL;
 
-    xorg_list_for_each_entry(pbd, &c->per_device, entry) {
-        if (pbd->deviceid == deviceid)
+    xorg_list_for_each_entry(p, &c->per_device, entry) {
+        if (p->deviceid == deviceid) {
+            pbd = p;
             break;
+        }
     }
 
-    BUG_WARN(!pbd);
     return pbd;
 }
 
@@ -337,6 +342,9 @@ barrier_find_nearest(BarrierScreenPtr cs, DeviceIntPtr dev,
         double distance;
 
         pbd = GetBarrierDevice(c, dev->id);
+        if (!pbd)
+            continue;
+
         if (pbd->seen)
             continue;
 
@@ -415,7 +423,7 @@ input_constrain_cursor(DeviceIntPtr dev, ScreenPtr screen,
     if (nevents)
         *nevents = 0;
 
-    if (xorg_list_is_empty(&cs->barriers) || IsFloating(dev))
+    if (xorg_list_is_empty(&cs->barriers) || InputDevIsFloating(dev))
         goto out;
 
     /**
@@ -445,6 +453,9 @@ input_constrain_cursor(DeviceIntPtr dev, ScreenPtr screen,
         nearest = &c->barrier;
 
         pbd = GetBarrierDevice(c, master->id);
+        if (!pbd)
+            continue;
+
         new_sequence = !pbd->hit;
 
         pbd->seen = TRUE;
@@ -485,6 +496,9 @@ input_constrain_cursor(DeviceIntPtr dev, ScreenPtr screen,
         int flags = 0;
 
         pbd = GetBarrierDevice(c, master->id);
+        if (!pbd)
+            continue;
+
         pbd->seen = FALSE;
         if (!pbd->hit)
             continue;
@@ -544,15 +558,13 @@ CreatePointerBarrierClient(ClientPtr client,
     ScreenPtr screen;
     BarrierScreenPtr cs;
     int err;
-    int size;
     int i;
-    struct PointerBarrierClient *ret;
     CARD16 *in_devices;
     DeviceIntPtr dev;
 
-    size = sizeof(*ret) + sizeof(DeviceIntPtr) * stuff->num_devices;
-    ret = malloc(size);
-
+    const int size = sizeof(struct PointerBarrierClient)
+                   + sizeof(DeviceIntPtr) * stuff->num_devices;
+    struct PointerBarrierClient *ret = calloc(1, size);
     if (!ret) {
         return BadAlloc;
     }
@@ -587,7 +599,7 @@ CreatePointerBarrierClient(ClientPtr client,
             goto error;
         }
 
-        if (!IsMaster (device)) {
+        if (!InputDevIsMaster (device)) {
             client->errorValue = device_id;
             err = BadDevice;
             goto error;
@@ -679,6 +691,9 @@ BarrierFreeBarrier(void *data, XID id)
             continue;
 
         pbd = GetBarrierDevice(c, dev->id);
+        if (!pbd)
+            continue;
+
         if (!pbd->hit)
             continue;
 
@@ -705,14 +720,14 @@ static void add_master_func(void *res, XID id, void *devid)
 {
     struct PointerBarrier *b;
     struct PointerBarrierClient *barrier;
-    struct PointerBarrierDevice *pbd;
     int *deviceid = devid;
 
     b = res;
     barrier = container_of(b, struct PointerBarrierClient, barrier);
 
-
-    pbd = AllocBarrierDevice();
+    struct PointerBarrierDevice *pbd = AllocBarrierDevice();
+    if (!pbd)
+        return;
     pbd->deviceid = *deviceid;
 
     input_lock();
@@ -738,6 +753,8 @@ static void remove_master_func(void *res, XID id, void *devid)
     barrier = container_of(b, struct PointerBarrierClient, barrier);
 
     pbd = GetBarrierDevice(barrier, *deviceid);
+    if (!pbd)
+        return;
 
     if (pbd->hit) {
         BarrierEvent ev = {
@@ -826,52 +843,40 @@ XIDestroyPointerBarrier(ClientPtr client,
         return err;
     }
 
-    if (CLIENT_ID(stuff->barrier) != client->index)
+    if (dixClientIdForXID(stuff->barrier) != client->index)
         return BadAccess;
 
-    FreeResource(stuff->barrier, RT_NONE);
+    FreeResource(stuff->barrier, X11_RESTYPE_NONE);
     return Success;
-}
-
-int _X_COLD
-SProcXIBarrierReleasePointer(ClientPtr client)
-{
-    xXIBarrierReleasePointerInfo *info;
-    REQUEST(xXIBarrierReleasePointerReq);
-    int i;
-
-    swaps(&stuff->length);
-    REQUEST_AT_LEAST_SIZE(xXIBarrierReleasePointerReq);
-
-    swapl(&stuff->num_barriers);
-    if (stuff->num_barriers > UINT32_MAX / sizeof(xXIBarrierReleasePointerInfo))
-        return BadLength;
-    REQUEST_FIXED_SIZE(xXIBarrierReleasePointerReq, stuff->num_barriers * sizeof(xXIBarrierReleasePointerInfo));
-
-    info = (xXIBarrierReleasePointerInfo*) &stuff[1];
-    for (i = 0; i < stuff->num_barriers; i++, info++) {
-        swaps(&info->deviceid);
-        swapl(&info->barrier);
-        swapl(&info->eventid);
-    }
-
-    return (ProcXIBarrierReleasePointer(client));
 }
 
 int
 ProcXIBarrierReleasePointer(ClientPtr client)
 {
+    REQUEST(xXIBarrierReleasePointerReq);
+    REQUEST_AT_LEAST_SIZE(xXIBarrierReleasePointerReq);
+
+    if (client->swapped)
+        swapl(&stuff->num_barriers);
+
+    if (stuff->num_barriers > UINT32_MAX / sizeof(xXIBarrierReleasePointerInfo))
+        return BadLength;
+    REQUEST_FIXED_SIZE(xXIBarrierReleasePointerReq, stuff->num_barriers * sizeof(xXIBarrierReleasePointerInfo));
+
+    if (client->swapped) {
+        xXIBarrierReleasePointerInfo *info = (xXIBarrierReleasePointerInfo*) &stuff[1];
+        for (int i = 0; i < stuff->num_barriers; i++, info++) {
+            swaps(&info->deviceid);
+            swapl(&info->barrier);
+            swapl(&info->eventid);
+        }
+    }
+
     int i;
     int err;
     struct PointerBarrierClient *barrier;
     struct PointerBarrier *b;
     xXIBarrierReleasePointerInfo *info;
-
-    REQUEST(xXIBarrierReleasePointerReq);
-    REQUEST_AT_LEAST_SIZE(xXIBarrierReleasePointerReq);
-    if (stuff->num_barriers > UINT32_MAX / sizeof(xXIBarrierReleasePointerInfo))
-        return BadLength;
-    REQUEST_FIXED_SIZE(xXIBarrierReleasePointerReq, stuff->num_barriers * sizeof(xXIBarrierReleasePointerInfo));
 
     info = (xXIBarrierReleasePointerInfo*) &stuff[1];
     for (i = 0; i < stuff->num_barriers; i++, info++) {
@@ -896,13 +901,16 @@ ProcXIBarrierReleasePointer(ClientPtr client)
             return err;
         }
 
-        if (CLIENT_ID(barrier_id) != client->index)
+        if (dixClientIdForXID(barrier_id) != client->index)
             return BadAccess;
-
 
         barrier = container_of(b, struct PointerBarrierClient, barrier);
 
         pbd = GetBarrierDevice(barrier, dev->id);
+        if (!pbd) {
+            client->errorValue = dev->id;
+            return BadDevice;
+        }
 
         if (pbd->barrier_event_id == event_id)
             pbd->release_event_id = event_id;
@@ -914,21 +922,17 @@ ProcXIBarrierReleasePointer(ClientPtr client)
 Bool
 XIBarrierInit(void)
 {
-    int i;
-
     if (!dixRegisterPrivateKey(&BarrierScreenPrivateKeyRec, PRIVATE_SCREEN, 0))
         return FALSE;
 
-    for (i = 0; i < screenInfo.numScreens; i++) {
-        ScreenPtr pScreen = screenInfo.screens[i];
+    DIX_FOR_EACH_SCREEN({
         BarrierScreenPtr cs;
-
         cs = (BarrierScreenPtr) calloc(1, sizeof(BarrierScreenRec));
         if (!cs)
             return FALSE;
         xorg_list_init(&cs->barriers);
-        SetBarrierScreen(pScreen, cs);
-    }
+        SetBarrierScreen(walkScreen, cs);
+    });
 
     PointerBarrierType = CreateNewResourceType(BarrierFreeBarrier,
                                                "XIPointerBarrier");
@@ -939,11 +943,9 @@ XIBarrierInit(void)
 void
 XIBarrierReset(void)
 {
-    int i;
-    for (i = 0; i < screenInfo.numScreens; i++) {
-        ScreenPtr pScreen = screenInfo.screens[i];
-        BarrierScreenPtr cs = GetBarrierScreen(pScreen);
+    DIX_FOR_EACH_SCREEN({
+        BarrierScreenPtr cs = GetBarrierScreen(walkScreen);
         free(cs);
-        SetBarrierScreen(pScreen, NULL);
-    }
+        SetBarrierScreen(walkScreen, NULL);
+    });
 }

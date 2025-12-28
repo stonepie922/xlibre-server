@@ -43,9 +43,7 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 
 ******************************************************************/
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <X11/X.h>
 
@@ -150,8 +148,8 @@ miZeroLine(DrawablePtr pDraw, GCPtr pGC, int mode,      /* Origin or Previous */
     width = xright - xleft + 1;
     height = ybottom - ytop + 1;
     list_len = (height >= width) ? height : width;
-    pspanInit = xallocarray(list_len, sizeof(DDXPointRec));
-    pwidthInit = xallocarray(list_len, sizeof(int));
+    pspanInit = calloc(list_len, sizeof(DDXPointRec));
+    pwidthInit = calloc(list_len, sizeof(int));
     if (!pspanInit || !pwidthInit) {
         free(pspanInit);
         free(pwidthInit);

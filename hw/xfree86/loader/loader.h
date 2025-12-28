@@ -46,12 +46,12 @@
  * authorization from the copyright holder(s) and author(s).
  */
 
+#ifndef _LOADER_H
+#define _LOADER_H
+
 #ifdef HAVE_XORG_CONFIG_H
 #include <xorg-config.h>
 #endif
-
-#ifndef _LOADER_H
-#define _LOADER_H
 
 #include <X11/Xosdefs.h>
 #include <X11/Xfuncproto.h>
@@ -68,7 +68,9 @@ typedef struct {
 } ModuleVersions;
 extern const ModuleVersions LoaderVersionInfo;
 
-extern unsigned long LoaderOptions;
+extern Bool LoaderIgnoreAbi;
+
+extern Bool is_nvidia_proprietary;
 
 /* Internal Functions */
 void *LoaderOpen(const char *, int *);

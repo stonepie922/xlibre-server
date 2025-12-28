@@ -12,7 +12,6 @@ srcs_randr = [
     'rrprovider.c',
     'rrproviderproperty.c',
     'rrscreen.c',
-    'rrsdispatch.c',
     'rrtransform.c',
 ]
 
@@ -25,7 +24,7 @@ if build_xinerama
     srcs_randr += 'rrxinerama.c'
 endif
 
-libxserver_randr = static_library('libxserver_randr',
+libxserver_randr = static_library('xserver_randr',
     srcs_randr,
     include_directories: inc,
     dependencies: common_dep,

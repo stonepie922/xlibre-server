@@ -24,9 +24,7 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <X11/X.h>
@@ -233,17 +231,6 @@ XkbFreeGeomShapes(XkbGeometryPtr geom, int first, int count, Bool freeAll)
                              &geom->num_shapes, &geom->sz_shapes,
                              (char **) &geom->shapes,
                              sizeof(XkbShapeRec), _XkbClearShape);
-    return;
-}
-
-/***====================================================================***/
-
-void
-XkbFreeGeomOverlayKeys(XkbOverlayRowPtr row, int first, int count, Bool freeAll)
-{
-    _XkbFreeGeomLeafElems(freeAll, first, count,
-                          &row->num_keys, &row->sz_keys,
-                          (char **) &row->keys, sizeof(XkbOverlayKeyRec));
     return;
 }
 

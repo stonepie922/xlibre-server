@@ -55,6 +55,8 @@
 #include <xorg-config.h>
 #endif
 
+#include <assert.h>
+
 #include "xf86Parser.h"
 #include "xf86tokens.h"
 #include "Configint.h"
@@ -84,13 +86,19 @@ static const xf86ConfigSymTabRec ServerFlagsTab[] = {
 #define CLEANUP xf86freeFlags
 
 XF86ConfFlagsPtr
-xf86parseFlagsSection(void)
+xf86parseFlagsSection(XF86ConfFlagsPtr ptr)
 {
     int token;
 
-    parsePrologue(XF86ConfFlagsPtr, XF86ConfFlagsRec)
+    if (ptr == NULL)
+    {
+        if((ptr=calloc(1, sizeof(XF86ConfFlagsRec))) == NULL)
+        {
+            return NULL;
+        }
+    }
 
-        while ((token = xf86getToken(ServerFlagsTab)) != ENDSECTION) {
+    while ((token = xf86getToken(ServerFlagsTab)) != ENDSECTION) {
         int hasvalue = FALSE;
         int strvalue = FALSE;
         int tokentype;
@@ -98,6 +106,8 @@ xf86parseFlagsSection(void)
         switch (token) {
         case COMMENT:
             ptr->flg_comment = xf86addComment(ptr->flg_comment, xf86_lex_val.str);
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
             break;
             /*
              * these old keywords are turned into standard generic options.
@@ -130,7 +140,7 @@ xf86parseFlagsSection(void)
                     if (hasvalue) {
                         tokentype = xf86getSubToken(&(ptr->flg_comment));
                         if (strvalue) {
-                            if (tokentype != STRING)
+                            if (tokentype != XF86_TOKEN_STRING)
                                 Error(QUOTE_MSG, tmp);
                             valstr = xf86_lex_val.str;
                         }
@@ -198,6 +208,7 @@ addNewOption2(XF86OptionPtr head, char *name, char *_val, int used)
     }
     else
         new = calloc(1, sizeof(*new));
+    assert(new);
     new->opt_name = name;
     new->opt_val = _val;
     new->opt_used = used;
@@ -426,28 +437,36 @@ xf86parseOption(XF86OptionPtr head)
     char *name, *comment = NULL;
     int token;
 
-    if ((token = xf86getSubToken(&comment)) != STRING) {
+    if ((token = xf86getSubToken(&comment)) != XF86_TOKEN_STRING) {
         xf86parseError(BAD_OPTION_MSG);
         free(comment);
         return head;
     }
 
     name = xf86_lex_val.str;
-    if ((token = xf86getSubToken(&comment)) == STRING) {
+    if ((token = xf86getSubToken(&comment)) == XF86_TOKEN_STRING) {
         option = xf86newOption(name, xf86_lex_val.str);
+        assert(option);
         option->opt_comment = comment;
-        if ((token = xf86getToken(NULL)) == COMMENT)
+        if ((token = xf86getToken(NULL)) == COMMENT) {
             option->opt_comment = xf86addComment(option->opt_comment, xf86_lex_val.str);
-        else
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
+        } else {
             xf86unGetToken(token);
+        }
     }
     else {
         option = xf86newOption(name, NULL);
+        assert(option);
         option->opt_comment = comment;
-        if (token == COMMENT)
+        if (token == COMMENT) {
             option->opt_comment = xf86addComment(option->opt_comment, xf86_lex_val.str);
-        else
+            free(xf86_lex_val.str);
+            xf86_lex_val.str = NULL;
+        } else {
             xf86unGetToken(token);
+        }
     }
 
     old = NULL;

@@ -24,23 +24,20 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
 #include <X11/X.h>
 #include <X11/Xproto.h>
+#include <X11/extensions/XI.h>
+
+#include "dix/input_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
 #include "misc.h"
 #include "inputstr.h"
-
-#include <X11/extensions/XI.h>
-#include <xkbsrv.h>
-#include "xkb.h"
-
-/***====================================================================***/
 
         /*
          * unsigned
@@ -435,6 +432,44 @@ XkbUpdateIndicators(DeviceIntPtr dev,
 
 /***====================================================================***/
 
+        /*
+         * void
+         * XkbForceUpdateDeviceLEDs(DeviceIntPtr dev)
+         *
+         * Force update LED states to the hardware from the device state
+         * specified by 'dev'.
+         *
+         * If 'dev' is a master device, this function will also force update
+         * its slave devices.
+         *
+         * Used if the actual LED state was externally set and need to push
+         * current state to the hardware e.g. switching between VTs.
+         */
+
+void
+XkbForceUpdateDeviceLEDs(DeviceIntPtr dev)
+{
+    DeviceIntPtr master;
+    XkbSrvLedInfoPtr sli;
+
+    if (!dev->key)
+        return;
+
+    sli = XkbFindSrvLedInfo(dev, XkbDfltXIClass, XkbDfltXIId, 0);
+    XkbDDXUpdateDeviceIndicators(dev, sli, sli->effectiveState);
+
+    if (InputDevIsMaster(dev)) {
+        master = dev;
+        nt_list_for_each_entry(dev, inputInfo.devices, next) {
+            if (!dev->key || GetMaster(dev, MASTER_KEYBOARD) != master)
+                continue;
+
+            sli = XkbFindSrvLedInfo(dev, XkbDfltXIClass, XkbDfltXIId, 0);
+            XkbDDXUpdateDeviceIndicators(dev, sli, sli->effectiveState);
+        }
+    }
+}
+
 /***====================================================================***/
 
         /*
@@ -771,7 +806,7 @@ XkbFlushLedEvents(DeviceIntPtr dev,
                 XkbDDXUpdateDeviceIndicators(dev, sli, sli->effectiveState);
             XkbSendExtensionDeviceNotify(dev, cause->client, ed);
         }
-        memset((char *) ed, 0, sizeof(XkbExtensionDeviceNotify));
+        memset((char *) ed, 0, sizeof(xkbExtensionDeviceNotify));
     }
     return;
 }

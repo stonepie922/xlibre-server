@@ -24,6 +24,13 @@
 #include <xorg-config.h>
 #endif
 
+#include <X11/extensions/render.h>
+
+#include "dix/dix_priv.h"
+#include "dix/input_priv.h"
+#include "dix/screenint_priv.h"
+#include "include/extinit.h"
+
 #include "xf86.h"
 #include "os.h"
 #include "globals.h"
@@ -33,12 +40,11 @@
 #include "mipointer.h"
 #include "windowstr.h"
 #include "inputstr.h"
-#include <randrstr.h>
-#include <X11/extensions/render.h>
+#include "randrstr_priv.h"
 
 #include "xf86cmap.h"
 #include "xf86Crtc.h"
-#include "xf86RandR12.h"
+#include "xf86RandR12_priv.h"
 
 typedef struct _xf86RandR12Info {
     int virtualX;
@@ -75,7 +81,7 @@ static Bool xf86RandR12Init12(ScreenPtr pScreen);
 static Bool xf86RandR12CreateScreenResources12(ScreenPtr pScreen);
 #endif
 
-static int xf86RandR12Generation;
+static x_server_generation_t xf86RandR12Generation;
 
 static DevPrivateKeyRec xf86RandR12KeyRec;
 
@@ -291,10 +297,10 @@ xf86ComputeCrtcPan(Bool transform_in_use,
          * dy = (F T0 - Q0) / U0
          * dy = (F P0 - V0) / W0
          */
-        double r[3];
-        double q[2], u[2], t[2], v[2], w[2], p[2];
+        double r[3] = { 0 };
+        double q[2], u[2], t[2], v[2], w[2] = { 0 }, p[2];
         double f;
-        struct pict_f_vector d;
+        struct pixman_f_vector d = { 0 };
         int i;
 
         /* Get the un-normalized crtc coordinates again */
@@ -368,7 +374,7 @@ xf86RandR13Pan(xf86CrtcPtr crtc, int x, int y)
         (crtc->panningTrackingArea.y2 <= crtc->panningTrackingArea.y1 ||
          (y >= crtc->panningTrackingArea.y1 &&
           y < crtc->panningTrackingArea.y2))) {
-        struct pict_f_vector c;
+        struct pixman_f_vector c;
 
         /*
          * Pre-clip the mouse position to the panning area so that we don't
@@ -598,7 +604,7 @@ xf86RandR12SetConfig(ScreenPtr pScreen,
     }
 
     for (dev = inputInfo.devices; dev; dev = dev->next) {
-        if (!IsMaster(dev) && !IsFloating(dev))
+        if (!InputDevIsMaster(dev) && !InputDevIsFloating(dev))
             continue;
 
         miPointerGetPosition(dev, &pos[dev->id][0], &pos[dev->id][1]);
@@ -646,7 +652,7 @@ xf86RandR12SetConfig(ScreenPtr pScreen,
      * FIXME: duplicated code, see modes/xf86RandR12.c
      */
     for (dev = inputInfo.devices; dev; dev = dev->next) {
-        if (!IsMaster(dev) && !IsFloating(dev))
+        if (!InputDevIsMaster(dev) && !InputDevIsFloating(dev))
             continue;
 
         if (pScreen == miPointerGetScreen(dev)) {
@@ -657,7 +663,7 @@ xf86RandR12SetConfig(ScreenPtr pScreen,
             py = (py >= pScreen->height ? (pScreen->height - 1) : py);
 
             /* Setting the viewpoint makes only sense on one device */
-            if (!view_adjusted && IsMaster(dev)) {
+            if (!view_adjusted && InputDevIsMaster(dev)) {
                 xf86SetViewport(pScreen, px, py);
                 view_adjusted = TRUE;
             }
@@ -755,11 +761,11 @@ xf86RandR12CreateScreenResources(ScreenPtr pScreen)
     int width, height;
     int mmWidth, mmHeight;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     /* XXX disable RandR when using Xinerama */
     if (!noPanoramiXExtension)
         return TRUE;
-#endif
+#endif /* XINERAMA */
 
     config = XF86_CRTC_CONFIG_PTR(pScrn);
     randrp = XF86RANDRINFO(pScreen);
@@ -843,9 +849,8 @@ Bool
 xf86RandR12Init(ScreenPtr pScreen)
 {
     rrScrPrivPtr rp;
-    XF86RandRInfoPtr randrp;
 
-#ifdef PANORAMIX
+#ifdef XINERAMA
     /* XXX disable RandR when using Xinerama */
     if (!noPanoramiXExtension) {
         if (xf86NumScreens == 1)
@@ -853,7 +858,7 @@ xf86RandR12Init(ScreenPtr pScreen)
         else
             return TRUE;
     }
-#endif
+#endif /* XINERAMA */
 
     if (xf86RandR12Generation != serverGeneration)
         xf86RandR12Generation = serverGeneration;
@@ -861,7 +866,7 @@ xf86RandR12Init(ScreenPtr pScreen)
     if (!dixRegisterPrivateKey(&xf86RandR12KeyRec, PRIVATE_SCREEN, 0))
         return FALSE;
 
-    randrp = malloc(sizeof(XF86RandRInfoRec));
+    XF86RandRInfoPtr randrp = calloc(1, sizeof(XF86RandRInfoRec));
     if (!randrp)
         return FALSE;
 
@@ -1057,7 +1062,7 @@ xf86RandR12CrtcNotify(RRCrtcPtr randr_crtc)
     DisplayModePtr mode = &crtc->mode;
     Bool ret;
 
-    randr_outputs = xallocarray(config->num_output, sizeof(RROutputPtr));
+    randr_outputs = calloc(config->num_output, sizeof(RROutputPtr));
     if (!randr_outputs)
         return FALSE;
     x = crtc->x;
@@ -1149,7 +1154,9 @@ xf86RandR12CrtcSet(ScreenPtr pScreen,
     if (!crtc->scrn->vtSema)
         return FALSE;
 
-    save_crtcs = xallocarray(config->num_output, sizeof(xf86CrtcPtr));
+    save_crtcs = calloc(config->num_output, sizeof(xf86CrtcPtr));
+    if (!save_crtcs)
+        return FALSE;
     if ((randr_mode != NULL) != crtc->enabled)
         changed = TRUE;
     else if (randr_mode && !xf86RandRModeMatches(randr_mode, &crtc->mode))
@@ -1425,7 +1432,7 @@ xf86RandR12CrtcInitGamma(xf86CrtcPtr crtc, float gamma_red, float gamma_green,
         (gamma_red != 1.0f || gamma_green != 1.0f || gamma_blue != 1.0f))
         return FALSE;
 
-    red = xallocarray(size, 3 * sizeof(CARD16));
+    red = calloc(size, 3 * sizeof(CARD16));
     if (!red)
         return FALSE;
 
@@ -1592,7 +1599,7 @@ xf86RROutputSetModes(RROutputPtr randr_output, DisplayModePtr modes)
         nmode++;
 
     if (nmode) {
-        rrmodes = xallocarray(nmode, sizeof(RRModePtr));
+        rrmodes = calloc(nmode, sizeof(RRModePtr));
 
         if (!rrmodes)
             return FALSE;
@@ -1647,8 +1654,13 @@ xf86RandR12SetInfo12(ScreenPtr pScreen)
     int o, c, l;
     int nclone;
 
-    clones = xallocarray(config->num_output, sizeof(RROutputPtr));
-    crtcs = xallocarray(config->num_crtc, sizeof(RRCrtcPtr));
+    clones = calloc(config->num_output, sizeof(RROutputPtr));
+    crtcs = calloc(config->num_crtc, sizeof(RRCrtcPtr));
+    if (!clones || !crtcs) {
+        free(clones);
+        free(crtcs);
+        return FALSE;
+    }
     for (o = 0; o < config->num_output; o++) {
         xf86OutputPtr output = config->output[o];
 
@@ -1793,7 +1805,7 @@ xf86RandR12CreateMonitors(ScreenPtr pScreen)
             return;
         monitor->pScreen = pScreen;
         snprintf(buf, 25, "Auto-Monitor-%d", tile_info->group_id);
-        monitor->name = MakeAtom(buf, strlen(buf), TRUE);
+        monitor->name = dixAddAtom(buf);
         monitor->primary = 0;
         monitor->automatic = TRUE;
         memset(&monitor->geometry.box, 0, sizeof(monitor->geometry.box));
@@ -2142,7 +2154,8 @@ xf86RandR14ProviderSetProperty(ScreenPtr pScreen,
     /* If we don't have any property handler, then we don't care what the
      * user is setting properties to.
      */
-    if (config->provider_funcs->set_property == NULL)
+    if (config->provider_funcs == NULL ||
+        config->provider_funcs->set_property == NULL)
         return TRUE;
 
     /*
@@ -2160,7 +2173,8 @@ xf86RandR14ProviderGetProperty(ScreenPtr pScreen,
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
 
-    if (config->provider_funcs->get_property == NULL)
+    if (config->provider_funcs == NULL ||
+        config->provider_funcs->get_property == NULL)
         return TRUE;
 
     /* Should be safe even w/o vtSema */

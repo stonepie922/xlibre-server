@@ -1,4 +1,3 @@
-
 /*
 
 Copyright 1994, 1998  The Open Group
@@ -26,6 +25,7 @@ in this Software without prior written authorization from The Open Group.
 */
 
 #ifndef MILINE_H
+#define MILINE_H
 
 #include "screenint.h"
 #include "privates.h"
@@ -48,10 +48,6 @@ in this Software without prior written authorization from The Open Group.
 #define OCTANT6		(1 << (XDECREASING|YMAJOR))
 #define OCTANT7		(1 << (YMAJOR))
 #define OCTANT8		(1 << (0))
-
-#define XMAJOROCTANTS		(OCTANT1 | OCTANT4 | OCTANT5 | OCTANT8)
-
-#define DEFAULTZEROLINEBIAS	(OCTANT2 | OCTANT3 | OCTANT4 | OCTANT5)
 
 /*
  * Devices can configure the rendering of routines in mi, mfb, and cfb*
@@ -108,17 +104,6 @@ extern _X_EXPORT void miSetZeroLineBias(ScreenPtr /* pScreen */ ,
      if (y > ymax) outcode |= OUT_BELOW;\
 }
 
-#define SWAPINT(i, j) \
-{  int _t = i;  i = j;  j = _t; }
-
-#define SWAPPT(i, j) \
-{  DDXPointRec _t; _t = i;  i = j; j = _t; }
-
-#define SWAPINT_PAIR(x1, y1, x2, y2)\
-{   int t = x1;  x1 = x2;  x2 = t;\
-        t = y1;  y1 = y2;  y2 = t;\
-}
-
 #define miGetZeroLineBias(_pScreen) ((unsigned long) (unsigned long*)\
     dixLookupPrivate(&(_pScreen)->devPrivates, miZeroLineScreenKey))
 
@@ -141,11 +126,6 @@ extern _X_EXPORT void miSetZeroLineBias(ScreenPtr /* pScreen */ ,
 
 #define FIXUP_ERROR(_e, _octant, _bias) \
     (_e) -= (((_bias) >> (_octant)) & 1)
-
-#define IsXMajorOctant(_octant)		(!((_octant) & YMAJOR))
-#define IsYMajorOctant(_octant)		((_octant) & YMAJOR)
-#define IsXDecreasingOctant(_octant)	((_octant) & XDECREASING)
-#define IsYDecreasingOctant(_octant)	((_octant) & YDECREASING)
 
 extern _X_EXPORT DevPrivateKeyRec miZeroLineScreenKeyRec;
 

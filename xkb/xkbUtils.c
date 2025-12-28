@@ -48,11 +48,8 @@ DEALINGS IN THE SOFTWARE.
 
 */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "os.h"
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
@@ -60,14 +57,16 @@ DEALINGS IN THE SOFTWARE.
 #include <X11/Xproto.h>
 #define	XK_CYRILLIC
 #include <X11/keysym.h>
+
+#include "dix/input_priv.h"
+#include "os/log_priv.h"
+#include "xkb/xkbsrv_priv.h"
+
+#include "os.h"
 #include "misc.h"
 #include "inputstr.h"
 #include "eventstr.h"
-
-#define	XKBSRV_NEED_FILE_FUNCS
-#include <xkbsrv.h>
 #include "xkbgeom.h"
-#include "xkb.h"
 
 /***====================================================================***/
 
@@ -214,7 +213,7 @@ XkbMaskForVMask(XkbDescPtr xkb, unsigned vmask)
 
 /***====================================================================***/
 
-void
+static void
 XkbUpdateKeyTypesFromCore(DeviceIntPtr pXDev,
                           KeySymsPtr pCore,
                           KeyCode first, CARD8 num, XkbChangesPtr changes)
@@ -902,9 +901,9 @@ XkbConvertCase(register KeySym sym, KeySym * lower, KeySym * upper)
         break;
     case 6:                    /* Cyrillic */
         /* Assume the KeySym is a legal value (ignore discontinuities) */
-        if (sym >= XK_Serbian_DJE && sym <= XK_Serbian_DZE)
+        if (sym >= XK_Serbian_DJE && sym <= XK_Cyrillic_DZHE)
             *lower -= (XK_Serbian_DJE - XK_Serbian_dje);
-        else if (sym >= XK_Serbian_dje && sym <= XK_Serbian_dze)
+        else if (sym >= XK_Serbian_dje && sym <= XK_Cyrillic_dzhe)
             *upper += (XK_Serbian_DJE - XK_Serbian_dje);
         else if (sym >= XK_Cyrillic_YU && sym <= XK_Cyrillic_HARDSIGN)
             *lower -= (XK_Cyrillic_YU - XK_Cyrillic_yu);
@@ -933,6 +932,7 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
 {
     void *tmp = NULL;
     int i;
+    int gap;
     XkbKeyTypePtr stype = NULL, dtype = NULL;
 
     /* client map */
@@ -962,14 +962,19 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
         }
         dst->map->num_syms = src->map->num_syms;
         dst->map->size_syms = src->map->size_syms;
+        gap = MAP_LENGTH - (src->max_key_code + 1);
 
         if (src->map->key_sym_map) {
-            if (src->max_key_code != dst->max_key_code) {
+            if (!dst->map->key_sym_map) {
                 tmp = reallocarray(dst->map->key_sym_map,
-                                   src->max_key_code + 1, sizeof(XkbSymMapRec));
+                                   MAP_LENGTH, sizeof(XkbSymMapRec));
                 if (!tmp)
                     return FALSE;
                 dst->map->key_sym_map = tmp;
+            }
+            if (gap > 0) {
+                memset((char *) &dst->map->key_sym_map[gap], 0,
+                       gap * sizeof(XkbSymMapRec));
             }
             memcpy(dst->map->key_sym_map, src->map->key_sym_map,
                    (src->max_key_code + 1) * sizeof(XkbSymMapRec));
@@ -1028,7 +1033,7 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
                     }
                     else if (!dtype->num_levels || !dtype->level_names ||
                              i >= dst->map->num_types) {
-                        tmp = malloc(stype->num_levels * sizeof(Atom));
+                        tmp = calloc(stype->num_levels, sizeof(Atom));
                         if (!tmp)
                             continue;
                         dtype->level_names = tmp;
@@ -1062,8 +1067,8 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
                         }
                         else if (!dtype->map_count || !dtype->map ||
                                  i >= dst->map->num_types) {
-                            tmp = xallocarray(stype->map_count,
-                                              sizeof(XkbKTMapEntryRec));
+                            tmp = calloc(stype->map_count,
+                                         sizeof(XkbKTMapEntryRec));
                             if (!tmp)
                                 return FALSE;
                             dtype->map = tmp;
@@ -1091,8 +1096,7 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
                         }
                         else if (!dtype->preserve || !dtype->map_count ||
                                  i >= dst->map->num_types) {
-                            tmp = xallocarray(stype->map_count,
-                                              sizeof(XkbModsRec));
+                            tmp = calloc(stype->map_count, sizeof(XkbModsRec));
                             if (!tmp)
                                 return FALSE;
                             dtype->preserve = tmp;
@@ -1141,11 +1145,14 @@ _XkbCopyClientMap(XkbDescPtr src, XkbDescPtr dst)
         }
 
         if (src->map->modmap) {
-            if (src->max_key_code != dst->max_key_code) {
-                tmp = realloc(dst->map->modmap, src->max_key_code + 1);
+            if (!dst->map->modmap) {
+                tmp = realloc(dst->map->modmap, MAP_LENGTH);
                 if (!tmp)
                     return FALSE;
                 dst->map->modmap = tmp;
+            }
+            if (gap > 0) {
+                memset(dst->map->modmap + gap, 0, gap);
             }
             memcpy(dst->map->modmap, src->map->modmap, src->max_key_code + 1);
         }
@@ -1166,6 +1173,7 @@ static Bool
 _XkbCopyServerMap(XkbDescPtr src, XkbDescPtr dst)
 {
     void *tmp = NULL;
+    int gap;
 
     /* server map */
     if (src->server) {
@@ -1176,13 +1184,16 @@ _XkbCopyServerMap(XkbDescPtr src, XkbDescPtr dst)
             dst->server = tmp;
         }
 
+        gap = MAP_LENGTH - (src->max_key_code + 1);
         if (src->server->explicit) {
-            if (src->max_key_code != dst->max_key_code) {
-                tmp = realloc(dst->server->explicit, src->max_key_code + 1);
+            if (!dst->server->explicit) {
+                tmp = realloc(dst->server->explicit, MAP_LENGTH);
                 if (!tmp)
                     return FALSE;
                 dst->server->explicit = tmp;
             }
+            if (gap > 0)
+                memset(dst->server->explicit + gap, 0, gap);
             memcpy(dst->server->explicit, src->server->explicit,
                    src->max_key_code + 1);
         }
@@ -1210,13 +1221,15 @@ _XkbCopyServerMap(XkbDescPtr src, XkbDescPtr dst)
         dst->server->num_acts = src->server->num_acts;
 
         if (src->server->key_acts) {
-            if (src->max_key_code != dst->max_key_code) {
+            if (!dst->server->key_acts) {
                 tmp = reallocarray(dst->server->key_acts,
-                                   src->max_key_code + 1, sizeof(unsigned short));
+                                   MAP_LENGTH, sizeof(unsigned short));
                 if (!tmp)
                     return FALSE;
                 dst->server->key_acts = tmp;
             }
+            if (gap > 0)
+                memset((char *) &dst->server->key_acts[gap], 0, gap * sizeof(unsigned short));
             memcpy(dst->server->key_acts, src->server->key_acts,
                    (src->max_key_code + 1) * sizeof(unsigned short));
         }
@@ -1226,13 +1239,15 @@ _XkbCopyServerMap(XkbDescPtr src, XkbDescPtr dst)
         }
 
         if (src->server->behaviors) {
-            if (src->max_key_code != dst->max_key_code) {
+            if (!dst->server->behaviors) {
                 tmp = reallocarray(dst->server->behaviors,
-                                   src->max_key_code + 1, sizeof(XkbBehavior));
+                                   MAP_LENGTH, sizeof(XkbBehavior));
                 if (!tmp)
                     return FALSE;
                 dst->server->behaviors = tmp;
             }
+            if (gap > 0)
+                memset((char *) &dst->server->behaviors[gap], 0, gap * sizeof(XkbBehavior));
             memcpy(dst->server->behaviors, src->server->behaviors,
                    (src->max_key_code + 1) * sizeof(XkbBehavior));
         }
@@ -1244,13 +1259,15 @@ _XkbCopyServerMap(XkbDescPtr src, XkbDescPtr dst)
         memcpy(dst->server->vmods, src->server->vmods, XkbNumVirtualMods);
 
         if (src->server->vmodmap) {
-            if (src->max_key_code != dst->max_key_code) {
+            if (!dst->server->vmodmap) {
                 tmp = reallocarray(dst->server->vmodmap,
-                                   src->max_key_code + 1, sizeof(unsigned short));
+                                   MAP_LENGTH, sizeof(unsigned short));
                 if (!tmp)
                     return FALSE;
                 dst->server->vmodmap = tmp;
             }
+            if (gap > 0)
+                memset((char *) &dst->server->vmodmap[gap], 0, gap * sizeof(unsigned short));
             memcpy(dst->server->vmodmap, src->server->vmodmap,
                    (src->max_key_code + 1) * sizeof(unsigned short));
         }
@@ -1271,6 +1288,7 @@ static Bool
 _XkbCopyNames(XkbDescPtr src, XkbDescPtr dst)
 {
     void *tmp = NULL;
+    int gap;
 
     /* names */
     if (src->names) {
@@ -1280,14 +1298,17 @@ _XkbCopyNames(XkbDescPtr src, XkbDescPtr dst)
                 return FALSE;
         }
 
+        gap = MAP_LENGTH - (src->max_key_code + 1);
         if (src->names->keys) {
-            if (src->max_key_code != dst->max_key_code) {
-                tmp = reallocarray(dst->names->keys, src->max_key_code + 1,
+            if (!dst->names->keys) {
+                tmp = reallocarray(dst->names->keys, MAP_LENGTH,
                                    sizeof(XkbKeyNameRec));
                 if (!tmp)
                     return FALSE;
                 dst->names->keys = tmp;
             }
+            if (gap > 0)
+                memset((char *) &dst->names->keys[gap], 0, gap * sizeof(XkbKeyNameRec));
             memcpy(dst->names->keys, src->names->keys,
                    (src->max_key_code + 1) * sizeof(XkbKeyNameRec));
         }
@@ -1467,8 +1488,8 @@ _XkbCopyGeom(XkbDescPtr src, XkbDescPtr dst)
                     strcpy(dprop->value, sprop->value);
                 }
                 else {
-                    dprop->name = xstrdup(sprop->name);
-                    dprop->value = xstrdup(sprop->value);
+                    dprop->name = Xstrdup(sprop->name);
+                    dprop->value = Xstrdup(sprop->value);
                 }
             }
 
@@ -1521,7 +1542,7 @@ _XkbCopyGeom(XkbDescPtr src, XkbDescPtr dst)
                     strcpy(dcolor->spec, scolor->spec);
                 }
                 else {
-                    dcolor->spec = xstrdup(scolor->spec);
+                    dcolor->spec = Xstrdup(scolor->spec);
                 }
                 dcolor->pixel = scolor->pixel;
             }
@@ -1585,8 +1606,8 @@ _XkbCopyGeom(XkbDescPtr src, XkbDescPtr dst)
                          j < sshape->num_outlines;
                          j++, soutline++, doutline++) {
                         if (soutline->num_points) {
-                            tmp = xallocarray(soutline->num_points,
-                                              sizeof(XkbPointRec));
+                            tmp = calloc(soutline->num_points,
+                                         sizeof(XkbPointRec));
                             if (!tmp)
                                 return FALSE;
                             doutline->points = tmp;
@@ -1713,7 +1734,7 @@ _XkbCopyGeom(XkbDescPtr src, XkbDescPtr dst)
                 for (j = 0, srow = ssection->rows, drow = dsection->rows;
                      j < ssection->num_rows; j++, srow++, drow++) {
                     if (srow->num_keys) {
-                        tmp = xallocarray(srow->num_keys, sizeof(XkbKeyRec));
+                        tmp = calloc(srow->num_keys, sizeof(XkbKeyRec));
                         if (!tmp)
                             return FALSE;
                         drow->keys = tmp;
@@ -1859,7 +1880,7 @@ _XkbCopyGeom(XkbDescPtr src, XkbDescPtr dst)
         /* font */
         if (src->geom->label_font) {
             if (!dst->geom->label_font) {
-                tmp = malloc(strlen(src->geom->label_font) + 1);
+                tmp = calloc(1, strlen(src->geom->label_font) + 1);
                 if (!tmp)
                     return FALSE;
                 dst->geom->label_font = tmp;
@@ -1907,7 +1928,7 @@ _XkbCopyIndicators(XkbDescPtr src, XkbDescPtr dst)
     /* indicators */
     if (src->indicators) {
         if (!dst->indicators) {
-            dst->indicators = malloc(sizeof(XkbIndicatorRec));
+            dst->indicators = calloc(1, sizeof(XkbIndicatorRec));
             if (!dst->indicators)
                 return FALSE;
         }
@@ -1926,7 +1947,7 @@ _XkbCopyControls(XkbDescPtr src, XkbDescPtr dst)
     /* controls */
     if (src->ctrls) {
         if (!dst->ctrls) {
-            dst->ctrls = malloc(sizeof(XkbControlsRec));
+            dst->ctrls = calloc(1, sizeof(XkbControlsRec));
             if (!dst->ctrls)
                 return FALSE;
         }
@@ -2083,7 +2104,7 @@ XkbMergeLockedPtrBtns(DeviceIntPtr master)
     DeviceIntPtr d = inputInfo.devices;
     XkbSrvInfoPtr xkbi = NULL;
 
-    if (!IsMaster(master))
+    if (!InputDevIsMaster(master))
         return;
 
     if (!master->key)
@@ -2093,7 +2114,7 @@ XkbMergeLockedPtrBtns(DeviceIntPtr master)
     xkbi->lockedPtrButtons = 0;
 
     for (; d; d = d->next) {
-        if (IsMaster(d) || GetMaster(d, MASTER_KEYBOARD) != master || !d->key)
+        if (InputDevIsMaster(d) || GetMaster(d, MASTER_KEYBOARD) != master || !d->key)
             continue;
 
         xkbi->lockedPtrButtons |= d->key->xkbInfo->lockedPtrButtons;

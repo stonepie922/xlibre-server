@@ -29,11 +29,18 @@
  * use or other dealings in this Software without prior written authorization.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
-#include "mi.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+
+#include "dix/colormap_priv.h"
+#include "dix/screen_hooks_priv.h"
+#include "dix/screenint_priv.h"
+#include "mi/mi_priv.h"
+
 #include "scrnintstr.h"
 #include "gcstruct.h"
 #include "pixmapstr.h"
@@ -41,12 +48,6 @@
 #include "propertyst.h"
 #include "mivalidate.h"
 #include "picturestr.h"
-#include "colormapst.h"
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <string.h>
 
 #include "rootlessCommon.h"
 #include "rootlessWindow.h"
@@ -89,7 +90,7 @@ RootlessUpdateScreenPixmap(ScreenPtr pScreen)
         free(s->pixmap_data);
 
         s->pixmap_data_size = rowbytes;
-        s->pixmap_data = malloc(s->pixmap_data_size);
+        s->pixmap_data = calloc(1, s->pixmap_data_size);
         if (s->pixmap_data == NULL)
             return;
 
@@ -110,37 +111,19 @@ RootlessUpdateScreenPixmap(ScreenPtr pScreen)
  *  Rootless implementations typically set a null framebuffer pointer, which
  *  causes problems with miCreateScreenResources. We fix things up here.
  */
-static Bool
-RootlessCreateScreenResources(ScreenPtr pScreen)
+static void RootlessCreateScreenResources(CallbackListPtr *pcbl,
+                                          ScreenPtr pScreen, Bool *ret)
 {
-    Bool ret = TRUE;
-
-    SCREEN_UNWRAP(pScreen, CreateScreenResources);
-
-    if (pScreen->CreateScreenResources != NULL)
-        ret = (*pScreen->CreateScreenResources) (pScreen);
-
-    SCREEN_WRAP(pScreen, CreateScreenResources);
-
-    if (!ret)
-        return ret;
-
     /* Make sure we have a valid screen pixmap. */
-
     RootlessUpdateScreenPixmap(pScreen);
-
-    return ret;
 }
 
-static Bool
-RootlessCloseScreen(ScreenPtr pScreen)
+static void RootlessCloseScreen(CallbackListPtr *pcbl, ScreenPtr pScreen, void *unused)
 {
-    RootlessScreenRec *s;
+    dixScreenUnhookClose(pScreen, RootlessCloseScreen);
+    dixScreenUnhookPostCreateResources(pScreen, RootlessCreateScreenResources);
 
-    s = SCREENREC(pScreen);
-
-    // fixme unwrap everything that was wrapped?
-    pScreen->CloseScreen = s->CloseScreen;
+    RootlessScreenRec *s = SCREENREC(pScreen);
 
     if (s->pixmap_data != NULL) {
         free(s->pixmap_data);
@@ -149,7 +132,7 @@ RootlessCloseScreen(ScreenPtr pScreen)
     }
 
     free(s);
-    return pScreen->CloseScreen(pScreen);
+    dixSetPrivate(&(pScreen)->devPrivates, rootlessScreenPrivateKey, NULL);
 }
 
 static void
@@ -617,8 +600,6 @@ RootlessWakeupHandler(void *data, int result)
 static Bool
 RootlessAllocatePrivates(ScreenPtr pScreen)
 {
-    RootlessScreenRec *s;
-
     if (!dixRegisterPrivateKey
         (&rootlessGCPrivateKeyRec, PRIVATE_GC, sizeof(RootlessGCRec)))
         return FALSE;
@@ -630,16 +611,10 @@ RootlessAllocatePrivates(ScreenPtr pScreen)
         (&rootlessWindowOldPixmapPrivateKeyRec, PRIVATE_WINDOW, 0))
         return FALSE;
 
-    s = malloc(sizeof(RootlessScreenRec));
+    RootlessScreenRec *s = calloc(1, sizeof(RootlessScreenRec));
     if (!s)
         return FALSE;
     SETSCREENREC(pScreen, s);
-
-    s->pixmap_data = NULL;
-    s->pixmap_data_size = 0;
-
-    s->redisplay_timer = NULL;
-    s->redisplay_timer_set = FALSE;
 
     return TRUE;
 }
@@ -648,6 +623,11 @@ static void
 RootlessWrap(ScreenPtr pScreen)
 {
     RootlessScreenRec *s = SCREENREC(pScreen);
+
+    dixScreenHookClose(pScreen, RootlessCloseScreen);
+    dixScreenHookWindowDestroy(pScreen, RootlessWindowDestroy);
+    dixScreenHookWindowPosition(pScreen, RootlessWindowPosition);
+    dixScreenHookPostCreateResources(pScreen, RootlessCreateScreenResources);
 
 #define WRAP(a) \
     if (pScreen->a) { \
@@ -658,19 +638,15 @@ RootlessWrap(ScreenPtr pScreen)
     } \
     pScreen->a = Rootless##a
 
-    WRAP(CreateScreenResources);
-    WRAP(CloseScreen);
     WRAP(CreateGC);
     WRAP(CopyWindow);
     WRAP(PaintWindow);
     WRAP(GetImage);
     WRAP(SourceValidate);
     WRAP(CreateWindow);
-    WRAP(DestroyWindow);
     WRAP(RealizeWindow);
     WRAP(UnrealizeWindow);
     WRAP(MoveWindow);
-    WRAP(PositionWindow);
     WRAP(ResizeWindow);
     WRAP(RestackWindow);
     WRAP(ReparentWindow);
@@ -732,14 +708,10 @@ RootlessInit(ScreenPtr pScreen, RootlessFrameProcsPtr procs)
 void
 RootlessUpdateRooted(Bool state)
 {
-    int i;
-
     if (!state) {
-        for (i = 0; i < screenInfo.numScreens; i++)
-            RootlessDisableRoot(screenInfo.screens[i]);
+        DIX_FOR_EACH_SCREEN({ RootlessDisableRoot(walkScreen); });
     }
     else {
-        for (i = 0; i < screenInfo.numScreens; i++)
-            RootlessEnableRoot(screenInfo.screens[i]);
+        DIX_FOR_EACH_SCREEN({ RootlessEnableRoot(walkScreen); });
     }
 }

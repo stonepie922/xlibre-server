@@ -19,14 +19,34 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
+#include <dix-config.h>
+
+#include <unistd.h>
+
+#include "dix/dix_priv.h"
+#include "dix/request_priv.h"
+#include "dix/screenint_priv.h"
+#include "os/client_priv.h"
 
 #include "dri3_priv.h"
 #include <syncsrv.h>
-#include <unistd.h>
 #include <xace.h>
 #include "../Xext/syncsdk.h"
 #include <protocol-versions.h>
 #include <drm_fourcc.h>
+#include "randrstr_priv.h"
+#include "dixstruct_priv.h"
+
+static Bool
+dri3_screen_can_one_point_four(ScreenPtr screen)
+{
+    dri3_screen_priv_ptr dri3 = dri3_screen_priv(screen);
+
+    return dri3 &&
+        dri3->info &&
+        dri3->info->version >= 4 &&
+        dri3->info->import_syncobj;
+}
 
 static Bool
 dri3_screen_can_one_point_two(ScreenPtr screen)
@@ -46,29 +66,35 @@ static int
 proc_dri3_query_version(ClientPtr client)
 {
     REQUEST(xDRI3QueryVersionReq);
-    xDRI3QueryVersionReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-        .length = 0,
+
+    xDRI3QueryVersionReply reply = {
         .majorVersion = SERVER_DRI3_MAJOR_VERSION,
         .minorVersion = SERVER_DRI3_MINOR_VERSION
     };
 
     REQUEST_SIZE_MATCH(xDRI3QueryVersionReq);
 
-    for (int i = 0; i < screenInfo.numScreens; i++) {
-        if (!dri3_screen_can_one_point_two(screenInfo.screens[i])) {
-            rep.minorVersion = 0;
+    DIX_FOR_EACH_SCREEN({
+        if (!dri3_screen_can_one_point_two(walkScreen)) {
+            reply.minorVersion = 0;
             break;
         }
-    }
+        if (!dri3_screen_can_one_point_four(walkScreen)) {
+            reply.minorVersion = 2;
+            break;
+        }
+    });
 
-    for (int i = 0; i < screenInfo.numGPUScreens; i++) {
-        if (!dri3_screen_can_one_point_two(screenInfo.gpuscreens[i])) {
-            rep.minorVersion = 0;
+    DIX_FOR_EACH_GPU_SCREEN({
+        if (!dri3_screen_can_one_point_two(walkScreen)) {
+            reply.minorVersion = 0;
             break;
         }
-    }
+        if (!dri3_screen_can_one_point_four(walkScreen)) {
+            reply.minorVersion = 2;
+            break;
+        }
+    });
 
     /* From DRI3 proto:
      *
@@ -77,46 +103,34 @@ proc_dri3_query_version(ClientPtr client)
      * higher than the requested version.
      */
 
-    if (rep.majorVersion > stuff->majorVersion ||
-        (rep.majorVersion == stuff->majorVersion &&
-         rep.minorVersion > stuff->minorVersion)) {
-        rep.majorVersion = stuff->majorVersion;
-        rep.minorVersion = stuff->minorVersion;
+    if (reply.majorVersion > stuff->majorVersion ||
+        (reply.majorVersion == stuff->majorVersion &&
+         reply.minorVersion > stuff->minorVersion)) {
+        reply.majorVersion = stuff->majorVersion;
+        reply.minorVersion = stuff->minorVersion;
     }
 
     if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swapl(&rep.majorVersion);
-        swapl(&rep.minorVersion);
+        swapl(&reply.majorVersion);
+        swapl(&reply.minorVersion);
     }
-    WriteToClient(client, sizeof(rep), &rep);
-    return Success;
+
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 int
 dri3_send_open_reply(ClientPtr client, int fd)
 {
-    xDRI3OpenReply rep = {
-        .type = X_Reply,
+    xDRI3OpenReply reply = {
         .nfd = 1,
-        .sequenceNumber = client->sequence,
-        .length = 0,
     };
-
-    if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-    }
 
     if (WriteFdToClient(client, fd, TRUE) < 0) {
         close(fd);
         return BadAlloc;
     }
 
-    WriteToClient(client, sizeof (rep), &rep);
-
-    return Success;
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 static int
@@ -214,14 +228,14 @@ proc_dri3_pixmap_from_buffer(ClientPtr client)
     pixmap->drawable.id = stuff->pixmap;
 
     /* security creation/labeling check */
-    rc = XaceHook(XACE_RESOURCE_ACCESS, client, stuff->pixmap, RT_PIXMAP,
-                  pixmap, RT_NONE, NULL, DixCreateAccess);
+    rc = XaceHookResourceAccess(client, stuff->pixmap, X11_RESTYPE_PIXMAP,
+                  pixmap, X11_RESTYPE_NONE, NULL, DixCreateAccess);
 
     if (rc != Success) {
-        (*drawable->pScreen->DestroyPixmap) (pixmap);
+        dixDestroyPixmap(pixmap, 0);
         return rc;
     }
-    if (!AddResource(stuff->pixmap, RT_PIXMAP, (void *) pixmap))
+    if (!AddResource(stuff->pixmap, X11_RESTYPE_PIXMAP, (void *) pixmap))
         return BadAlloc;
 
     return Success;
@@ -231,49 +245,43 @@ static int
 proc_dri3_buffer_from_pixmap(ClientPtr client)
 {
     REQUEST(xDRI3BufferFromPixmapReq);
-    xDRI3BufferFromPixmapReply rep = {
-        .type = X_Reply,
-        .nfd = 1,
-        .sequenceNumber = client->sequence,
-        .length = 0,
-    };
+
     int rc;
     int fd;
     PixmapPtr pixmap;
 
     REQUEST_SIZE_MATCH(xDRI3BufferFromPixmapReq);
-    rc = dixLookupResourceByType((void **) &pixmap, stuff->pixmap, RT_PIXMAP,
+    rc = dixLookupResourceByType((void **) &pixmap, stuff->pixmap, X11_RESTYPE_PIXMAP,
                                  client, DixWriteAccess);
     if (rc != Success) {
         client->errorValue = stuff->pixmap;
         return rc;
     }
 
-    rep.width = pixmap->drawable.width;
-    rep.height = pixmap->drawable.height;
-    rep.depth = pixmap->drawable.depth;
-    rep.bpp = pixmap->drawable.bitsPerPixel;
+    xDRI3BufferFromPixmapReply reply = {
+        .nfd = 1,
+        .width = pixmap->drawable.width,
+        .height = pixmap->drawable.height,
+        .depth = pixmap->drawable.depth,
+        .bpp = pixmap->drawable.bitsPerPixel,
+    };
 
-    fd = dri3_fd_from_pixmap(pixmap, &rep.stride, &rep.size);
+    fd = dri3_fd_from_pixmap(pixmap, &reply.stride, &reply.size);
     if (fd < 0)
         return BadPixmap;
 
     if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swapl(&rep.size);
-        swaps(&rep.width);
-        swaps(&rep.height);
-        swaps(&rep.stride);
+        swapl(&reply.size);
+        swaps(&reply.width);
+        swaps(&reply.height);
+        swaps(&reply.stride);
     }
     if (WriteFdToClient(client, fd, TRUE) < 0) {
         close(fd);
         return BadAlloc;
     }
 
-    WriteToClient(client, sizeof(rep), &rep);
-
-    return Success;
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 static int
@@ -306,11 +314,8 @@ static int
 proc_dri3_fd_from_fence(ClientPtr client)
 {
     REQUEST(xDRI3FDFromFenceReq);
-    xDRI3FDFromFenceReply rep = {
-        .type = X_Reply,
+    xDRI3FDFromFenceReply reply = {
         .nfd = 1,
-        .sequenceNumber = client->sequence,
-        .length = 0,
     };
     DrawablePtr drawable;
     int fd;
@@ -330,26 +335,16 @@ proc_dri3_fd_from_fence(ClientPtr client)
     if (fd < 0)
         return BadMatch;
 
-    if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-    }
     if (WriteFdToClient(client, fd, FALSE) < 0)
         return BadAlloc;
 
-    WriteToClient(client, sizeof(rep), &rep);
-
-    return Success;
+    return X_SEND_REPLY_SIMPLE(client, reply);
 }
 
 static int
 proc_dri3_get_supported_modifiers(ClientPtr client)
 {
     REQUEST(xDRI3GetSupportedModifiersReq);
-    xDRI3GetSupportedModifiersReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-    };
     WindowPtr window;
     ScreenPtr pScreen;
     CARD64 *window_modifiers = NULL;
@@ -357,7 +352,6 @@ proc_dri3_get_supported_modifiers(ClientPtr client)
     CARD32 nwindowmodifiers = 0;
     CARD32 nscreenmodifiers = 0;
     int status;
-    int i;
 
     REQUEST_SIZE_MATCH(xDRI3GetSupportedModifiersReq);
 
@@ -367,34 +361,28 @@ proc_dri3_get_supported_modifiers(ClientPtr client)
     pScreen = window->drawable.pScreen;
 
     dri3_get_supported_modifiers(pScreen, &window->drawable,
-				 stuff->depth, stuff->bpp,
+                                 stuff->depth, stuff->bpp,
                                  &nwindowmodifiers, &window_modifiers,
                                  &nscreenmodifiers, &screen_modifiers);
 
-    rep.numWindowModifiers = nwindowmodifiers;
-    rep.numScreenModifiers = nscreenmodifiers;
-    rep.length = bytes_to_int32(rep.numWindowModifiers * sizeof(CARD64)) +
-                 bytes_to_int32(rep.numScreenModifiers * sizeof(CARD64));
-
-    if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swapl(&rep.numWindowModifiers);
-        swapl(&rep.numScreenModifiers);
-        for (i = 0; i < nwindowmodifiers; i++)
-            swapll(&window_modifiers[i]);
-        for (i = 0; i < nscreenmodifiers; i++)
-            swapll(&screen_modifiers[i]);
-    }
-
-    WriteToClient(client, sizeof(rep), &rep);
-    WriteToClient(client, nwindowmodifiers * sizeof(CARD64), window_modifiers);
-    WriteToClient(client, nscreenmodifiers * sizeof(CARD64), screen_modifiers);
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD64s(&rpcbuf, window_modifiers, nwindowmodifiers);
+    x_rpcbuf_write_CARD64s(&rpcbuf, screen_modifiers, nscreenmodifiers);
 
     free(window_modifiers);
     free(screen_modifiers);
 
-    return Success;
+    xDRI3GetSupportedModifiersReply reply = {
+        .numWindowModifiers = nwindowmodifiers,
+        .numScreenModifiers = nscreenmodifiers,
+    };
+
+    if (client->swapped) {
+        swapl(&reply.numWindowModifiers);
+        swapl(&reply.numScreenModifiers);
+    }
+
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
 }
 
 static int
@@ -478,14 +466,14 @@ proc_dri3_pixmap_from_buffers(ClientPtr client)
     pixmap->drawable.id = stuff->pixmap;
 
     /* security creation/labeling check */
-    rc = XaceHook(XACE_RESOURCE_ACCESS, client, stuff->pixmap, RT_PIXMAP,
-                  pixmap, RT_NONE, NULL, DixCreateAccess);
+    rc = XaceHookResourceAccess(client, stuff->pixmap, X11_RESTYPE_PIXMAP,
+                  pixmap, X11_RESTYPE_NONE, NULL, DixCreateAccess);
 
     if (rc != Success) {
-        (*screen->DestroyPixmap) (pixmap);
+        dixDestroyPixmap(pixmap, 0);
         return rc;
     }
-    if (!AddResource(stuff->pixmap, RT_PIXMAP, (void *) pixmap))
+    if (!AddResource(stuff->pixmap, X11_RESTYPE_PIXMAP, (void *) pixmap))
         return BadAlloc;
 
     return Success;
@@ -495,10 +483,6 @@ static int
 proc_dri3_buffers_from_pixmap(ClientPtr client)
 {
     REQUEST(xDRI3BuffersFromPixmapReq);
-    xDRI3BuffersFromPixmapReply rep = {
-        .type = X_Reply,
-        .sequenceNumber = client->sequence,
-    };
     int rc;
     int fds[4];
     int num_fds;
@@ -508,7 +492,7 @@ proc_dri3_buffers_from_pixmap(ClientPtr client)
     PixmapPtr pixmap;
 
     REQUEST_SIZE_MATCH(xDRI3BuffersFromPixmapReq);
-    rc = dixLookupResourceByType((void **) &pixmap, stuff->pixmap, RT_PIXMAP,
+    rc = dixLookupResourceByType((void **) &pixmap, stuff->pixmap, X11_RESTYPE_PIXMAP,
                                  client, DixWriteAccess);
     if (rc != Success) {
         client->errorValue = stuff->pixmap;
@@ -519,26 +503,6 @@ proc_dri3_buffers_from_pixmap(ClientPtr client)
     if (num_fds == 0)
         return BadPixmap;
 
-    rep.nfd = num_fds;
-    rep.length = bytes_to_int32(num_fds * 2 * sizeof(CARD32));
-    rep.width = pixmap->drawable.width;
-    rep.height = pixmap->drawable.height;
-    rep.depth = pixmap->drawable.depth;
-    rep.bpp = pixmap->drawable.bitsPerPixel;
-    rep.modifier = modifier;
-
-    if (client->swapped) {
-        swaps(&rep.sequenceNumber);
-        swapl(&rep.length);
-        swaps(&rep.width);
-        swaps(&rep.height);
-        swapll(&rep.modifier);
-        for (i = 0; i < num_fds; i++) {
-            swapl(&strides[i]);
-            swapl(&offsets[i]);
-        }
-    }
-
     for (i = 0; i < num_fds; i++) {
         if (WriteFdToClient(client, fds[i], TRUE) < 0) {
             while (i--)
@@ -547,24 +511,93 @@ proc_dri3_buffers_from_pixmap(ClientPtr client)
         }
     }
 
-    WriteToClient(client, sizeof(rep), &rep);
-    WriteToClient(client, num_fds * sizeof(CARD32), strides);
-    WriteToClient(client, num_fds * sizeof(CARD32), offsets);
+    x_rpcbuf_t rpcbuf = { .swapped = client->swapped, .err_clear = TRUE };
+    x_rpcbuf_write_CARD32s(&rpcbuf, (CARD32*)strides, num_fds);
+    x_rpcbuf_write_CARD32s(&rpcbuf, (CARD32*)offsets, num_fds);
 
+    xDRI3BuffersFromPixmapReply reply = {
+        .nfd = num_fds,
+        .width = pixmap->drawable.width,
+        .height = pixmap->drawable.height,
+        .depth = pixmap->drawable.depth,
+        .bpp = pixmap->drawable.bitsPerPixel,
+        .modifier = modifier,
+    };
+
+    if (client->swapped) {
+        swaps(&reply.width);
+        swaps(&reply.height);
+        swapll(&reply.modifier);
+    }
+
+    return X_SEND_REPLY_WITH_RPCBUF(client, reply, rpcbuf);
+}
+
+static int
+proc_dri3_set_drm_device_in_use(ClientPtr client)
+{
+    REQUEST(xDRI3SetDRMDeviceInUseReq);
+    WindowPtr window;
+    int status;
+
+    REQUEST_SIZE_MATCH(xDRI3SetDRMDeviceInUseReq);
+    status = dixLookupWindow(&window, stuff->window, client,
+                             DixGetAttrAccess);
+    if (status != Success)
+        return status;
+
+    /* TODO Eventually we should use this information to have
+     * DRI3GetSupportedModifiers return device-specific modifiers, but for now
+     * we will ignore it until multi-device support is more complete.
+     * Otherwise we can't advertise support for DRI3 1.4.
+     */
     return Success;
 }
 
-int (*proc_dri3_vector[DRI3NumberRequests]) (ClientPtr) = {
-    proc_dri3_query_version,            /* 0 */
-    proc_dri3_open,                     /* 1 */
-    proc_dri3_pixmap_from_buffer,       /* 2 */
-    proc_dri3_buffer_from_pixmap,       /* 3 */
-    proc_dri3_fence_from_fd,            /* 4 */
-    proc_dri3_fd_from_fence,            /* 5 */
-    proc_dri3_get_supported_modifiers,  /* 6 */
-    proc_dri3_pixmap_from_buffers,      /* 7 */
-    proc_dri3_buffers_from_pixmap,      /* 8 */
-};
+static int
+proc_dri3_import_syncobj(ClientPtr client)
+{
+    REQUEST(xDRI3ImportSyncobjReq);
+    DrawablePtr drawable;
+    ScreenPtr screen;
+    int fd;
+    int status;
+
+    SetReqFds(client, 1);
+    REQUEST_SIZE_MATCH(xDRI3ImportSyncobjReq);
+    LEGAL_NEW_RESOURCE(stuff->syncobj, client);
+
+    status = dixLookupDrawable(&drawable, stuff->drawable, client,
+                               M_ANY, DixGetAttrAccess);
+    if (status != Success)
+        return status;
+
+    screen = drawable->pScreen;
+
+    fd = ReadFdFromClient(client);
+    if (fd < 0)
+        return BadValue;
+
+    return dri3_import_syncobj(client, screen, stuff->syncobj, fd);
+}
+
+static int
+proc_dri3_free_syncobj(ClientPtr client)
+{
+    REQUEST(xDRI3FreeSyncobjReq);
+    struct dri3_syncobj *syncobj;
+    int status;
+
+    REQUEST_SIZE_MATCH(xDRI3FreeSyncobjReq);
+
+    status = dixLookupResourceByType((void **) &syncobj, stuff->syncobj,
+                                     dri3_syncobj_type, client, DixWriteAccess);
+    if (status != Success)
+        return status;
+
+    FreeResource(stuff->syncobj, RT_NONE);
+    return Success;
+}
 
 int
 proc_dri3_dispatch(ClientPtr client)
@@ -572,9 +605,41 @@ proc_dri3_dispatch(ClientPtr client)
     REQUEST(xReq);
     if (!client->local)
         return BadMatch;
-    if (stuff->data >= DRI3NumberRequests || !proc_dri3_vector[stuff->data])
-        return BadRequest;
-    return (*proc_dri3_vector[stuff->data]) (client);
+
+    switch (stuff->data) {
+        case X_DRI3QueryVersion:
+            return proc_dri3_query_version(client);
+        case X_DRI3Open:
+            return proc_dri3_open(client);
+        case X_DRI3PixmapFromBuffer:
+            return proc_dri3_pixmap_from_buffer(client);
+        case X_DRI3BufferFromPixmap:
+            return proc_dri3_buffer_from_pixmap(client);
+        case X_DRI3FenceFromFD:
+            return proc_dri3_fence_from_fd(client);
+        case X_DRI3FDFromFence:
+            return proc_dri3_fd_from_fence(client);
+
+        /* v1.2 */
+        case xDRI3GetSupportedModifiers:
+            return proc_dri3_get_supported_modifiers(client);
+        case xDRI3PixmapFromBuffers:
+            return proc_dri3_pixmap_from_buffers(client);
+        case xDRI3BuffersFromPixmap:
+            return proc_dri3_buffers_from_pixmap(client);
+
+        /* v1.3 */
+        case xDRI3SetDRMDeviceInUse:
+            return proc_dri3_set_drm_device_in_use(client);
+
+        /* v1.4 */
+        case xDRI3ImportSyncobj:
+            return proc_dri3_import_syncobj(client);
+        case xDRI3FreeSyncobj:
+            return proc_dri3_free_syncobj(client);
+        default:
+            return BadRequest;
+    }
 }
 
 static int _X_COLD
@@ -582,11 +647,9 @@ sproc_dri3_query_version(ClientPtr client)
 {
     REQUEST(xDRI3QueryVersionReq);
     REQUEST_SIZE_MATCH(xDRI3QueryVersionReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->majorVersion);
     swapl(&stuff->minorVersion);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_query_version(client);
 }
 
 static int _X_COLD
@@ -594,11 +657,9 @@ sproc_dri3_open(ClientPtr client)
 {
     REQUEST(xDRI3OpenReq);
     REQUEST_SIZE_MATCH(xDRI3OpenReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->drawable);
     swapl(&stuff->provider);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_open(client);
 }
 
 static int _X_COLD
@@ -606,15 +667,13 @@ sproc_dri3_pixmap_from_buffer(ClientPtr client)
 {
     REQUEST(xDRI3PixmapFromBufferReq);
     REQUEST_SIZE_MATCH(xDRI3PixmapFromBufferReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->pixmap);
     swapl(&stuff->drawable);
     swapl(&stuff->size);
     swaps(&stuff->width);
     swaps(&stuff->height);
     swaps(&stuff->stride);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_pixmap_from_buffer(client);
 }
 
 static int _X_COLD
@@ -622,10 +681,8 @@ sproc_dri3_buffer_from_pixmap(ClientPtr client)
 {
     REQUEST(xDRI3BufferFromPixmapReq);
     REQUEST_SIZE_MATCH(xDRI3BufferFromPixmapReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->pixmap);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_buffer_from_pixmap(client);
 }
 
 static int _X_COLD
@@ -633,11 +690,9 @@ sproc_dri3_fence_from_fd(ClientPtr client)
 {
     REQUEST(xDRI3FenceFromFDReq);
     REQUEST_SIZE_MATCH(xDRI3FenceFromFDReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->drawable);
     swapl(&stuff->fence);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_fence_from_fd(client);
 }
 
 static int _X_COLD
@@ -645,11 +700,9 @@ sproc_dri3_fd_from_fence(ClientPtr client)
 {
     REQUEST(xDRI3FDFromFenceReq);
     REQUEST_SIZE_MATCH(xDRI3FDFromFenceReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->drawable);
     swapl(&stuff->fence);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_fd_from_fence(client);
 }
 
 static int _X_COLD
@@ -657,10 +710,8 @@ sproc_dri3_get_supported_modifiers(ClientPtr client)
 {
     REQUEST(xDRI3GetSupportedModifiersReq);
     REQUEST_SIZE_MATCH(xDRI3GetSupportedModifiersReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->window);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_get_supported_modifiers(client);
 }
 
 static int _X_COLD
@@ -668,8 +719,6 @@ sproc_dri3_pixmap_from_buffers(ClientPtr client)
 {
     REQUEST(xDRI3PixmapFromBuffersReq);
     REQUEST_SIZE_MATCH(xDRI3PixmapFromBuffersReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->pixmap);
     swapl(&stuff->window);
     swaps(&stuff->width);
@@ -683,7 +732,7 @@ sproc_dri3_pixmap_from_buffers(ClientPtr client)
     swapl(&stuff->stride3);
     swapl(&stuff->offset3);
     swapll(&stuff->modifier);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_pixmap_from_buffers(client);
 }
 
 static int _X_COLD
@@ -691,23 +740,39 @@ sproc_dri3_buffers_from_pixmap(ClientPtr client)
 {
     REQUEST(xDRI3BuffersFromPixmapReq);
     REQUEST_SIZE_MATCH(xDRI3BuffersFromPixmapReq);
-
-    swaps(&stuff->length);
     swapl(&stuff->pixmap);
-    return (*proc_dri3_vector[stuff->dri3ReqType]) (client);
+    return proc_dri3_buffers_from_pixmap(client);
 }
 
-int (*sproc_dri3_vector[DRI3NumberRequests]) (ClientPtr) = {
-    sproc_dri3_query_version,           /* 0 */
-    sproc_dri3_open,                    /* 1 */
-    sproc_dri3_pixmap_from_buffer,      /* 2 */
-    sproc_dri3_buffer_from_pixmap,      /* 3 */
-    sproc_dri3_fence_from_fd,           /* 4 */
-    sproc_dri3_fd_from_fence,           /* 5 */
-    sproc_dri3_get_supported_modifiers, /* 6 */
-    sproc_dri3_pixmap_from_buffers,     /* 7 */
-    sproc_dri3_buffers_from_pixmap,     /* 8 */
-};
+static int _X_COLD
+sproc_dri3_set_drm_device_in_use(ClientPtr client)
+{
+    REQUEST(xDRI3SetDRMDeviceInUseReq);
+    REQUEST_SIZE_MATCH(xDRI3SetDRMDeviceInUseReq);
+    swapl(&stuff->window);
+    swapl(&stuff->drmMajor);
+    swapl(&stuff->drmMinor);
+    return proc_dri3_set_drm_device_in_use(client);
+}
+
+static int _X_COLD
+sproc_dri3_import_syncobj(ClientPtr client)
+{
+    REQUEST(xDRI3ImportSyncobjReq);
+    REQUEST_SIZE_MATCH(xDRI3ImportSyncobjReq);
+    swapl(&stuff->syncobj);
+    swapl(&stuff->drawable);
+    return proc_dri3_import_syncobj(client);
+}
+
+static int _X_COLD
+sproc_dri3_free_syncobj(ClientPtr client)
+{
+    REQUEST(xDRI3FreeSyncobjReq);
+    REQUEST_SIZE_MATCH(xDRI3FreeSyncobjReq);
+    swapl(&stuff->syncobj);
+    return proc_dri3_free_syncobj(client);
+}
 
 int _X_COLD
 sproc_dri3_dispatch(ClientPtr client)
@@ -715,7 +780,39 @@ sproc_dri3_dispatch(ClientPtr client)
     REQUEST(xReq);
     if (!client->local)
         return BadMatch;
-    if (stuff->data >= DRI3NumberRequests || !sproc_dri3_vector[stuff->data])
-        return BadRequest;
-    return (*sproc_dri3_vector[stuff->data]) (client);
+
+    switch (stuff->data) {
+        case X_DRI3QueryVersion:
+            return sproc_dri3_query_version(client);
+        case X_DRI3Open:
+            return sproc_dri3_open(client);
+        case X_DRI3PixmapFromBuffer:
+            return sproc_dri3_pixmap_from_buffer(client);
+        case X_DRI3BufferFromPixmap:
+            return sproc_dri3_buffer_from_pixmap(client);
+        case X_DRI3FenceFromFD:
+            return sproc_dri3_fence_from_fd(client);
+        case X_DRI3FDFromFence:
+            return sproc_dri3_fd_from_fence(client);
+
+        /* v1.2 */
+        case xDRI3GetSupportedModifiers:
+            return sproc_dri3_get_supported_modifiers(client);
+        case xDRI3PixmapFromBuffers:
+            return sproc_dri3_pixmap_from_buffers(client);
+        case xDRI3BuffersFromPixmap:
+            return sproc_dri3_buffers_from_pixmap(client);
+
+        /* v1.3 */
+        case xDRI3SetDRMDeviceInUse:
+            return sproc_dri3_set_drm_device_in_use(client);
+
+        /* v1.4 */
+        case xDRI3ImportSyncobj:
+            return sproc_dri3_import_syncobj(client);
+        case xDRI3FreeSyncobj:
+            return sproc_dri3_free_syncobj(client);
+        default:
+            return BadRequest;
+    }
 }

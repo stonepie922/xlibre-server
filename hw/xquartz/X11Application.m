@@ -30,12 +30,12 @@
 
 #include "sanitizedCarbon.h"
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #import "X11Application.h"
 #import "NSUserDefaults+XQuartzDefaults.h"
+
+#include "miext/extinit_priv.h"
 
 #include "darwin.h"
 #include "quartz.h"
@@ -80,7 +80,6 @@ static dispatch_queue_t eventTranslationQueue;
 #define APPKIT_APPFLAGS_HACK 1
 #endif
 
-extern Bool noTestExtensions;
 extern Bool noRenderExtension;
 
 static TISInputSourceRef last_key_layout;
@@ -1103,7 +1102,7 @@ handle_mouse:
             else
                 DarwinSendTabletEvents(darwinTabletCurrent, ProximityOut, 0,
                                        location.x, location.y, pressure,
-                                       tilt.x, tilt.y);
+                                       tilt.x, -tilt.y);
             return;
         }
 
@@ -1117,7 +1116,7 @@ handle_mouse:
             if (needsProximityIn) {
                 DarwinSendTabletEvents(darwinTabletCurrent, ProximityIn, 0,
                                        location.x, location.y, pressure,
-                                       tilt.x, tilt.y);
+                                       tilt.x, -tilt.y);
 
                 needsProximityIn = NO;
             }
@@ -1159,7 +1158,7 @@ handle_mouse:
         } else {
             DarwinSendTabletEvents(pDev, ev_type, ev_button,
                                    location.x, location.y, pressure,
-                                   tilt.x, tilt.y);
+                                   tilt.x, -tilt.y);
         }
 
         break;
@@ -1186,7 +1185,7 @@ handle_mouse:
         else
             DarwinSendTabletEvents(darwinTabletCurrent, ProximityOut, 0,
                                    location.x, location.y, pressure,
-                                   tilt.x, tilt.y);
+                                   tilt.x, -tilt.y);
         break;
 
     case NSScrollWheel:

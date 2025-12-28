@@ -28,6 +28,9 @@ from The Open Group.
 
 /* Author:  Keith Packard, MIT X Consortium */
 
+#ifndef XSERVER_MIWIDELINE_H
+#define XSERVER_MIWIDELINE_H
+
 #include "mifpoly.h"            /* for ICEIL */
 
 /*
@@ -79,7 +82,7 @@ typedef struct _LineFace {
     if (pixel != oldPixel) { \
 	ChangeGCVal gcval; \
 	gcval.val = pixel; \
-	ChangeGC (NullClient, pGC, GCForeground, &gcval); \
+	ChangeGC (NULL, pGC, GCForeground, &gcval); \
 	ValidateGC (pDrawable, pGC); \
     } \
 }
@@ -87,7 +90,9 @@ typedef struct _LineFace {
     if (pixel != oldPixel) { \
 	ChangeGCVal gcval; \
 	gcval.val = oldPixel; \
-	ChangeGC (NullClient, pGC, GCForeground, &gcval); \
+	ChangeGC (NULL, pGC, GCForeground, &gcval); \
 	ValidateGC (pDrawable, pGC); \
     } \
 }
+
+#endif /* XSERVER_MIWIDELINE_H */

@@ -1,3 +1,6 @@
+module_abi_tag = 'xlibre-25'
+module_abi_dir = join_paths(module_dir, module_abi_tag)
+
 xorg_inc = include_directories(
     'common',
     'ddc',
@@ -16,6 +19,7 @@ xorg_inc = include_directories(
 xorg_c_args = []
 xorg_c_args += '-DHAVE_XORG_CONFIG_H'
 xorg_c_args += '-DXORG_NO_SDKSYMS'
+xorg_c_args += ('-DXORG_MODULE_ABI_TAG="'+module_abi_tag+'"')
 
 pciaccess_dep = []
 if get_option('pciaccess')
@@ -24,6 +28,7 @@ endif
 
 # subdirs for convenience libraries statically linked into Xorg
 subdir('common')
+subdir('compat')
 subdir('ddc')
 if build_dri1
     subdir('dri')
@@ -37,6 +42,7 @@ subdir('modes')
 subdir('os-support')
 subdir('parser')
 subdir('ramdac')
+subdir('xext')
 subdir('xkb')
 
 srcs_xorg = [
@@ -53,6 +59,7 @@ xorg_link = [
     libxserver,
     libglxvnd,
     xorg_common,
+    xorg_compat,
     xorg_loader,
     xorg_ddc,
     xorg_xkb,
@@ -101,7 +108,7 @@ else
     xorg_install_dir = get_option('bindir')
 endif
 
-e = executable(
+xserver_exec = executable(
     'Xorg',
     srcs_xorg,
     include_directories: [inc, xorg_inc],
@@ -131,18 +138,14 @@ subdir('shadowfb')
 if build_vgahw
     subdir('vgahw')
 endif
-if build_modesetting
-   subdir('drivers/modesetting')
-endif
-if get_option('xf86-input-inputtest')
-    subdir('drivers/inputtest')
-endif
 
-meson.add_install_script(
-    'sh', '-c',
-    'ln -fs Xorg @0@@1@'.format(
-        '${DESTDIR}',
-        join_paths(get_option('prefix'), get_option('bindir'), 'X')))
+subdir('drivers')
+
+install_symlink(
+    'X',
+    pointing_to: xserver_exec.name(),
+    install_dir: join_paths(get_option('prefix'), get_option('bindir'))
+    )
 
 if get_option('suid_wrapper')
     executable('Xorg.wrap',
@@ -167,7 +170,7 @@ if get_option('suid_wrapper')
         xorg_sh,
         install_mode: 'rwxr-xr-x',
         install_dir: join_paths(get_option('prefix'), get_option('bindir')),
-        rename: ['Xorg']
+        rename: [xserver_exec.name()]
     )
 endif
 

@@ -541,8 +541,10 @@ LoadImageComma(char *fname, char *iconDirectory, int sx, int sy, int flags)
                           MAKEINTRESOURCE(i), IMAGE_ICON, sx, sy, flags);
     }
     else {
-        char *file = malloc(PATH_MAX + NAME_MAX + 2);
+        char *file = calloc(1, PATH_MAX + NAME_MAX + 2);
+#ifdef  __CYGWIN__
         Bool convert = FALSE;
+#endif
 
         if (!file)
             return NULL;
@@ -658,7 +660,7 @@ winIconIsOverride(HICON hicon)
 
 /*
  * Open and parse the XWinrc config file @path.
- * If @path is NULL, use the built-in default.
+ * @path must not be NULL
  */
 static int
 winPrefsLoadPreferences(const char *path)
@@ -744,13 +746,12 @@ LoadPreferences(void)
     if (!parsed) {
         ErrorF
             ("LoadPreferences: See \"man XWinrc\" to customize the XWin menu.\n");
-        parsed = winPrefsLoadPreferences(NULL);
     }
 
     /* Setup a DISPLAY environment variable, need to allocate on heap */
     /* because putenv doesn't copy the argument... */
     winGetDisplayName(szDisplay, 0);
-    szEnvDisplay = (char *) (malloc(strlen(szDisplay) + strlen("DISPLAY=") + 1));
+    szEnvDisplay = calloc(1, strlen(szDisplay) + strlen("DISPLAY=") + 1);
     if (szEnvDisplay) {
         snprintf(szEnvDisplay, 512, "DISPLAY=%s", szDisplay);
         putenv(szEnvDisplay);

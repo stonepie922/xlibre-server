@@ -2,10 +2,13 @@
 #include "tests.h"
 #include "tests-common.h"
 
+int verbose = 0;
+
 int
 main(int argc, char **argv)
 {
     run_test(list_test);
+    run_test(sha1_test);
     run_test(string_test);
 
 #ifdef XORG_TESTS

@@ -26,9 +26,7 @@ Author:  Bob Scheifler, MIT X Consortium
 
 ********************************************************/
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <math.h>
 #include <X11/X.h>
@@ -667,7 +665,7 @@ miPolyFillArc(DrawablePtr pDraw, GCPtr pGC, int narcs_all, xArc * parcs)
                 nspans += (arc->height + 1) >> 1;
         }
 
-        pts = points = malloc (sizeof (DDXPointRec) * nspans +
+        pts = points = calloc(1, sizeof (DDXPointRec) * nspans +
                                sizeof(int) * nspans);
         if (points) {
             wids = widths = (int *) (points + nspans);

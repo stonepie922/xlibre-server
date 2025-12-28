@@ -20,13 +20,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef HAVE_DIX_CONFIG_H
 #include <dix-config.h>
-#endif
 
 #include <stdlib.h>
 
-#include "fb.h"
+#include "fb/fb_priv.h"
+#include "fb/fbbits.h"
+
 #include "miline.h"
 
 #define fbBresShiftMask(mask,dir,bpp) ((bpp == FB_STIP_UNIT) ? 0 : \
@@ -213,7 +213,7 @@ fbSetFg(DrawablePtr pDrawable, GCPtr pGC, Pixel fg)
         ChangeGCVal val;
 
         val.val = fg;
-        ChangeGC(NullClient, pGC, GCForeground, &val);
+        ChangeGC(NULL, pGC, GCForeground, &val);
         ValidateGC(pDrawable, pGC);
     }
 }
